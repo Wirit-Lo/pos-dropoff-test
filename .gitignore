@@ -1,0 +1,24 @@
+ไฟล์ Python ที่ถูก compile (ไม่ต้องเอาขึ้น)
+
+pycache/
+*.py[cod]
+*$py.class
+
+ไฟล์ Environment (ถ้ามี)
+
+venv/
+env/
+
+ไฟล์ Config (สำคัญ! เราจะไม่เอา config.ini ขึ้น แต่จะเอา config.example.ini ขึ้นแทน)
+
+config.ini
+
+ไฟล์ที่ได้จากการสร้าง EXE
+
+build/
+dist/
+*.spec
+
+ไฟล์ Report รูปภาพ error
+
+error_reports/
