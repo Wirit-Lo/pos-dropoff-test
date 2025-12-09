@@ -15,36 +15,51 @@ def load_config(filename='config.ini'):
 def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
-# ================= 2. Smart Functions (Adaptive) =================
+# ================= 2. System Calibration (ระบบวัดความเร็วเครื่อง) =================
+def get_machine_delay_factor():
+    """
+    ฟังก์ชันวัดความเร็วเครื่อง (Benchmark)
+    เพื่อปรับค่า Timeout ให้เหมาะสมกับความช้า/เร็วของเครื่องอัตโนมัติ
+    """
+    log("...กำลังตรวจสอบประสิทธิภาพเครื่อง (Calibrating)...")
+    start_time = time.time()
+    
+    # ทดสอบ Loop คำนวณเบาๆ เพื่อวัด CPU Speed
+    count = 0
+    for i in range(3000000): # วนลูป 3 ล้านรอบ
+        count += 1
+        
+    end_time = time.time()
+    duration = end_time - start_time
+    
+    # เกณฑ์การวัด (Threshold)
+    # เครื่องเร็วปกติจะใช้เวลาประมาณ 0.1 - 0.2 วินาที
+    if duration > 0.5:
+        log(f"[System] เครื่องทำงานหนัก/ช้า ({duration:.2f}s) -> เพิ่มเวลาการรอเป็น 2 เท่า")
+        return 2.0
+    elif duration > 0.25:
+        log(f"[System] เครื่องทำงานปานกลาง ({duration:.2f}s) -> เพิ่มเวลาการรอเป็น 1.5 เท่า")
+        return 1.5
+    else:
+        log(f"[System] เครื่องทำงานเร็ว ({duration:.2f}s) -> ใช้เวลาตาม Config ปกติ")
+        return 1.0
+
+# ================= 3. Smart Functions (Adaptive) =================
 def force_scroll_down(window, scroll_dist=-20):
-    """
-    ฟังก์ชันช่วยเลื่อนหน้าจอลง (Scroll) โดยใช้ Mouse Wheel
-    ค่า scroll_dist ติดลบ = เลื่อนลง
-    """
     log(f"...กำลังเลื่อนหน้าจอลง (Mouse Wheel {scroll_dist})...")
     try:
         rect = window.rectangle()
-        # หาจุดกลางหน้าจอเพื่อวางเมาส์
         center_x = rect.left + 300
         center_y = rect.top + 300
-        
-        # คลิกเพื่อให้หน้าจอ Focus ก่อนเลื่อน (คลิกตรงกลาง)
         mouse.click(coords=(center_x, center_y))
         time.sleep(0.5)
-        # สั่งเลื่อนเมาส์
         mouse.scroll(coords=(center_x, center_y), wheel_dist=scroll_dist)
         time.sleep(1)
     except Exception as e:
         log(f"[!] Mouse scroll failed: {e}")
-        # ถ้าใช้เมาส์ไม่ได้ ให้ลองกดปุ่ม Page Down แทน
         window.type_keys("{PGDN}")
 
 def smart_click(window, criteria_list, timeout=5, optional=False):
-    """
-    คลิกปุ่มตามรายการชื่อ (รองรับหลายชื่อ)
-    ระบบนี้เป็น Adaptive อยู่แล้ว: คือถ้าเจอวินาทีที่ 1 ก็จะกดและจบฟังก์ชันทันที
-    ถ้าไม่เจอก็จะรอจนครบ timeout
-    """
     if isinstance(criteria_list, str): criteria_list = [criteria_list]
     
     start = time.time()
@@ -69,62 +84,51 @@ def smart_click(window, criteria_list, timeout=5, optional=False):
         log(f"[X] หาปุ่ม {criteria_list} ไม่เจอ!")
     return False
 
-def check_sender_popup(window, config):
+def check_sender_popup(window, config, current_timeout):
     """
-    ฟังก์ชันเช็คหน้า 'ผู้ฝากส่ง' แบบ Adaptive
-    - Timeout ดึงจาก Config (เครื่องช้ารอนาน เครื่องไวไปเลย)
-    - เพิ่มการ Scroll Down และ Click Label เพื่อแก้ปัญหากรอกผิดช่อง
+    ฟังก์ชันเช็คหน้า 'ผู้ฝากส่ง'
+    ใช้ timeout ที่ผ่านการคำนวณตามความเร็วเครื่องแล้ว
     """
-    # ดึงค่า Timeout หลักจาก Config (ถ้าไม่มีใช้ 5 วิ)
-    try:
-        adapt_timeout = int(config['SETTINGS'].get('ElementWaitTimeout', 5))
-        scroll_dist = int(config['SETTINGS'].get('ScrollDistance', -20))
-        phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
-    except:
-        adapt_timeout = 5
-        scroll_dist = -20
-        phone = "0812345678"
-
-    log(f"...เช็ค Popup ผู้ฝากส่ง (รอสูงสุด {adapt_timeout} วิ)...")
+    log(f"...เช็ค Popup ผู้ฝากส่ง (รอสูงสุด {current_timeout} วิ)...")
     
-    # ถ้าเจอ 'อ่านบัตรประชาชน' ให้กดเลย (ถ้าเจอเร็ว ก็ไปต่อเร็ว)
-    if smart_click(window, "อ่านบัตรประชาชน", timeout=adapt_timeout, optional=True):
+    if smart_click(window, "อ่านบัตรประชาชน", timeout=current_timeout, optional=True):
         log("[Popup] เจอหน้าผู้ฝากส่ง -> กดอ่านบัตรเรียบร้อย")
-        time.sleep(1) # รอข้อมูลบัตรโหลดเข้า
+        time.sleep(1)
         
-        # --- เพิ่มส่วนเลื่อนจอและกรอกเบอร์ (ตามที่ขอ) ---
         try:
-            # 1. สั่งเลื่อนหน้าจอลงก่อน
-            force_scroll_down(window, scroll_dist)
+            scroll_dist = int(config['SETTINGS'].get('ScrollDistance', -20))
+            phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
             
+            force_scroll_down(window, scroll_dist)
             log(f"...กรอกเบอร์โทรศัพท์: {phone}")
             
-            # 2. พยายามคลิกที่คำว่า "หมายเลขโทรศัพท์" หรือ "เบอร์โทรศัพท์" 
-            # เพื่อให้ Cursor ย้ายจากชื่อ (ด้านบน) ลงมาที่เบอร์ (ด้านล่าง)
             labels = ["หมายเลขโทรศัพท์", "เบอร์โทรศัพท์", "โทรศัพท์", "เบอร์มือถือ"]
-            if smart_click(window, labels, timeout=3, optional=True):
-                # ถ้ากด Label ได้ ให้กด TAB 1 ทีเพื่อเข้าช่อง Input
+            if smart_click(window, labels, timeout=current_timeout, optional=True):
                 window.type_keys("{TAB}")
                 time.sleep(0.2)
                 window.type_keys(str(phone), with_spaces=True)
                 log("[/] กรอกเบอร์เรียบร้อย (สูตร Click Label + Tab)")
             else:
-                # ถ้าหา Label ไม่เจอ (อาจจะ Scroll ไม่ถึง) ลองกด TAB หลายๆ ที หรือพิมพ์เลย
                 log("...หา Label ไม่เจอ -> ลองพิมพ์เลย (Blind Type)...")
                 window.type_keys(str(phone), with_spaces=True)
                 
         except Exception as e:
             log(f"[!] Error ช่วงกรอกเบอร์: {e}")
 
-        # กดถัดไป
-        smart_click(window, "ถัดไป", timeout=2, optional=True)
+        smart_click(window, "ถัดไป", timeout=current_timeout, optional=True)
     else:
         log("[Popup] ไม่เจอหน้าผู้ฝากส่ง (ภายในเวลาที่กำหนด) -> ข้ามไปขั้นตอนต่อไป")
 
-def smart_input_weight(window, value):
+def smart_input_weight(window, value, timeout=5):
     log(f"...กำลังกรอกน้ำหนัก: {value}")
     try:
-        edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
+        start = time.time()
+        edits = []
+        while time.time() - start < timeout:
+            edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
+            if edits: break
+            time.sleep(0.5)
+
         if edits:
             target_box = edits[0]
             target_box.click_input()
@@ -135,7 +139,7 @@ def smart_input_weight(window, value):
 
     log("...หา Edit Box ไม่เจอ ลองสูตร Click+Tab...")
     try:
-        if smart_click(window, "น้ำหนัก", timeout=2, optional=True):
+        if smart_click(window, "น้ำหนัก", timeout=timeout, optional=True):
             window.type_keys("{TAB}")
             time.sleep(0.2)
             window.type_keys(str(value), with_spaces=True)
@@ -147,13 +151,13 @@ def smart_input_weight(window, value):
     window.type_keys(str(value), with_spaces=True)
     return True
 
-def smart_next(window):
+def smart_next(window, timeout=5):
     """กดถัดไป หรือ Enter"""
-    if not smart_click(window, "ถัดไป", timeout=2, optional=True):
+    if not smart_click(window, "ถัดไป", timeout=timeout, optional=True):
         window.type_keys("{ENTER}")
 
 def wait_for_text(window, text, timeout=10):
-    """รอให้ข้อความปรากฏบนหน้าจอ (ใช้เช็คว่าเปลี่ยนหน้าหรือยัง)"""
+    """รอให้ข้อความปรากฏบนหน้าจอ"""
     log(f"...รอข้อความ '{text}'...")
     start = time.time()
     while time.time() - start < timeout:
@@ -166,78 +170,85 @@ def wait_for_text(window, text, timeout=10):
     log(f"[!] รอ '{text}' จนหมดเวลา (อาจจะยังอยู่หน้าเดิม)")
     return False
 
-# ================= 3. Main Scenario =================
+# ================= 4. Main Scenario =================
 def run_smart_scenario(main_window, config):
     try:
         weight = config['DEPOSIT_ENVELOPE']['Weight']
         postal = config['DEPOSIT_ENVELOPE']['PostalCode']
         step_delay = int(config['SETTINGS'].get('StepDelay', 1))
+        base_timeout = int(config['SETTINGS'].get('ElementWaitTimeout', 15))
     except: 
         log("[Error] Config ผิดพลาด")
         return
 
+    # --- เริ่มวัดความเร็วเครื่อง และคำนวณ Timeout ใหม่ ---
+    speed_factor = get_machine_delay_factor()
+    final_timeout = int(base_timeout * speed_factor)
+    
     log(f"\n--- เริ่มต้น Scenario (ซองจดหมาย - Smart Mode) ---")
+    log(f"Config Timeout: {base_timeout}s | Machine Factor: {speed_factor}x | Final Timeout: {final_timeout}s")
     time.sleep(1)
 
     # 1. รับฝากสิ่งของ
-    if not smart_click(main_window, "รับฝากสิ่งของ"): return
+    if not smart_click(main_window, "รับฝากสิ่งของ", timeout=final_timeout): return
     time.sleep(step_delay)
 
-    # --- เช็ค Popup ผู้ฝากส่ง (ย้ายมาตรงนี้ตามคำขอ) ---
-    # จะทำการเช็คทันทีหลังกดรับฝากสิ่งของ ก่อนที่จะไปเลือกซอง
-    # ส่ง config เข้าไปเพื่อใช้ดึงเบอร์โทรและระยะ Scroll
-    check_sender_popup(main_window, config)
+    # --- เช็ค Popup ผู้ฝากส่ง (ใช้ Timeout ที่คำนวณแล้ว) ---
+    check_sender_popup(main_window, config, final_timeout)
     time.sleep(step_delay)
 
     # 2. ซองจดหมาย (รูปร่าง)
-    if not smart_click(main_window, "ซองจดหมาย"): return
+    if not smart_click(main_window, "ซองจดหมาย", timeout=final_timeout): return
     time.sleep(step_delay)
 
-    # 3. ซองจดหมาย (หมวดหมู่) --> แก้ไข: กด Enter ผ่านไปเลย
+    # 3. ซองจดหมาย (หมวดหมู่) --> กด Enter ผ่านไปเลย
     log("STEP 3: กด Enter ผ่านหมวดหมู่")
     main_window.type_keys("{ENTER}")
     time.sleep(step_delay)
 
     # 4. น้ำหนัก
-    smart_input_weight(main_window, weight)
-    smart_next(main_window)
+    smart_input_weight(main_window, weight, timeout=final_timeout)
+    smart_next(main_window, timeout=final_timeout)
     
-    # --- แก้ไข: รอให้หน้าจอเปลี่ยนไปหน้า "รหัสไปรษณีย์" ก่อน ---
-    # ป้องกันการพิมพ์เลข ปณ. ใส่ช่องน้ำหนัก
-    wait_for_text(main_window, "รหัสไปรษณีย์")
+    # --- รอหน้าจอเปลี่ยนไปหน้า "รหัสไปรษณีย์" ---
+    wait_for_text(main_window, "รหัสไปรษณีย์", timeout=final_timeout)
     time.sleep(0.5) 
 
     # 5. รหัสไปรษณีย์
     log(f"...กรอกรหัสไปรษณีย์: {postal}")
     try:
-        # หา Edit Box ตัวแรก (ตอนนี้ควรเป็นหน้าใหม่แล้ว)
-        edits = [e for e in main_window.descendants(control_type="Edit") if e.is_visible()]
+        start = time.time()
+        edits = []
+        while time.time() - start < final_timeout:
+            edits = [e for e in main_window.descendants(control_type="Edit") if e.is_visible()]
+            if edits: break
+            time.sleep(0.5)
+            
         if edits:
             postal_box = edits[0]
             postal_box.click_input()
             postal_box.type_keys(str(postal))
         else:
-            # ถ้าไม่เจอช่อง ให้พิมพ์สด
             main_window.type_keys(str(postal), with_spaces=True)
     except:
         main_window.type_keys(str(postal), with_spaces=True)
     
-    smart_next(main_window)
+    smart_next(main_window, timeout=final_timeout)
     time.sleep(step_delay)
 
     # 6. จบงาน
     log("STEP 6: จบงาน")
-    if smart_click(main_window, "ดำเนินการ", timeout=3, optional=True):
+    if smart_click(main_window, "ดำเนินการ", timeout=5, optional=True):
         log("[/] กดปุ่ม 'ดำเนินการ' (Popup ทับซ้อน) สำเร็จ")
     
     final_buttons = ["เสร็จสิ้น", "Settle", "ยืนยัน", "ตกลง"]
-    smart_click(main_window, final_buttons, timeout=3, optional=True)
+    smart_click(main_window, final_buttons, timeout=5, optional=True)
     
     main_window.type_keys("{ENTER}")
 
     log("\n[SUCCESS] จบการทำงาน")
 
-# ================= 4. Execution =================
+# ================= 5. Execution =================
 if __name__ == "__main__":
     conf = load_config()
     if conf:
