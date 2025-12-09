@@ -119,6 +119,10 @@ def run_smart_scenario(main_window, config):
     if not smart_click(main_window, "รับฝากสิ่งของ"): return
     time.sleep(step_delay)
 
+    # --- เช็ค Popup ผู้ฝากส่ง ---
+    check_sender_popup(main_window)
+    time.sleep(step_delay)
+
     # 2. ซองจดหมาย (รูปร่าง)
     if not smart_click(main_window, "ซองจดหมาย"): return
     time.sleep(step_delay)
@@ -126,10 +130,6 @@ def run_smart_scenario(main_window, config):
     # 3. ซองจดหมาย (หมวดหมู่) --> แก้ไข: กด Enter ผ่านไปเลย
     log("STEP 3: กด Enter ผ่านหมวดหมู่")
     main_window.type_keys("{ENTER}")
-    time.sleep(step_delay)
-
-    # --- เช็ค Popup ผู้ฝากส่ง ---
-    check_sender_popup(main_window)
     time.sleep(step_delay)
 
     # 4. น้ำหนัก
