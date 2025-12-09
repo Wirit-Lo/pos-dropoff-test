@@ -3,6 +3,7 @@ import os
 import time
 import datetime
 from pywinauto.application import Application
+from pywinauto import mouse
 
 # ================= 1. Config & Log =================
 def load_config(filename='config.ini'):
@@ -15,6 +16,21 @@ def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
 # ================= 2. Smart Functions (Adaptive) =================
+def force_scroll_down(window, scroll_dist=-20):
+    """ฟังก์ชันช่วยเลื่อนหน้าจอลง"""
+    log(f"...กำลังเลื่อนหน้าจอลง (Mouse Wheel {scroll_dist})...")
+    try:
+        rect = window.rectangle()
+        center_x = rect.left + 300
+        center_y = rect.top + 300
+        mouse.click(coords=(center_x, center_y))
+        time.sleep(0.5)
+        mouse.scroll(coords=(center_x, center_y), wheel_dist=scroll_dist)
+        time.sleep(1)
+    except Exception as e:
+        log(f"[!] Scroll failed: {e}")
+        window.type_keys("{PGDN}")
+
 def smart_click(window, criteria_list, timeout=5, optional=False):
     """
     คลิกปุ่มตามรายการชื่อ (รองรับหลายชื่อ)
@@ -44,15 +60,48 @@ def smart_click(window, criteria_list, timeout=5, optional=False):
         log(f"[X] หาปุ่ม {criteria_list} ไม่เจอ!")
     return False
 
-def check_sender_popup(window):
+def check_sender_popup(window, config):
     """
     ฟังก์ชันเช็คหน้า 'ผู้ฝากส่ง'
-    เพิ่ม Timeout เป็น 5 วินาที เพื่อให้ดักจับ Popup ได้ทัน
+    - กดอ่านบัตร
+    - เลื่อนจอลง
+    - กรอกเบอร์โทรศัพท์
     """
     log("...เช็ค Popup ผู้ฝากส่ง (รอ 5 วินาที)...")
     if smart_click(window, "อ่านบัตรประชาชน", timeout=5, optional=True):
         log("[Popup] เจอหน้าผู้ฝากส่ง -> กดอ่านบัตรเรียบร้อย")
         time.sleep(1)
+        
+        # --- เพิ่มส่วนเลื่อนจอและกรอกเบอร์ ---
+        try:
+            # 1. เลื่อนจอลง
+            scroll_dist = int(config['SETTINGS'].get('ScrollDistance', -20))
+            force_scroll_down(window, scroll_dist)
+            
+            # 2. ดึงเบอร์โทรจาก Config
+            try:
+                # ลองดึงจาก TEST_DATA (ถ้ามี) ถ้าไม่มีใช้ Default
+                phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
+            except:
+                phone = "0812345678"
+            
+            log(f"...กรอกเบอร์โทรศัพท์: {phone}")
+            
+            # 3. หาช่องกรอก (ใช้เทคนิค Click Label + Tab)
+            if smart_click(window, ["หมายเลขโทรศัพท์", "เบอร์โทรศัพท์", "โทรศัพท์"], timeout=3, optional=True):
+                window.type_keys("{TAB}")
+                time.sleep(0.2)
+                window.type_keys(str(phone), with_spaces=True)
+                log("[/] กรอกเบอร์เรียบร้อย")
+            else:
+                # ถ้าหา Label ไม่เจอ ลองพิมพ์เลย
+                log("...หา Label ไม่เจอ -> ลองพิมพ์เลย...")
+                window.type_keys(str(phone), with_spaces=True)
+                
+        except Exception as e:
+            log(f"[!] Error ช่วงกรอกเบอร์: {e}")
+
+        # กดถัดไป
         smart_click(window, "ถัดไป", timeout=2, optional=True)
     else:
         log("[Popup] ไม่เจอหน้าผู้ฝากส่ง -> ข้ามไปขั้นตอนต่อไป")
@@ -119,8 +168,10 @@ def run_smart_scenario(main_window, config):
     if not smart_click(main_window, "รับฝากสิ่งของ"): return
     time.sleep(step_delay)
 
-    # --- เช็ค Popup ผู้ฝากส่ง ---
-    check_sender_popup(main_window)
+    # --- เช็ค Popup ผู้ฝากส่ง (ย้ายมาตรงนี้ตามคำขอ) ---
+    # จะทำการเช็คทันทีหลังกดรับฝากสิ่งของ ก่อนที่จะไปเลือกซอง
+    # ส่ง config เข้าไปเพื่อใช้ดึงเบอร์โทรและระยะ Scroll
+    check_sender_popup(main_window, config)
     time.sleep(step_delay)
 
     # 2. ซองจดหมาย (รูปร่าง)
