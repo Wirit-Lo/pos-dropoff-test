@@ -46,6 +46,24 @@ def force_scroll_down(window, scroll_dist=-5):
         log(f"[!] Mouse scroll failed: {e}")
         window.type_keys("{PGDN}")
 
+def click_percent(window, x_pct, y_pct):
+    """
+    [NEW] ฟังก์ชันคลิกตามตำแหน่ง % ของหน้าจอ (แก้ปัญหาหาปุ่มไม่เจอ)
+    x_pct: 0.0 - 1.0 (ซ้ายไปขวา)
+    y_pct: 0.0 - 1.0 (บนลงล่าง)
+    """
+    try:
+        rect = window.rectangle()
+        target_x = rect.left + int(rect.width() * x_pct)
+        target_y = rect.top + int(rect.height() * y_pct)
+        
+        log(f"...Force Click ที่ตำแหน่ง {x_pct*100}% , {y_pct*100}% (x={target_x}, y={target_y})")
+        mouse.click(coords=(target_x, target_y))
+        return True
+    except Exception as e:
+        log(f"[!] Click Percent Failed: {e}")
+        return False
+
 def smart_click(window, criteria_list, timeout=5, optional=False):
     """คลิกปุ่มตามรายการชื่อ"""
     if isinstance(criteria_list, str): criteria_list = [criteria_list]
@@ -223,60 +241,60 @@ def run_smart_scenario(main_window, config):
                 time.sleep(1)
         except: pass
 
-    # STEP 6: บริการหลัก (Service Selection) - [REVISED LOGIC]
+    # STEP 6: บริการหลัก (Service Selection) - [Robust Click]
     if wait_for_text(main_window, "บริการหลัก", timeout=10):
         log("...รอหน้าจอพร้อม 2 วินาที...")
         time.sleep(2)
         
-        # 1. บังคับ Focus ที่หน้าต่างหลัก
         main_window.set_focus()
         try:
             main_window.child_window(title="บริการหลัก", control_type="Text").click_input()
         except: pass
 
-        # 2. วนลูปพยายามเลือก EMS (Retry Loop)
         ems_selected = False
-        for attempt in range(3): # ลอง 3 ครั้ง
+        for attempt in range(3): 
             log(f"STEP 6: เลือกบริการหลัก (รอบที่ {attempt+1})")
             
-            # เช็คก่อนว่าเข้าหน้า EMS หรือยัง
+            # Check Success
             if wait_for_text(main_window, "EMS ในประเทศ", timeout=2):
                 ems_selected = True
                 log("[/] ตรวจพบหน้า 'EMS ในประเทศ' เรียบร้อย")
                 break
             
-            # ถ้ายังไม่เจอ ลองกด E
-            log("...กด E...")
+            # วิธีที่ 1: ลองหาด้วยชื่อหลายๆ แบบ
+            log("...ลองคลิกปุ่ม EMS ตามชื่อ...")
+            if smart_click(main_window, ["บริการอีเอ็มเอส", "อีเอ็มเอส", "EMS"], timeout=1, optional=True):
+                time.sleep(1)
+                continue
+
+            # วิธีที่ 2: กด E
+            log("...ลองกด E...")
             main_window.type_keys("E")
             time.sleep(1)
-            
-            # เช็คอีกที
-            if wait_for_text(main_window, "EMS ในประเทศ", timeout=1):
-                ems_selected = True
-                break
-                
-            # ถ้ากด E ไม่ไป ลองคลิกเมาส์
-            log("...กด E ไม่ไป -> ลองคลิกปุ่ม 'บริการอีเอ็มเอส'...")
-            if smart_click(main_window, ["บริการอีเอ็มเอส", "บริการอีเอ็มเอส (E)"], timeout=2, optional=True):
-                time.sleep(1)
-                if wait_for_text(main_window, "EMS ในประเทศ", timeout=1):
-                    ems_selected = True
-                    break
 
-        # ถ้าจบ Loop แล้วยังเลือกไม่ได้ ให้หยุด
+            # วิธีที่ 3: [ไม้ตาย] คลิกที่ตำแหน่งหน้าจอ (Coordinate Click)
+            # ปุ่ม EMS อยู่ซ้ายมือ (ประมาณ 20-25% จากซ้าย, 50% จากบน)
+            log("...ลองคลิกที่ตำแหน่งหน้าจอ (Coordinate Click)...")
+            click_percent(main_window, 0.20, 0.50) 
+            time.sleep(2)
+
         if not ems_selected:
-            log("[X] ไม่สามารถเลือกบริการ EMS ได้ (กด E และคลิกไม่สำเร็จ)")
-            debug_current_screen(main_window)
-            return
+            # เช็คครั้งสุดท้าย
+            if wait_for_text(main_window, "EMS ในประเทศ", timeout=2):
+                log("[/] (Late Check) ตรวจพบหน้า 'EMS ในประเทศ'")
+            else:
+                log("[X] ไม่สามารถเลือกบริการ EMS ได้")
+                debug_current_screen(main_window)
+                return
 
-        # 3. เลือกประเภทส่ง (กด 0) เมื่อมั่นใจว่าอยู่หน้า EMS แล้ว
+        # 3. เลือกประเภทส่ง (กด 0)
         log("STEP 6.5: เลือกประเภทส่ง (กด 0)")
         main_window.type_keys("0")
         time.sleep(step_delay)
     else:
         log("[!] หาหน้าบริการหลักไม่เจอ (ข้ามการกด E)")
 
-    # --- STEP 7: เพิ่มประกัน (Insurance) [UPDATED ROBUSTNESS] ---
+    # --- STEP 7: เพิ่มประกัน (Insurance) ---
     if add_insurance:
         log(f"STEP 7: เพิ่มราคารับประกัน ({insurance_amount} บาท)")
         
@@ -295,8 +313,7 @@ def run_smart_scenario(main_window, config):
             main_window.type_keys(str(insurance_amount))
             time.sleep(1)
             
-            # 4. กดปุ่ม 'ถัดไป' หรือ 'Enter' บน Popup
-            # พยายามหาปุ่ม 'ถัดไป' บน Popup ก่อน
+            # 4. กดปุ่ม 'ถัดไป' หรือ 'Enter'
             if smart_click(main_window, ["ถัดไป", "Next", "Enter"], timeout=3, optional=True):
                 log("[/] กดปุ่ม 'ถัดไป' บน Popup สำเร็จ")
             else:
@@ -307,7 +324,7 @@ def run_smart_scenario(main_window, config):
         else:
             log("[X] ไม่เจอ Popup 'วงเงินประกัน' - หยุดการทำงานเพื่อตรวจสอบ")
             debug_current_screen(main_window)
-            return # หยุดการทำงานทันทีถ้ากด + แล้ว Popup ไม่ขึ้น
+            return 
              
     else:
         log("STEP 7: ไม่เพิ่มประกัน (ข้าม)")
@@ -316,7 +333,7 @@ def run_smart_scenario(main_window, config):
     log("...กำลังจะไปหน้าบริการพิเศษ (กด Enter)...")
     main_window.type_keys("{ENTER}")
     
-    # --- STEP 8: บริการพิเศษ (Special Service) [Check Stuck] ---
+    # --- STEP 8: บริการพิเศษ ---
     if wait_for_text(main_window, "บริการพิเศษ", timeout=10):
         log("STEP 8: บริการพิเศษ (เจอหน้าแล้ว -> กด A)")
         main_window.type_keys("A")
@@ -324,9 +341,9 @@ def run_smart_scenario(main_window, config):
     else:
         log("[X] หมดเวลา! ไม่เจอหน้า 'บริการพิเศษ' (ติดอยู่ที่หน้าเดิม?)")
         debug_current_screen(main_window)
-        return # หยุดการทำงาน
+        return 
 
-    # --- STEP 9: จบงาน (Finish) ---
+    # --- STEP 9: จบงาน ---
     log("STEP 9: จบงาน (ยังไม่กด Z ตามคำสั่ง)")
     # main_window.type_keys("Z")
 
