@@ -3,7 +3,7 @@ import os
 import time
 import datetime
 from pywinauto.application import Application
-from pywinauto import mouse  # [NEW] ต้อง Import mouse เพื่อใช้เลื่อนหน้าจอ
+from pywinauto import mouse  # ต้อง Import mouse เพื่อใช้เลื่อนหน้าจอ
 
 # ================= 1. Config & Log =================
 def load_config(filename='config.ini'):
@@ -18,7 +18,7 @@ def log(message):
 # ================= 2. Helper Functions (Scroll & Search) =================
 def force_scroll_down(window, scroll_dist=-5):
     """
-    [NEW] ฟังก์ชันช่วยเลื่อนหน้าจอลงโดยใช้ Mouse Wheel
+    ฟังก์ชันช่วยเลื่อนหน้าจอลงโดยใช้ Mouse Wheel
     scroll_dist ติดลบ = เลื่อนลง
     """
     log(f"...กำลังเลื่อนหน้าจอลง (Mouse Wheel {scroll_dist})...")
@@ -67,7 +67,7 @@ def smart_click(window, criteria_list, timeout=5, optional=False):
 
 # ================= 3. Smart Input Functions =================
 def smart_input_weight(window, value):
-    """ฟังก์ชันกรอกน้ำหนัก (แบบเดิม)"""
+    """ฟังก์ชันกรอกน้ำหนัก"""
     log(f"...กำลังกรอกน้ำหนัก: {value}")
     try:
         edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
@@ -85,20 +85,15 @@ def smart_input_weight(window, value):
 
 def smart_input_with_scroll(window, label_text, value, scroll_times=2):
     """
-    [NEW] ฟังก์ชันกรอกข้อมูลที่รองรับการเลื่อนหน้าจอ (สำหรับเบอร์โทร หรือช่องที่อยู่ด้านล่าง)
-    - label_text: ชื่อหัวข้อของช่อง (เช่น 'หมายเลขโทรศัพท์') เพื่อใช้ค้นหา
-    - value: ค่าที่จะกรอก
+    ฟังก์ชันกรอกข้อมูลที่รองรับการเลื่อนหน้าจอ
     """
     log(f"...กำลังพยายามกรอก '{label_text}': {value}")
 
-    # ลองหา 2 รอบ (รอบแรกหาเลย, รอบสองลอง Scroll แล้วหา)
     for i in range(scroll_times + 1):
         try:
-            # 1. พยายามหา Edit Box ที่สัมพันธ์กับชื่อ Label หรือหา Edit Box โดยตรง
-            # เทคนิค: หา Edit Control ทั้งหมด
+            # 1. พยายามหา Edit Box ที่สัมพันธ์กับชื่อ Label
             edits = window.descendants(control_type="Edit")
             for edit in edits:
-                # เช็คชื่อของ Edit Box (AutomationId หรือ Name)
                 if edit.is_visible() and (label_text in edit.element_info.name or label_text in edit.window_text()):
                     edit.set_focus()
                     edit.click_input()
@@ -106,7 +101,7 @@ def smart_input_with_scroll(window, label_text, value, scroll_times=2):
                     log(f"[/] กรอก {label_text} สำเร็จ (Found by Name)")
                     return True
             
-            # 2. ถ้าหาจากชื่อ Edit ไม่เจอ ลองหา Text Label แล้วกด Tab ไปหาช่องข้างๆ
+            # 2. ถ้าหาจากชื่อ Edit ไม่เจอ ลองหา Text Label แล้วกด Tab
             labels = [c for c in window.descendants(control_type="Text") if label_text in c.window_text() and c.is_visible()]
             if labels:
                 log(f"[/] เจอ Label '{label_text}' -> กำลังกด Tab เพื่อเข้าช่องกรอก")
@@ -119,27 +114,38 @@ def smart_input_with_scroll(window, label_text, value, scroll_times=2):
         except Exception as e:
             log(f"[!] Error finding input: {e}")
 
-        # ถ้ายังไม่เจอ และยังไม่ใช่รอบสุดท้าย ให้เลื่อนจอ
+        # ถ้ายังไม่เจอ ให้เลื่อนจอ
         if i < scroll_times:
             log(f"[Rotate {i+1}] หาช่องไม่เจอ... กำลังเลื่อนหน้าจอลง...")
-            force_scroll_down(window, scroll_dist=-5) # เลื่อนลง
+            force_scroll_down(window, scroll_dist=-5)
             time.sleep(1)
 
     log(f"[X] หมดความพยายามในการหาช่อง '{label_text}'")
     return False
 
-def check_sender_popup(window):
-    log("...เช็ค Popup ผู้ฝากส่ง (รอ 5 วินาที)...")
-    if smart_click(window, "อ่านบัตรประชาชน", timeout=5, optional=True):
-        log("[Popup] เจอหน้าผู้ฝากส่ง -> กดอ่านบัตรเรียบร้อย")
-        time.sleep(1)
-        smart_click(window, "ถัดไป", timeout=2, optional=True)
-    else:
-        log("[Popup] ไม่เจอหน้าผู้ฝากส่ง -> ข้ามไปขั้นตอนต่อไป")
-
 def smart_next(window):
+    """กดถัดไป หรือ Enter"""
     if not smart_click(window, "ถัดไป", timeout=2, optional=True):
         window.type_keys("{ENTER}")
+
+def process_sender_info(window, phone_number):
+    """
+    [UPDATED] ฟังก์ชันจัดการหน้าผู้ฝากส่ง (อ่านบัตร -> กรอกเบอร์ -> ถัดไป)
+    """
+    log("...เช็คหน้า Popup ผู้ฝากส่ง...")
+    # เช็คว่ามีปุ่มอ่านบัตรประชาชนหรือไม่ (ถ้ามีแสดงว่าอยู่หน้าผู้ฝากส่ง)
+    if smart_click(window, "อ่านบัตรประชาชน", timeout=5, optional=True):
+        log("[Popup] เจอหน้าผู้ฝากส่ง -> กดอ่านบัตรเรียบร้อย")
+        time.sleep(1) # รอข้อมูลบัตรขึ้น
+        
+        # [แก้ไข] กรอกเบอร์โทรศัพท์ก่อนกดถัดไป
+        smart_input_with_scroll(window, "หมายเลขโทรศัพท์", phone_number)
+        
+        # [แก้ไข] เมื่อกรอกเสร็จแล้ว ค่อยกดถัดไป
+        log("...ข้อมูลครบถ้วน กดถัดไป...")
+        smart_next(window)
+    else:
+        log("[Popup] ไม่เจอหน้าผู้ฝากส่ง -> ข้ามไปขั้นตอนต่อไป")
 
 def wait_for_text(window, text, timeout=10):
     log(f"...รอข้อความ '{text}'...")
@@ -156,30 +162,25 @@ def wait_for_text(window, text, timeout=10):
 # ================= 4. Main Scenario =================
 def run_smart_scenario(main_window, config):
     try:
+        # [แก้ไข] ดึงข้อมูลจาก Config ให้ถูกหมวด (TEST_DATA สำหรับเบอร์โทร)
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
         postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
-        # อ่านเบอร์โทรจาก Config (ถ้าไม่มีให้ใช้ค่า Default)
-        phone = config['DEPOSIT_ENVELOPE'].get('PhoneNumber', '0812345678') 
+        phone = config['TEST_DATA'].get('PhoneNumber', '0812345678') # ดึงจาก TEST_DATA
+        
         step_delay = int(config['SETTINGS'].get('StepDelay', 1))
-    except: 
-        log("[Error] Config ผิดพลาด")
+    except Exception as e: 
+        log(f"[Error] Config ผิดพลาด: {e}")
         return
 
-    log(f"\n--- เริ่มต้น Scenario (Smart Mode + Scroll Support) ---")
+    log(f"\n--- เริ่มต้น Scenario (Smart Mode) Phone: {phone} ---")
     time.sleep(1)
 
     # 1. รับฝากสิ่งของ
     if not smart_click(main_window, "รับฝากสิ่งของ"): return
     time.sleep(step_delay)
 
-    # --- เช็ค Popup ผู้ฝากส่ง ---
-    check_sender_popup(main_window)
-    time.sleep(step_delay)
-
-    # [NEW STEP] กรอกเบอร์โทรศัพท์ (ถ้ามีให้กรอกหน้านี้)
-    # สมมติว่าต้องกรอกเบอร์หลังอ่านบัตร และช่องอาจจะอยู่ข้างล่าง
-    # ใช้ฟังก์ชันใหม่ smart_input_with_scroll
-    smart_input_with_scroll(main_window, "หมายเลขโทรศัพท์", phone)
+    # --- [UPDATED] ขั้นตอนผู้ฝากส่ง (รวม Read ID + Phone + Enter ไว้ในฟังก์ชันเดียว) ---
+    process_sender_info(main_window, phone)
     time.sleep(step_delay)
 
     # 2. ซองจดหมาย (รูปร่าง)
