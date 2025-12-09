@@ -248,35 +248,47 @@ def run_smart_scenario(main_window, config):
     else:
         main_window.type_keys("{ENTER}")
 
-    # ================= [STEP 6: เลือกบริการ] =================
-    log("STEP 6: เลือกบริการ (Using Text Search)")
+    # ================= [STEP 6: เลือกบริการ (KEYBOARD MODE)] =================
+    log("STEP 6: เลือกบริการ (Keyboard Mode: Press E)")
     
-    log("...รอหน้าจอโหลด 2 วินาที...")
-    time.sleep(2)
-
-    # ใช้ฟังก์ชันใหม่ ค้นหาจากชื่อปุ่ม/ข้อความ
-    # ใส่ Keyword หลายๆ แบบเผื่อไว้ (EMS, บริการอีเอ็มเอส, ในประเทศ)
-    success = click_button_containing_text(main_window, ["EMS", "บริการอีเอ็มเอส", "ในประเทศ"])
-
-    # ================= [CHECK: ผ่านหรือไม่?] =================
-    time.sleep(2)
-    
-    # ตรวจสอบว่ายังอยู่หน้า "บริการหลัก" หรือไม่ (ถ้ายังอยู่แสดงว่ากดไม่ไป)
-    still_on_main = wait_for_text(main_window, "บริการหลัก", timeout=1)
-    
-    if success and not still_on_main:
-        log("[SUCCESS] หน้าจอเปลี่ยนแล้ว (ผ่าน Step 6)")
-        time.sleep(1)
-        log("...กด 0 เพื่อยืนยัน...")
-        main_window.type_keys("0")
-    else:
-        log("\n[!!! PAUSED !!!] เกิดปัญหา: กดแล้วไม่ไป หรือ ยังอยู่หน้าเดิม")
-        log(">> สคริปต์จะหยุดค้างอยู่ที่นี่เพื่อให้คุณตรวจสอบหน้าจอ")
-        # แสดงโครงสร้างหน้าจอเพื่อช่วย Debug ว่าจริงๆ แล้ว text มันชื่ออะไรกันแน่
-        debug_ui_structure(main_window) 
+    # 1. รอให้เข้าหน้า 'บริการหลัก' ชัวร์ๆ ก่อน (ตามที่ขอ)
+    log("...รอตรวจสอบหน้า 'บริการหลัก'...")
+    # รอได้สูงสุด 15 วินาที เพื่อให้แน่ใจว่าหน้าโหลดเสร็จจริง
+    if wait_for_text(main_window, "บริการหลัก", timeout=15):
+        log("[/] ตรวจพบหน้า 'บริการหลัก' เรียบร้อย")
+        # เพิ่ม Wait อีกนิดเพื่อให้ UI พร้อมรับ Input จริงๆ
+        log("...รอ UI พร้อม (2 วินาที)...")
+        time.sleep(2)
         
-        while True:
-            time.sleep(5)
+        # 2. กดคีย์บอร์ด E
+        log("...กดปุ่ม 'E' เพื่อเลือก EMS...")
+        main_window.set_focus() # บังคับ Focus หน้าจอก่อนกด
+        main_window.type_keys("E")
+        time.sleep(2)
+
+        # 3. ตรวจสอบผลลัพธ์
+        # ถ้าหน้าจอยังมีคำว่า "บริการหลัก" แสดงว่ายังไม่ไป
+        if not wait_for_text(main_window, "บริการหลัก", timeout=1):
+            log("[SUCCESS] หน้าจอเปลี่ยนแล้ว (ผ่าน Step 6)")
+            time.sleep(1)
+            log("...กด 0 เพื่อยืนยัน...")
+            main_window.type_keys("0")
+        else:
+            log("[WARN] กด E แล้วยังอยู่หน้าเดิม -> ลองกด Enter ย้ำ")
+            main_window.type_keys("{ENTER}")
+            time.sleep(1)
+            
+            if not wait_for_text(main_window, "บริการหลัก", timeout=1):
+                 log("[SUCCESS] หน้าจอเปลี่ยนแล้วหลังกด Enter")
+                 main_window.type_keys("0")
+            else:
+                 log("[FAIL] กด E ไม่ทำงาน (ติดอยู่ที่หน้าบริการหลัก)")
+                 debug_ui_structure(main_window)
+                 while True: time.sleep(5)
+    else:
+        log("[!] ไม่เจอหน้า 'บริการหลัก' (Timeout) - หยุดทำงาน")
+        debug_ui_structure(main_window)
+        while True: time.sleep(5)
             
     log("--- จบการทำงาน ---")
     return
