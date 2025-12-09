@@ -46,24 +46,6 @@ def force_scroll_down(window, scroll_dist=-5):
         log(f"[!] Mouse scroll failed: {e}")
         window.type_keys("{PGDN}")
 
-def click_percent(window, x_pct, y_pct):
-    """
-    [NEW] ฟังก์ชันคลิกตามตำแหน่ง % ของหน้าจอ (แก้ปัญหาหาปุ่มไม่เจอ)
-    x_pct: 0.0 - 1.0 (ซ้ายไปขวา)
-    y_pct: 0.0 - 1.0 (บนลงล่าง)
-    """
-    try:
-        rect = window.rectangle()
-        target_x = rect.left + int(rect.width() * x_pct)
-        target_y = rect.top + int(rect.height() * y_pct)
-        
-        log(f"...Force Click ที่ตำแหน่ง {x_pct*100}% , {y_pct*100}% (x={target_x}, y={target_y})")
-        mouse.click(coords=(target_x, target_y))
-        return True
-    except Exception as e:
-        log(f"[!] Click Percent Failed: {e}")
-        return False
-
 def smart_click(window, criteria_list, timeout=5, optional=False):
     """คลิกปุ่มตามรายการชื่อ"""
     if isinstance(criteria_list, str): criteria_list = [criteria_list]
@@ -241,11 +223,12 @@ def run_smart_scenario(main_window, config):
                 time.sleep(1)
         except: pass
 
-    # STEP 6: บริการหลัก (Service Selection) - [Robust Click]
+    # STEP 6: บริการหลัก (Service Selection) - [Robust Click & Keys]
     if wait_for_text(main_window, "บริการหลัก", timeout=10):
         log("...รอหน้าจอพร้อม 2 วินาที...")
         time.sleep(2)
         
+        # 1. บังคับ Focus ที่หน้าต่างหลัก และคลิกที่ว่างเพื่อ Activate Window
         main_window.set_focus()
         try:
             main_window.child_window(title="บริการหลัก", control_type="Text").click_input()
@@ -261,22 +244,25 @@ def run_smart_scenario(main_window, config):
                 log("[/] ตรวจพบหน้า 'EMS ในประเทศ' เรียบร้อย")
                 break
             
-            # วิธีที่ 1: ลองหาด้วยชื่อหลายๆ แบบ
-            log("...ลองคลิกปุ่ม EMS ตามชื่อ...")
-            if smart_click(main_window, ["บริการอีเอ็มเอส", "อีเอ็มเอส", "EMS"], timeout=1, optional=True):
-                time.sleep(1)
-                continue
-
-            # วิธีที่ 2: กด E
-            log("...ลองกด E...")
+            # วิธีที่ 1: กด E โดยเพิ่มการกดปุ่มลูกศรนำทางก่อน
+            # บางครั้งโปรแกรมต้องมีการขยับ Selection ก่อนถึงจะรับ Hotkey
+            log("...ลองกด Right Arrow แล้วกด E...")
+            main_window.type_keys("{RIGHT}") 
+            time.sleep(0.5)
             main_window.type_keys("E")
             time.sleep(1)
 
-            # วิธีที่ 3: [ไม้ตาย] คลิกที่ตำแหน่งหน้าจอ (Coordinate Click)
-            # ปุ่ม EMS อยู่ซ้ายมือ (ประมาณ 20-25% จากซ้าย, 50% จากบน)
-            log("...ลองคลิกที่ตำแหน่งหน้าจอ (Coordinate Click)...")
-            click_percent(main_window, 0.20, 0.50) 
-            time.sleep(2)
+            # เช็คผลลัพธ์
+            if wait_for_text(main_window, "EMS ในประเทศ", timeout=1):
+                ems_selected = True
+                break
+
+            # วิธีที่ 2: ลองหาด้วยชื่อหลายๆ แบบ (เน้นหา Text Element)
+            # จากรูป Text คือ "บริการอีเอ็มเอส"
+            log("...ลองคลิกปุ่ม EMS จากข้อความ (Text)...")
+            if smart_click(main_window, ["บริการอีเอ็มเอส", "อีเอ็มเอส"], timeout=1, optional=True):
+                time.sleep(1)
+                continue
 
         if not ems_selected:
             # เช็คครั้งสุดท้าย
