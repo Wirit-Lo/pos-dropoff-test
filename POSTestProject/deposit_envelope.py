@@ -17,24 +17,33 @@ def log(message):
 
 # ================= 2. Smart Functions (Adaptive) =================
 def force_scroll_down(window, scroll_dist=-20):
-    """ฟังก์ชันช่วยเลื่อนหน้าจอลง"""
+    """
+    ฟังก์ชันช่วยเลื่อนหน้าจอลง (Scroll) โดยใช้ Mouse Wheel
+    ค่า scroll_dist ติดลบ = เลื่อนลง
+    """
     log(f"...กำลังเลื่อนหน้าจอลง (Mouse Wheel {scroll_dist})...")
     try:
         rect = window.rectangle()
+        # หาจุดกลางหน้าจอเพื่อวางเมาส์
         center_x = rect.left + 300
         center_y = rect.top + 300
+        
+        # คลิกเพื่อให้หน้าจอ Focus ก่อนเลื่อน (คลิกตรงกลาง)
         mouse.click(coords=(center_x, center_y))
         time.sleep(0.5)
+        # สั่งเลื่อนเมาส์
         mouse.scroll(coords=(center_x, center_y), wheel_dist=scroll_dist)
         time.sleep(1)
     except Exception as e:
-        log(f"[!] Scroll failed: {e}")
+        log(f"[!] Mouse scroll failed: {e}")
+        # ถ้าใช้เมาส์ไม่ได้ ให้ลองกดปุ่ม Page Down แทน
         window.type_keys("{PGDN}")
 
 def smart_click(window, criteria_list, timeout=5, optional=False):
     """
     คลิกปุ่มตามรายการชื่อ (รองรับหลายชื่อ)
-    optional=True: ถ้าหาไม่เจอให้ปล่อยผ่าน (ไม่ Error)
+    ระบบนี้เป็น Adaptive อยู่แล้ว: คือถ้าเจอวินาทีที่ 1 ก็จะกดและจบฟังก์ชันทันที
+    ถ้าไม่เจอก็จะรอจนครบ timeout
     """
     if isinstance(criteria_list, str): criteria_list = [criteria_list]
     
@@ -62,40 +71,46 @@ def smart_click(window, criteria_list, timeout=5, optional=False):
 
 def check_sender_popup(window, config):
     """
-    ฟังก์ชันเช็คหน้า 'ผู้ฝากส่ง'
-    - กดอ่านบัตร
-    - เลื่อนจอลง
-    - กรอกเบอร์โทรศัพท์
+    ฟังก์ชันเช็คหน้า 'ผู้ฝากส่ง' แบบ Adaptive
+    - Timeout ดึงจาก Config (เครื่องช้ารอนาน เครื่องไวไปเลย)
+    - เพิ่มการ Scroll Down และ Click Label เพื่อแก้ปัญหากรอกผิดช่อง
     """
-    log("...เช็ค Popup ผู้ฝากส่ง (รอ 5 วินาที)...")
-    if smart_click(window, "อ่านบัตรประชาชน", timeout=5, optional=True):
+    # ดึงค่า Timeout หลักจาก Config (ถ้าไม่มีใช้ 5 วิ)
+    try:
+        adapt_timeout = int(config['SETTINGS'].get('ElementWaitTimeout', 5))
+        scroll_dist = int(config['SETTINGS'].get('ScrollDistance', -20))
+        phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
+    except:
+        adapt_timeout = 5
+        scroll_dist = -20
+        phone = "0812345678"
+
+    log(f"...เช็ค Popup ผู้ฝากส่ง (รอสูงสุด {adapt_timeout} วิ)...")
+    
+    # ถ้าเจอ 'อ่านบัตรประชาชน' ให้กดเลย (ถ้าเจอเร็ว ก็ไปต่อเร็ว)
+    if smart_click(window, "อ่านบัตรประชาชน", timeout=adapt_timeout, optional=True):
         log("[Popup] เจอหน้าผู้ฝากส่ง -> กดอ่านบัตรเรียบร้อย")
-        time.sleep(1)
+        time.sleep(1) # รอข้อมูลบัตรโหลดเข้า
         
-        # --- เพิ่มส่วนเลื่อนจอและกรอกเบอร์ ---
+        # --- เพิ่มส่วนเลื่อนจอและกรอกเบอร์ (ตามที่ขอ) ---
         try:
-            # 1. เลื่อนจอลง
-            scroll_dist = int(config['SETTINGS'].get('ScrollDistance', -20))
+            # 1. สั่งเลื่อนหน้าจอลงก่อน
             force_scroll_down(window, scroll_dist)
-            
-            # 2. ดึงเบอร์โทรจาก Config
-            try:
-                # ลองดึงจาก TEST_DATA (ถ้ามี) ถ้าไม่มีใช้ Default
-                phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
-            except:
-                phone = "0812345678"
             
             log(f"...กรอกเบอร์โทรศัพท์: {phone}")
             
-            # 3. หาช่องกรอก (ใช้เทคนิค Click Label + Tab)
-            if smart_click(window, ["หมายเลขโทรศัพท์", "เบอร์โทรศัพท์", "โทรศัพท์"], timeout=3, optional=True):
+            # 2. พยายามคลิกที่คำว่า "หมายเลขโทรศัพท์" หรือ "เบอร์โทรศัพท์" 
+            # เพื่อให้ Cursor ย้ายจากชื่อ (ด้านบน) ลงมาที่เบอร์ (ด้านล่าง)
+            labels = ["หมายเลขโทรศัพท์", "เบอร์โทรศัพท์", "โทรศัพท์", "เบอร์มือถือ"]
+            if smart_click(window, labels, timeout=3, optional=True):
+                # ถ้ากด Label ได้ ให้กด TAB 1 ทีเพื่อเข้าช่อง Input
                 window.type_keys("{TAB}")
                 time.sleep(0.2)
                 window.type_keys(str(phone), with_spaces=True)
-                log("[/] กรอกเบอร์เรียบร้อย")
+                log("[/] กรอกเบอร์เรียบร้อย (สูตร Click Label + Tab)")
             else:
-                # ถ้าหา Label ไม่เจอ ลองพิมพ์เลย
-                log("...หา Label ไม่เจอ -> ลองพิมพ์เลย...")
+                # ถ้าหา Label ไม่เจอ (อาจจะ Scroll ไม่ถึง) ลองกด TAB หลายๆ ที หรือพิมพ์เลย
+                log("...หา Label ไม่เจอ -> ลองพิมพ์เลย (Blind Type)...")
                 window.type_keys(str(phone), with_spaces=True)
                 
         except Exception as e:
@@ -104,7 +119,7 @@ def check_sender_popup(window, config):
         # กดถัดไป
         smart_click(window, "ถัดไป", timeout=2, optional=True)
     else:
-        log("[Popup] ไม่เจอหน้าผู้ฝากส่ง -> ข้ามไปขั้นตอนต่อไป")
+        log("[Popup] ไม่เจอหน้าผู้ฝากส่ง (ภายในเวลาที่กำหนด) -> ข้ามไปขั้นตอนต่อไป")
 
 def smart_input_weight(window, value):
     log(f"...กำลังกรอกน้ำหนัก: {value}")
