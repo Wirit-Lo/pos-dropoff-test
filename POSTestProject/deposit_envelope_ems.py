@@ -209,15 +209,32 @@ def run_smart_scenario(main_window, config):
         except: pass
 
     # STEP 6: บริการหลัก (Service Selection)
-    # [FIXED] รอให้แน่ใจว่าเข้าหน้าบริการหลักแล้ว และเพิ่ม sleep กันพลาด
     if wait_for_text(main_window, "บริการหลัก", timeout=10):
-        # เจอข้อความแล้ว รออีกนิดให้ UI พร้อมรับ Input (E)
+        # [UPDATED] แก้ไขปัญหากด E ไม่ติด
         log("...รอหน้าจอพร้อม 2 วินาที...")
-        time.sleep(2) 
+        time.sleep(2)
         
-        log("STEP 6: เลือกบริการหลัก (กด E -> กด 0)")
+        # 1. บังคับ Focus ที่หน้าต่างหลัก
+        main_window.set_focus()
+        
+        # 2. ลองคลิกที่หัวข้อ 'บริการหลัก' 1 ครั้ง เพื่อเคลียร์ Focus จากช่องอื่นๆ
+        try:
+            # พยายามหา Text control ที่ชื่อบริการหลักแล้วคลิก (ถ้าหาไม่เจอก็ข้ามไป)
+            main_window.child_window(title="บริการหลัก", control_type="Text").click_input()
+        except:
+            pass
+            
+        log("STEP 6: เลือกบริการหลัก (กด E)")
         main_window.type_keys("E")
         time.sleep(1)
+
+        # 3. เช็คว่ากด E ติดหรือไม่ (ถ้าติด ต้องมีคำว่า 'EMS ในประเทศ' โผล่มาในหน้าถัดไป)
+        # ถ้าไม่เจอ แสดงว่ายังอยู่หน้าเดิม -> ให้ลองใช้ smart_click กดปุ่ม 'บริการอีเอ็มเอส' แทน
+        if not wait_for_text(main_window, "EMS ในประเทศ", timeout=2):
+             log("[!] กด E ไม่ไป (หรือโหลดช้า) -> ลองคลิกปุ่ม 'บริการอีเอ็มเอส' สำรอง")
+             smart_click(main_window, ["บริการอีเอ็มเอส", "EMS"], timeout=2, optional=True)
+
+        log("STEP 6.5: เลือกประเภทส่ง (กด 0)")
         main_window.type_keys("0")
         time.sleep(step_delay)
     else:
@@ -227,8 +244,6 @@ def run_smart_scenario(main_window, config):
     if add_insurance:
         log(f"STEP 7: เพิ่มราคารับประกัน ({insurance_amount} บาท)")
         
-        # [FIXED] เปลี่ยนกลับมาใช้ smart_click เพื่อใช้เมาส์กด
-        # เพิ่ม criteria หลายแบบเผื่อปุ่มมีชื่อต่างกัน
         if smart_click(main_window, ["+", "เพิ่ม", "Add"], timeout=5, optional=True):
              log("[/] กดปุ่มเพิ่มประกันสำเร็จ (Click)")
         else:
