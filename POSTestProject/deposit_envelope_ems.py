@@ -193,15 +193,14 @@ def run_smart_scenario(main_window, config):
         main_window.type_keys(str(postal), with_spaces=True)
     
     smart_next(main_window)
-    time.sleep(1)
+    # เพิ่ม Wait นิดหน่อยหลังจากกดถัดไป ก่อนจะเช็ค Popup
+    time.sleep(2)
 
     # --- [UPDATED] เช็ค Popup รหัสไปรษณีย์ทับซ้อน ---
-    # ถ้ามี Popup 'ดำเนินการ' หรือ 'พื้นที่รหัสไปรษณีย์ทับซ้อน' ให้กด Enter
     if smart_click(main_window, "ดำเนินการ", timeout=2, optional=True):
         log("[Popup] รหัสไปรษณีย์ทับซ้อน -> กด 'ดำเนินการ' สำเร็จ")
         time.sleep(1)
     else:
-        # ลองเช็คจาก Text Title เพื่อความชัวร์ (บางทีปุ่มหาไม่เจอ)
         try:
             if main_window.child_window(title__contains="ทับซ้อน").exists(timeout=1):
                 log("[Popup] เจอป๊อปอัพทับซ้อน -> กด Enter")
@@ -210,20 +209,32 @@ def run_smart_scenario(main_window, config):
         except: pass
 
     # STEP 6: บริการหลัก (Service Selection)
-    # รอให้แน่ใจว่าเข้าหน้าบริการหลักแล้ว
-    wait_for_text(main_window, "บริการหลัก", timeout=5)
-    
-    log("STEP 6: เลือกบริการหลัก (กด E -> กด 0)")
-    main_window.type_keys("E")
-    time.sleep(1)
-    main_window.type_keys("0")
-    time.sleep(step_delay)
+    # [FIXED] รอให้แน่ใจว่าเข้าหน้าบริการหลักแล้ว และเพิ่ม sleep กันพลาด
+    if wait_for_text(main_window, "บริการหลัก", timeout=10):
+        # เจอข้อความแล้ว รออีกนิดให้ UI พร้อมรับ Input (E)
+        log("...รอหน้าจอพร้อม 2 วินาที...")
+        time.sleep(2) 
+        
+        log("STEP 6: เลือกบริการหลัก (กด E -> กด 0)")
+        main_window.type_keys("E")
+        time.sleep(1)
+        main_window.type_keys("0")
+        time.sleep(step_delay)
+    else:
+        log("[!] หาหน้าบริการหลักไม่เจอ (ข้ามการกด E)")
 
     # --- STEP 7: เพิ่มประกัน (Insurance) ---
     if add_insurance:
         log(f"STEP 7: เพิ่มราคารับประกัน ({insurance_amount} บาท)")
-        # ใช้วิธีกดปุ่ม + บนคีย์บอร์ดโดยตรง (แก้ปัญหาหาปุ่มไม่เจอ)
-        main_window.type_keys("+")
+        
+        # [FIXED] เปลี่ยนกลับมาใช้ smart_click เพื่อใช้เมาส์กด
+        # เพิ่ม criteria หลายแบบเผื่อปุ่มมีชื่อต่างกัน
+        if smart_click(main_window, ["+", "เพิ่ม", "Add"], timeout=5, optional=True):
+             log("[/] กดปุ่มเพิ่มประกันสำเร็จ (Click)")
+        else:
+             log("[!] หาปุ่มเพิ่มประกัน (+) ไม่เจอ - ลองกดปุ่มบนคีย์บอร์ดแทน")
+             main_window.type_keys("+")
+
         time.sleep(1)
         
         # พิมพ์จำนวนเงิน
@@ -242,15 +253,16 @@ def run_smart_scenario(main_window, config):
     main_window.type_keys("{ENTER}")
     time.sleep(step_delay)
 
-    # --- [NEW] STEP 8: บริการพิเศษ (Special Service) ---
+    # --- STEP 8: บริการพิเศษ (Special Service) ---
     wait_for_text(main_window, "บริการพิเศษ", timeout=5)
     log("STEP 8: บริการพิเศษ (กด A)")
     main_window.type_keys("A")
     time.sleep(step_delay)
 
     # --- STEP 9: จบงาน (Finish) ---
-    log("STEP 9: จบงาน (Z)")
-    main_window.type_keys("Z")
+    # [FIXED] ปิดการกด Z ตามคำขอ
+    log("STEP 9: จบงาน (ยังไม่กด Z ตามคำสั่ง)")
+    # main_window.type_keys("Z")
 
     log("\n[SUCCESS] จบการทำงาน")
 
