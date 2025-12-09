@@ -79,6 +79,52 @@ def smart_click_by_text_location(window, target_text, y_offset=0):
         log(f"[!] Error smart_click_by_text_location: {e}")
     return False
 
+def click_first_available_service(window):
+    """
+    [NEW] เลือกบริการแรกสุดโดยดูจาก Structure ของ UI (ListItem หรือ Image)
+    แทนการใช้ Coordinate เพื่อแก้ปัญหาหน้าจอต่างขนาด
+    """
+    log("...พยายามหาปุ่มบริการแรกด้วยโครงสร้าง (Structural Search)...")
+    
+    # วิธีที่ 1: หา ListItem (จาก Screenshot พบว่าปุ่มอยู่ใน List Item)
+    try:
+        list_items = window.descendants(control_type="ListItem")
+        # กรองเอาเฉพาะที่มองเห็น
+        visible_items = [item for item in list_items if item.is_visible()]
+        
+        if visible_items:
+            # มักจะเป็นรายการแรกเสมอสำหรับ EMS
+            target = visible_items[0]
+            log(f"[/] เจอ ListItem {len(visible_items)} รายการ -> คลิกรายการแรก")
+            target.click_input()
+            return True
+    except Exception as e:
+        log(f"Debug ListItem Error: {e}")
+
+    # วิธีที่ 2: หาปุ่มที่มีรูปภาพขนาดใหญ่ (Large Image Button)
+    try:
+        # หาปุ่มทั้งหมด
+        buttons = window.descendants(control_type="Button")
+        valid_buttons = []
+        for btn in buttons:
+            if btn.is_visible():
+                rect = btn.rectangle()
+                # กรองปุ่มที่มีขนาดใหญ่พอสมควร (ไม่ใช่ปุ่มเล็กๆ แถบเมนู)
+                # เช่น กว้าง > 100 และ สูง > 100
+                if rect.width() > 100 and rect.height() > 100:
+                    valid_buttons.append(btn)
+        
+        if valid_buttons:
+            # เรียงตามตำแหน่ง (บน -> ล่าง, ซ้าย -> ขวา)
+            valid_buttons.sort(key=lambda b: (b.rectangle().top, b.rectangle().left))
+            log(f"[/] เจอปุ่มขนาดใหญ่ {len(valid_buttons)} ปุ่ม -> คลิกปุ่มแรก")
+            valid_buttons[0].click_input()
+            return True
+    except Exception as e:
+        log(f"Debug Button Error: {e}")
+
+    return False
+
 def click_screen_percentage(window, pct_x, pct_y):
     """คลิกโดยอ้างอิง % ของขนาดหน้าต่าง (Fallback สุดท้าย)"""
     try:
@@ -207,15 +253,14 @@ def run_smart_scenario(main_window, config):
 
     # ================= [FIXED STEP 6 START] =================
     # หน้าเลือกบริการ EMS / ลงทะเบียน / พัสดุ
-    log("STEP 6: เลือกบริการ (Fixed Logic)")
+    log("STEP 6: เลือกบริการ (Improved Logic)")
     
     # รอให้หน้าจอโหลด Text คำว่า "บริการหลัก" หรือ "EMS" ก่อน
     if wait_for_text(main_window, "บริการหลัก", timeout=10) or wait_for_text(main_window, "อีเอ็มเอส", timeout=10):
         time.sleep(1)
         main_window.set_focus()
 
-        # วิธีที่ 1: หา Text "บริการอีเอ็มเอส" แล้วคลิกที่ตัวมัน หรือต่ำกว่ามัน 30px
-        # (จากรูป Screenshot จะเห็นคำว่า 'บริการอีเอ็มเอส' อยู่ในกรอบ)
+        # วิธีที่ 1: หา Text "บริการอีเอ็มเอส" แล้วคลิกที่ตัวมัน
         success = smart_click_by_text_location(main_window, "บริการอีเอ็มเอส", y_offset=40)
         
         if not success:
@@ -223,9 +268,12 @@ def run_smart_scenario(main_window, config):
             success = smart_click_by_text_location(main_window, "EMS ในประเทศ", y_offset=0)
 
         if not success:
-            # วิธีที่ 3 (Fallback): ถ้าหา Text ไม่เจอเลย ให้คลิกตำแหน่ง Grid แรก
-            # สมมติว่า EMS อยู่ตำแหน่งแรกซ้ายมือเสมอ (ประมาณ 20% จากซ้าย, 40% จากบน)
-            log("[!] หา Text ไม่เจอ -> ใช้ Coordinate Click ที่ตำแหน่งบริการแรก")
+            # วิธีที่ 3 (NEW): ค้นหาด้วยโครงสร้าง (ListItem หรือ Large Button)
+            success = click_first_available_service(main_window)
+
+        if not success:
+            # วิธีสุดท้ายจริงๆ ถึงค่อยใช้ Coordinate
+            log("[!] ยังหาไม่เจอ -> ใช้ Coordinate Click เป็นทางเลือกสุดท้าย")
             click_screen_percentage(main_window, 0.20, 0.40)
         
         time.sleep(1.5)
