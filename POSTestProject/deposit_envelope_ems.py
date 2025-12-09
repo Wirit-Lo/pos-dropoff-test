@@ -223,27 +223,53 @@ def run_smart_scenario(main_window, config):
                 time.sleep(1)
         except: pass
 
-    # STEP 6: บริการหลัก (Service Selection)
+    # STEP 6: บริการหลัก (Service Selection) - [REVISED LOGIC]
     if wait_for_text(main_window, "บริการหลัก", timeout=10):
-        # [UPDATED] แก้ไขปัญหากด E ไม่ติด
         log("...รอหน้าจอพร้อม 2 วินาที...")
         time.sleep(2)
         
+        # 1. บังคับ Focus ที่หน้าต่างหลัก
         main_window.set_focus()
         try:
-            # คลิก Text บริการหลัก เพื่อเคลียร์ Focus
             main_window.child_window(title="บริการหลัก", control_type="Text").click_input()
         except: pass
+
+        # 2. วนลูปพยายามเลือก EMS (Retry Loop)
+        ems_selected = False
+        for attempt in range(3): # ลอง 3 ครั้ง
+            log(f"STEP 6: เลือกบริการหลัก (รอบที่ {attempt+1})")
             
-        log("STEP 6: เลือกบริการหลัก (กด E)")
-        main_window.type_keys("E")
-        time.sleep(1)
+            # เช็คก่อนว่าเข้าหน้า EMS หรือยัง
+            if wait_for_text(main_window, "EMS ในประเทศ", timeout=2):
+                ems_selected = True
+                log("[/] ตรวจพบหน้า 'EMS ในประเทศ' เรียบร้อย")
+                break
+            
+            # ถ้ายังไม่เจอ ลองกด E
+            log("...กด E...")
+            main_window.type_keys("E")
+            time.sleep(1)
+            
+            # เช็คอีกที
+            if wait_for_text(main_window, "EMS ในประเทศ", timeout=1):
+                ems_selected = True
+                break
+                
+            # ถ้ากด E ไม่ไป ลองคลิกเมาส์
+            log("...กด E ไม่ไป -> ลองคลิกปุ่ม 'บริการอีเอ็มเอส'...")
+            if smart_click(main_window, ["บริการอีเอ็มเอส", "บริการอีเอ็มเอส (E)"], timeout=2, optional=True):
+                time.sleep(1)
+                if wait_for_text(main_window, "EMS ในประเทศ", timeout=1):
+                    ems_selected = True
+                    break
 
-        # เช็คว่ากด E ติดหรือไม่
-        if not wait_for_text(main_window, "EMS ในประเทศ", timeout=2):
-             log("[!] กด E ไม่ไป (หรือโหลดช้า) -> ลองคลิกปุ่ม 'บริการอีเอ็มเอส' สำรอง")
-             smart_click(main_window, ["บริการอีเอ็มเอส", "EMS"], timeout=2, optional=True)
+        # ถ้าจบ Loop แล้วยังเลือกไม่ได้ ให้หยุด
+        if not ems_selected:
+            log("[X] ไม่สามารถเลือกบริการ EMS ได้ (กด E และคลิกไม่สำเร็จ)")
+            debug_current_screen(main_window)
+            return
 
+        # 3. เลือกประเภทส่ง (กด 0) เมื่อมั่นใจว่าอยู่หน้า EMS แล้ว
         log("STEP 6.5: เลือกประเภทส่ง (กด 0)")
         main_window.type_keys("0")
         time.sleep(step_delay)
