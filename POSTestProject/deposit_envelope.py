@@ -3,7 +3,7 @@ import os
 import time
 import datetime
 from pywinauto.application import Application
-from pywinauto import mouse  # ต้อง Import mouse เพื่อใช้เลื่อนหน้าจอ
+from pywinauto import mouse
 
 # ================= 1. Config & Log =================
 def load_config(filename='config.ini'):
@@ -17,10 +17,7 @@ def log(message):
 
 # ================= 2. Helper Functions (Scroll & Search) =================
 def force_scroll_down(window, scroll_dist=-5):
-    """
-    ฟังก์ชันช่วยเลื่อนหน้าจอลงโดยใช้ Mouse Wheel
-    scroll_dist ติดลบ = เลื่อนลง
-    """
+    """ฟังก์ชันช่วยเลื่อนหน้าจอลงโดยใช้ Mouse Wheel"""
     log(f"...กำลังเลื่อนหน้าจอลง (Mouse Wheel {scroll_dist})...")
     try:
         rect = window.rectangle()
@@ -47,7 +44,7 @@ def smart_click(window, criteria_list, timeout=5, optional=False):
     while time.time() - start < timeout:
         for criteria in criteria_list:
             try:
-                # Deep Search
+                # Deep Search หาปุ่มหรือ Element ที่มีชื่อตรงกับ criteria
                 for child in window.descendants():
                     if child.is_visible() and criteria in child.window_text():
                         try:
@@ -79,19 +76,20 @@ def smart_input_weight(window, value):
             return True
     except: pass
     
-    # Fallback methods...
+    # Fallback methods: พิมพ์ค่าลงไปเลย
     window.type_keys(str(value), with_spaces=True)
     return True
 
 def smart_input_with_scroll(window, label_text, value, scroll_times=2):
     """
-    ฟังก์ชันกรอกข้อมูลที่รองรับการเลื่อนหน้าจอ
+    ฟังก์ชันกรอกข้อมูลที่รองรับการเลื่อนหน้าจอ (สำหรับเบอร์โทร หรือช่องที่อยู่ด้านล่าง)
     """
     log(f"...กำลังพยายามกรอก '{label_text}': {value}")
 
+    # ลองหา 2-3 รอบ (รอบแรกหาเลย, รอบต่อไปลอง Scroll แล้วหา)
     for i in range(scroll_times + 1):
         try:
-            # 1. พยายามหา Edit Box ที่สัมพันธ์กับชื่อ Label
+            # 1. พยายามหา Edit Box โดยตรงจากชื่อ
             edits = window.descendants(control_type="Edit")
             for edit in edits:
                 if edit.is_visible() and (label_text in edit.element_info.name or label_text in edit.window_text()):
@@ -101,7 +99,7 @@ def smart_input_with_scroll(window, label_text, value, scroll_times=2):
                     log(f"[/] กรอก {label_text} สำเร็จ (Found by Name)")
                     return True
             
-            # 2. ถ้าหาจากชื่อ Edit ไม่เจอ ลองหา Text Label แล้วกด Tab
+            # 2. ถ้าหา Edit ไม่เจอ ลองหา Text Label แล้วกด Tab
             labels = [c for c in window.descendants(control_type="Text") if label_text in c.window_text() and c.is_visible()]
             if labels:
                 log(f"[/] เจอ Label '{label_text}' -> กำลังกด Tab เพื่อเข้าช่องกรอก")
@@ -114,7 +112,7 @@ def smart_input_with_scroll(window, label_text, value, scroll_times=2):
         except Exception as e:
             log(f"[!] Error finding input: {e}")
 
-        # ถ้ายังไม่เจอ ให้เลื่อนจอ
+        # ถ้ายังไม่เจอ ให้เลื่อนจอลง
         if i < scroll_times:
             log(f"[Rotate {i+1}] หาช่องไม่เจอ... กำลังเลื่อนหน้าจอลง...")
             force_scroll_down(window, scroll_dist=-5)
@@ -130,25 +128,25 @@ def smart_next(window):
 
 def process_sender_info(window, phone_number):
     """
-    [UPDATED] ฟังก์ชันจัดการหน้าผู้ฝากส่ง (อ่านบัตร -> กรอกเบอร์ -> ถัดไป)
+    ฟังก์ชันจัดการหน้าผู้ฝากส่ง: อ่านบัตร -> กรอกเบอร์ให้ครบ -> กดถัดไป
     """
     log("...เช็คหน้า Popup ผู้ฝากส่ง...")
-    # เช็คว่ามีปุ่มอ่านบัตรประชาชนหรือไม่ (ถ้ามีแสดงว่าอยู่หน้าผู้ฝากส่ง)
+    # เช็คว่ามีปุ่มอ่านบัตรประชาชนหรือไม่
     if smart_click(window, "อ่านบัตรประชาชน", timeout=5, optional=True):
         log("[Popup] เจอหน้าผู้ฝากส่ง -> กดอ่านบัตรเรียบร้อย")
         time.sleep(1) # รอข้อมูลบัตรขึ้น
         
-        # [แก้ไข] กรอกเบอร์โทรศัพท์ก่อนกดถัดไป
+        # [แก้ไข] กรอกเบอร์โทรศัพท์ก่อนกดถัดไป (เลื่อนหาถ้าจำเป็น)
         smart_input_with_scroll(window, "หมายเลขโทรศัพท์", phone_number)
         
-        # [แก้ไข] เมื่อกรอกเสร็จแล้ว ค่อยกดถัดไป
+        # [แก้ไข] เมื่อกรอกเสร็จแล้ว ค่อยกดถัดไปเพื่อปิด Popup
         log("...ข้อมูลครบถ้วน กดถัดไป...")
         smart_next(window)
     else:
         log("[Popup] ไม่เจอหน้าผู้ฝากส่ง -> ข้ามไปขั้นตอนต่อไป")
 
 def wait_for_text(window, text, timeout=10):
-    log(f"...รอข้อความ '{text}'...")
+    """รอให้ข้อความปรากฏ (ใช้เช็คการเปลี่ยนหน้า)"""
     start = time.time()
     while time.time() - start < timeout:
         try:
@@ -162,24 +160,27 @@ def wait_for_text(window, text, timeout=10):
 # ================= 4. Main Scenario =================
 def run_smart_scenario(main_window, config):
     try:
-        # [แก้ไข] ดึงข้อมูลจาก Config ให้ถูกหมวด (TEST_DATA สำหรับเบอร์โทร)
+        # อ่านค่าจาก Config
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
         postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
-        phone = config['TEST_DATA'].get('PhoneNumber', '0812345678') # ดึงจาก TEST_DATA
+        # อ่านค่าลักษณะเฉพาะ (SpecialOptions) เช่น "LQ, FR"
+        special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
         
+        # อ่านเบอร์โทรจาก TEST_DATA
+        phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
         step_delay = int(config['SETTINGS'].get('StepDelay', 1))
     except Exception as e: 
         log(f"[Error] Config ผิดพลาด: {e}")
         return
 
-    log(f"\n--- เริ่มต้น Scenario (Smart Mode) Phone: {phone} ---")
+    log(f"\n--- เริ่มต้น Scenario (Options: {special_options_str}) Phone: {phone} ---")
     time.sleep(1)
 
     # 1. รับฝากสิ่งของ
     if not smart_click(main_window, "รับฝากสิ่งของ"): return
     time.sleep(step_delay)
 
-    # --- [UPDATED] ขั้นตอนผู้ฝากส่ง (รวม Read ID + Phone + Enter ไว้ในฟังก์ชันเดียว) ---
+    # --- ขั้นตอนผู้ฝากส่ง (อ่านบัตร + กรอกเบอร์) ---
     process_sender_info(main_window, phone)
     time.sleep(step_delay)
 
@@ -187,8 +188,25 @@ def run_smart_scenario(main_window, config):
     if not smart_click(main_window, "ซองจดหมาย"): return
     time.sleep(step_delay)
 
-    # 3. ซองจดหมาย (หมวดหมู่) --> Enter ผ่าน
-    log("STEP 3: กด Enter ผ่านหมวดหมู่")
+    # --- STEP 3: เลือกหมวดหมู่ / ลักษณะเฉพาะ ตาม Config ---
+    log("STEP 3: เลือกหมวดหมู่/ลักษณะเฉพาะ")
+    
+    # ตรวจสอบว่าใน Config มีค่าหรือไม่
+    if special_options_str.strip():
+        # แยกข้อความด้วยเครื่องหมายคอมมา (,) เช่น "LQ, FR" -> ["LQ", "FR"]
+        options = [opt.strip() for opt in special_options_str.split(',')]
+        
+        log(f"...กำลังเลือกรายการพิเศษ: {options}")
+        for opt in options:
+            if opt: # ป้องกันค่าว่าง
+                # พยายามกดปุ่มที่มีข้อความตรงกับ Config
+                smart_click(main_window, opt, timeout=2, optional=True)
+                time.sleep(0.5)
+    else:
+        log("...ไม่มีการระบุลักษณะเฉพาะ (ข้าม)")
+
+    # กด Enter เพื่อไปต่อ (ต้องกดเสมอเพื่อผ่านหน้านี้)
+    log("...กด Enter เพื่อไปหน้าถัดไป")
     main_window.type_keys("{ENTER}")
     time.sleep(step_delay)
 
