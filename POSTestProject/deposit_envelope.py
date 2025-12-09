@@ -14,31 +14,19 @@ def load_config(filename='config.ini'):
 def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
-# ================= 2. Smart Functions (ฉลาด + สั้น) =================
-def dump_ui(window):
-    """อ่านรายชื่อปุ่มบนหน้าจอ (ทำงานเฉพาะตอนหาไม่เจอ)"""
-    log("\n[DEBUG] --- Elements on Screen ---")
-    try:
-        for child in window.descendants():
-            if child.is_visible() and child.window_text():
-                # กรองเอาเฉพาะที่สำคัญๆ มาแสดง
-                print(f"   • {child.element_info.control_type:12} | '{child.window_text()}'")
-    except: pass
-    log("----------------------------------\n")
-
-def smart_click(window, criteria_list, timeout=5):
+# ================= 2. Smart Functions (Adaptive) =================
+def smart_click(window, criteria_list, timeout=5, optional=False):
     """
-    รับชื่อปุ่มได้หลายชื่อ (List) เช่น ["ดำเนินการ", "เสร็จสิ้น", "Settle"]
-    เจออันไหนกดอันนั้น
+    คลิกปุ่มตามรายการชื่อ (รองรับหลายชื่อ)
+    optional=True: ถ้าหาไม่เจอให้ปล่อยผ่าน (ไม่ Error) ใช้สำหรับ Popup ที่อาจจะขึ้นหรือไม่ขึ้นก็ได้
     """
-    if isinstance(criteria_list, str): criteria_list = [criteria_list] # แปลงเป็น list ถ้ามาตัวเดียว
+    if isinstance(criteria_list, str): criteria_list = [criteria_list]
     
     start = time.time()
     while time.time() - start < timeout:
-        # วนลูปหาทุกชื่อที่ให้มา
         for criteria in criteria_list:
             try:
-                # 1. หาแบบ Deep Search (สแกนทุกลูกหลาน)
+                # Deep Search
                 for child in window.descendants():
                     if child.is_visible() and criteria in child.window_text():
                         try:
@@ -46,60 +34,85 @@ def smart_click(window, criteria_list, timeout=5):
                             log(f"[/] กดปุ่ม '{criteria}' สำเร็จ")
                             return True
                         except:
-                            child.click_input(double=True) # เผื่อต้อง Double Click
+                            child.click_input(double=True)
                             log(f"[/] Double Click '{criteria}'")
                             return True
             except: pass
         time.sleep(0.5)
 
-    log(f"[X] หาปุ่มในรายการ {criteria_list} ไม่เจอ!")
-    dump_ui(window) # หาไม่เจอค่อยโชว์ Dump
+    if not optional:
+        log(f"[X] หาปุ่ม {criteria_list} ไม่เจอ!")
     return False
 
-def smart_input(window, label_text, value, delay=0.5):
+def check_sender_popup(window):
     """
-    เทคนิค: คลิกที่ 'ชื่อหัวข้อ' ก่อน -> กด TAB -> พิมพ์ค่า
-    ช่วยให้เข้าช่องถูก 100% แม้หา Edit Box ไม่เจอ
+    ฟังก์ชันเช็คหน้า 'ผู้ฝากส่ง' (Adaptive)
+    - ถ้าเจอ 'อ่านบัตรประชาชน' -> กดให้เลย
+    - ถ้าไม่เจอ -> ทำงานต่อทันที (ไม่รอ)
     """
-    log(f"...กรอก '{label_text}': {value}")
-    
-    # 1. คลิกที่ Label เพื่อดึง Focus มาใกล้ๆ
-    if smart_click(window, label_text, timeout=3):
-        time.sleep(0.5)
-        # 2. กด TAB เพื่อกระโดดเข้าช่อง Input ข้างๆ
-        window.type_keys("{TAB}")
-        time.sleep(0.2)
-        # 3. พิมพ์ค่าลงไป
-        try:
-            window.type_keys(str(value), with_spaces=True)
-            log(f"[/] พิมพ์ '{value}' เสร็จสิ้น")
-            return True
-        except:
-            log(f"[!] พิมพ์ข้อมูลล้มเหลว")
-            return False
+    log("...เช็ค Popup ผู้ฝากส่ง...")
+    # ลองหาปุ่มอ่านบัตรประชาชน แบบเร็วๆ (Timeout 2 วินาทีพอ)
+    if smart_click(window, "อ่านบัตรประชาชน", timeout=2, optional=True):
+        log("[Popup] เจอหน้าผู้ฝากส่ง -> กดอ่านบัตรเรียบร้อย")
+        time.sleep(1) # รอโหลดนิดนึง
+        
+        # ถ้ากดแล้วต้องกด 'ถัดไป' หรือไม่? (ปกติอ่านบัตรเสร็จอาจจะเด้งไปเอง หรือต้องกดถัดไป)
+        # ลองกดถัดไปเผื่อไว้
+        smart_click(window, "ถัดไป", timeout=2, optional=True)
     else:
-        log(f"[!] หาหัวข้อ '{label_text}' ไม่เจอ (ข้ามการกรอก)")
-        return False
+        log("[Popup] ไม่เจอหน้าผู้ฝากส่ง -> ข้ามไปขั้นตอนต่อไป")
+
+def smart_input_weight(window, value):
+    """
+    ฟังก์ชันกรอกน้ำหนักแบบเจาะจง (แก้ปัญหากรอกไม่ได้)
+    """
+    log(f"...กำลังกรอกน้ำหนัก: {value}")
+    
+    # วิธีที่ 1: หา Edit Box โดยตรง (หน้าน้ำหนักมักมี Edit Box ใหญ่ๆ อันเดียว)
+    try:
+        edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
+        if edits:
+            # เจอ Edit Box! คลิกและพิมพ์เลย
+            target_box = edits[0]
+            target_box.click_input()
+            target_box.type_keys(str(value), with_spaces=True)
+            log(f"[/] เจอ Edit Box และกรอก '{value}' สำเร็จ")
+            return True
+    except: pass
+
+    # วิธีที่ 2: ถ้าวิธีแรกไม่ได้ผล ใช้สูตร Click Header + TAB
+    log("...หา Edit Box ไม่เจอ ลองสูตร Click+Tab...")
+    try:
+        # คลิกที่คำว่า "น้ำหนัก" (ที่เป็นหัวข้อ)
+        if smart_click(window, "น้ำหนัก", timeout=2, optional=True):
+            window.type_keys("{TAB}")
+            time.sleep(0.2)
+            window.type_keys(str(value), with_spaces=True)
+            log(f"[/] กรอก '{value}' ด้วยสูตร Tab สำเร็จ")
+            return True
+    except: pass
+
+    # วิธีที่ 3: สุดท้ายจริงๆ พิมพ์ Blind Type (เผื่อ Cursor มันกระพริบอยู่แล้ว)
+    log("...ลองพิมพ์สด (Blind Type)...")
+    window.type_keys(str(value), with_spaces=True)
+    return True
 
 def smart_next(window):
     """กดถัดไป หรือ Enter"""
-    if not smart_click(window, "ถัดไป", timeout=2):
-        # log("...ไม่เจอปุ่มถัดไป -> กด Enter")
+    if not smart_click(window, "ถัดไป", timeout=2, optional=True):
         window.type_keys("{ENTER}")
 
 # ================= 3. Main Scenario =================
-def run_fast_scenario(main_window, config):
-    # โหลดค่า Config
+def run_smart_scenario(main_window, config):
     try:
         weight = config['DEPOSIT_ENVELOPE']['Weight']
         postal = config['DEPOSIT_ENVELOPE']['PostalCode']
-        # ดึงค่า Delay ถ้าไม่มีให้ใช้ 1 วินาที
         step_delay = int(config['SETTINGS'].get('StepDelay', 1))
     except: 
         log("[Error] Config ผิดพลาด")
         return
 
-    log(f"\n--- เริ่มต้น Scenario (ซองจดหมาย) ---")
+    log(f"\n--- เริ่มต้น Scenario (ซองจดหมาย - Smart Mode) ---")
     time.sleep(1)
 
     # 1. รับฝากสิ่งของ
@@ -111,27 +124,47 @@ def run_fast_scenario(main_window, config):
     time.sleep(step_delay)
 
     # 3. ซองจดหมาย (หมวดหมู่)
-    smart_click(main_window, "ซองจดหมาย") 
+    smart_click(main_window, "ซองจดหมาย", timeout=3, optional=True) 
     time.sleep(step_delay)
 
-    # 4. น้ำหนัก (ใช้เทคนิค Click Label + Tab)
-    # smart_input จะคลิกที่คำว่า "น้ำหนัก" แล้ว TAB ไปกรอกค่าให้เอง
-    smart_input(main_window, "น้ำหนัก", weight)
+    # --- จุดเช็ค Popup ผู้ฝากส่ง (Smart Check) ---
+    # จะเช็คตรงนี้ เพราะมักจะถามก่อนเข้าน้ำหนัก หรือก่อนเข้าหน้าซอง
+    check_sender_popup(main_window)
+    time.sleep(step_delay)
+
+    # 4. น้ำหนัก (New Logic)
+    smart_input_weight(main_window, weight)
     smart_next(main_window)
     time.sleep(step_delay)
 
     # 5. รหัสไปรษณีย์
-    smart_input(main_window, "รหัสไปรษณีย์", postal)
+    # ใช้วิธีพิมพ์เลย เพราะหน้าไปรษณีย์มักจะ Focus ที่ช่องแรกสุดเสมอ
+    log(f"...กรอกรหัสไปรษณีย์: {postal}")
+    try:
+        # หา Edit Box แรกของหน้านี้
+        postal_box = [e for e in main_window.descendants(control_type="Edit") if e.is_visible()][0]
+        postal_box.click_input()
+        postal_box.type_keys(str(postal))
+    except:
+        # ถ้าหาไม่เจอ พิมพ์สด
+        main_window.type_keys(str(postal), with_spaces=True)
+    
     smart_next(main_window)
     time.sleep(step_delay)
 
-    # 6. ดำเนินการ / เสร็จสิ้น
+    # 6. จบงาน (ดำเนินการ/เสร็จสิ้น/Popup ทับซ้อน)
     log("STEP 6: จบงาน")
-    # ลองหาหลายๆ คำที่เป็นไปได้
-    final_buttons = ["ดำเนินการ", "เสร็จสิ้น", "Settle", "ยืนยัน", "ตกลง"]
-    if not smart_click(main_window, final_buttons):
-        log("...หาปุ่มจบไม่เจอ ลองกด Enter...")
-        main_window.type_keys("{ENTER}")
+    
+    # เช็ค Popup "พื้นที่รหัสไปรษณีย์ทับซ้อน" (ที่มีปุ่ม ดำเนินการ)
+    if smart_click(main_window, "ดำเนินการ", timeout=3, optional=True):
+        log("[/] กดปุ่ม 'ดำเนินการ' (Popup ทับซ้อน) สำเร็จ")
+    
+    # เช็คปุ่มจบงานอื่นๆ
+    final_buttons = ["เสร็จสิ้น", "Settle", "ยืนยัน", "ตกลง"]
+    smart_click(main_window, final_buttons, timeout=3, optional=True)
+    
+    # กด Enter ปิดท้ายเพื่อความชัวร์
+    main_window.type_keys("{ENTER}")
 
     log("\n[SUCCESS] จบการทำงาน")
 
@@ -141,14 +174,12 @@ if __name__ == "__main__":
     if conf:
         log("Connecting...")
         try:
-            # เพิ่ม Timeout ตอน Connect เผื่อเครื่องช้า
             connect_wait = int(conf['SETTINGS'].get('ConnectTimeout', 10))
-            
             app = Application(backend="uia").connect(title_re=conf['APP']['WindowTitle'], timeout=connect_wait)
             win = app.top_window()
             win.set_focus()
             
-            run_fast_scenario(win, conf)
+            run_smart_scenario(win, conf)
             
         except Exception as e:
             log(f"Error: {e}")
