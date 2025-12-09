@@ -15,6 +15,21 @@ def load_config(filename='config.ini'):
 def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
+def debug_current_screen(window):
+    """
+    [NEW] ฟังก์ชันช่วย Debug ดูว่าตอนนี้หน้าจอมีข้อความอะไรบ้าง
+    จะทำงานเมื่อสคริปต์หาทางไปต่อไม่เจอ
+    """
+    log("!!! DEBUG: สคริปต์หยุดทำงาน - ตรวจสอบหน้าจอปัจจุบัน !!!")
+    try:
+        # ดึงข้อความทั้งหมดที่มองเห็นได้บนหน้าจอ
+        texts = [child.window_text() for child in window.descendants(control_type="Text") if child.is_visible() and child.window_text()]
+        # แสดงผลแค่ 20 ตัวแรกเพื่อไม่ให้รกเกินไป
+        log(f"ข้อความที่พบบนหน้าจอ (บางส่วน): {texts[:20]}...")
+        log("---------------------------------------------------")
+    except Exception as e:
+        log(f"Debug Error: {e}")
+
 # ================= 2. Helper Functions (Scroll & Search) =================
 def force_scroll_down(window, scroll_dist=-5):
     """ฟังก์ชันช่วยเลื่อนหน้าจอลงโดยใช้ Mouse Wheel"""
@@ -214,22 +229,17 @@ def run_smart_scenario(main_window, config):
         log("...รอหน้าจอพร้อม 2 วินาที...")
         time.sleep(2)
         
-        # 1. บังคับ Focus ที่หน้าต่างหลัก
         main_window.set_focus()
-        
-        # 2. ลองคลิกที่หัวข้อ 'บริการหลัก' 1 ครั้ง เพื่อเคลียร์ Focus จากช่องอื่นๆ
         try:
-            # พยายามหา Text control ที่ชื่อบริการหลักแล้วคลิก (ถ้าหาไม่เจอก็ข้ามไป)
+            # คลิก Text บริการหลัก เพื่อเคลียร์ Focus
             main_window.child_window(title="บริการหลัก", control_type="Text").click_input()
-        except:
-            pass
+        except: pass
             
         log("STEP 6: เลือกบริการหลัก (กด E)")
         main_window.type_keys("E")
         time.sleep(1)
 
-        # 3. เช็คว่ากด E ติดหรือไม่ (ถ้าติด ต้องมีคำว่า 'EMS ในประเทศ' โผล่มาในหน้าถัดไป)
-        # ถ้าไม่เจอ แสดงว่ายังอยู่หน้าเดิม -> ให้ลองใช้ smart_click กดปุ่ม 'บริการอีเอ็มเอส' แทน
+        # เช็คว่ากด E ติดหรือไม่
         if not wait_for_text(main_window, "EMS ในประเทศ", timeout=2):
              log("[!] กด E ไม่ไป (หรือโหลดช้า) -> ลองคลิกปุ่ม 'บริการอีเอ็มเอส' สำรอง")
              smart_click(main_window, ["บริการอีเอ็มเอส", "EMS"], timeout=2, optional=True)
@@ -240,42 +250,57 @@ def run_smart_scenario(main_window, config):
     else:
         log("[!] หาหน้าบริการหลักไม่เจอ (ข้ามการกด E)")
 
-    # --- STEP 7: เพิ่มประกัน (Insurance) ---
+    # --- STEP 7: เพิ่มประกัน (Insurance) [UPDATED ROBUSTNESS] ---
     if add_insurance:
         log(f"STEP 7: เพิ่มราคารับประกัน ({insurance_amount} บาท)")
         
-        if smart_click(main_window, ["+", "เพิ่ม", "Add"], timeout=5, optional=True):
-             log("[/] กดปุ่มเพิ่มประกันสำเร็จ (Click)")
-        else:
+        # 1. กดปุ่ม +
+        if not smart_click(main_window, ["+", "เพิ่ม", "Add"], timeout=5, optional=True):
              log("[!] หาปุ่มเพิ่มประกัน (+) ไม่เจอ - ลองกดปุ่มบนคีย์บอร์ดแทน")
              main_window.type_keys("+")
 
-        time.sleep(1)
-        
-        # พิมพ์จำนวนเงิน
-        log(f"...พิมพ์จำนวนเงิน: {insurance_amount}")
-        main_window.type_keys(str(insurance_amount))
-        time.sleep(0.5)
-        
-        # กด Enter เพื่อยืนยัน Popup วงเงิน
-        main_window.type_keys("{ENTER}")
-        time.sleep(1)
+        # 2. [Check] รอ Popup 'วงเงินประกัน' เด้งขึ้นมา
+        if wait_for_text(main_window, "วงเงินประกัน", timeout=5):
+            log("[/] Popup 'วงเงินประกัน' เด้งขึ้นมาแล้ว")
+            time.sleep(0.5)
+            
+            # 3. พิมพ์จำนวนเงิน
+            log(f"...พิมพ์จำนวนเงิน: {insurance_amount}")
+            main_window.type_keys(str(insurance_amount))
+            time.sleep(1)
+            
+            # 4. กดปุ่ม 'ถัดไป' หรือ 'Enter' บน Popup
+            # พยายามหาปุ่ม 'ถัดไป' บน Popup ก่อน
+            if smart_click(main_window, ["ถัดไป", "Next", "Enter"], timeout=3, optional=True):
+                log("[/] กดปุ่ม 'ถัดไป' บน Popup สำเร็จ")
+            else:
+                log("...กด Enter (เพื่อปิด Popup)")
+                main_window.type_keys("{ENTER}")
+            
+            time.sleep(2)
+        else:
+            log("[X] ไม่เจอ Popup 'วงเงินประกัน' - หยุดการทำงานเพื่อตรวจสอบ")
+            debug_current_screen(main_window)
+            return # หยุดการทำงานทันทีถ้ากด + แล้ว Popup ไม่ขึ้น
+             
     else:
         log("STEP 7: ไม่เพิ่มประกัน (ข้าม)")
 
-    # กด Enter เพื่อไปหน้าถัดไป (จากหน้าบริการหลัก -> บริการพิเศษ)
-    log("...กด Enter เพื่อไปหน้าบริการพิเศษ")
+    # Transition to Special Service
+    log("...กำลังจะไปหน้าบริการพิเศษ (กด Enter)...")
     main_window.type_keys("{ENTER}")
-    time.sleep(step_delay)
-
-    # --- STEP 8: บริการพิเศษ (Special Service) ---
-    wait_for_text(main_window, "บริการพิเศษ", timeout=5)
-    log("STEP 8: บริการพิเศษ (กด A)")
-    main_window.type_keys("A")
-    time.sleep(step_delay)
+    
+    # --- STEP 8: บริการพิเศษ (Special Service) [Check Stuck] ---
+    if wait_for_text(main_window, "บริการพิเศษ", timeout=10):
+        log("STEP 8: บริการพิเศษ (เจอหน้าแล้ว -> กด A)")
+        main_window.type_keys("A")
+        time.sleep(step_delay)
+    else:
+        log("[X] หมดเวลา! ไม่เจอหน้า 'บริการพิเศษ' (ติดอยู่ที่หน้าเดิม?)")
+        debug_current_screen(main_window)
+        return # หยุดการทำงาน
 
     # --- STEP 9: จบงาน (Finish) ---
-    # [FIXED] ปิดการกด Z ตามคำขอ
     log("STEP 9: จบงาน (ยังไม่กด Z ตามคำสั่ง)")
     # main_window.type_keys("Z")
 
