@@ -87,44 +87,54 @@ def smart_click(window, criteria_list, timeout=5, optional=False):
         log(f"[X] หาปุ่ม {criteria_list} ไม่เจอ!")
     return False
 
-def smart_click_by_text_location(window, target_text, y_offset=0):
-    log(f"...พยายามหา Text: '{target_text}' เพื่อคลิก...")
-    try:
-        text_elements = window.descendants(control_type="Text")
-        for txt in text_elements:
-            if target_text in txt.window_text() and txt.is_visible():
-                rect = txt.rectangle()
-                click_x = rect.mid_point().x
-                click_y = rect.mid_point().y + y_offset
-                log(f"[/] เจอข้อความ '{target_text}' -> คลิกที่พิกัด ({click_x}, {click_y})")
-                mouse.click(button='left', coords=(click_x, click_y))
-                return True
-    except: pass
-    return False
+def click_button_containing_text(window, search_texts):
+    """
+    [NEW] ค้นหาข้อความ แล้วย้อนหาปุ่มแม่ (Parent Button/ListItem) เพื่อคลิก
+    วิธีนี้แม่นยำกว่าการกดที่ข้อความตรงๆ หรือกดตามขนาด
+    """
+    if isinstance(search_texts, str): search_texts = [search_texts]
+    log(f"...กำลังค้นหาปุ่มที่มีข้อความ: {search_texts}...")
 
-def click_largest_element(window):
-    """
-    [NEW] คลิก Element ที่มีขนาดใหญ่ที่สุดบนหน้าจอ (แก้ไขปัญหาไปกดโดนปุ่ม Back เล็กๆ)
-    """
-    log("...ค้นหาปุ่มที่มีขนาดใหญ่ที่สุด (Smart Select)...")
     try:
-        # เรียกใช้ฟังก์ชัน Debug เพื่อดึงรายการ Element ที่เรียงตามขนาดมาแล้ว
-        elements = debug_ui_structure(window)
+        # ดึงทุก Element ออกมาสแกน (อาจจะเยอะหน่อยแต่มั่นใจ)
+        all_elements = window.descendants()
         
-        if elements:
-            # เลือกตัวที่ใหญ่ที่สุด (ตัวแรกใน list เพราะ sort มาแล้ว)
-            target = elements[0]
-            
-            # กรองความปลอดภัย: ปุ่มบริการหลักควรมีขนาดใหญ่ (เช่น กว้าง > 200)
-            if target['width'] > 200 and target['height'] > 100:
-                log(f"[/] เลือกคลิกปุ่มขนาดใหญ่สุด: '{target['text']}' (Size: {target['width']}x{target['height']})")
-                target['item'].click_input()
-                return True
-            else:
-                log(f"[!] ปุ่มใหญ่สุดที่เจอมีขนาดเล็กเกินไป ({target['width']}x{target['height']}) - ไม่กล้ากด")
+        for text_keyword in search_texts:
+            for child in all_elements:
+                try:
+                    # ตรวจสอบว่ามองเห็นและมีข้อความตรงกับที่เราหาไหม
+                    if child.is_visible() and text_keyword in child.window_text():
+                        log(f"   -> เจอข้อความ '{child.window_text()}' (Type: {child.element_info.control_type})")
+                        
+                        # Case 1: ตัวมันเองเป็นปุ่มอยู่แล้ว -> กดเลย
+                        if child.element_info.control_type in ["Button", "ListItem"]:
+                            log(f"[/] ตัว Element เป็นปุ่มอยู่แล้ว -> คลิกเลย")
+                            child.click_input()
+                            return True
+                        
+                        # Case 2: มันเป็น Text หรือ Image -> ให้ไต่ระดับขึ้นไปหาพ่อ (Parent) ที่เป็นปุ่ม
+                        parent = child.parent()
+                        attempts = 0
+                        while parent and attempts < 3: # ลองหาขึ้นไป 3 ชั้น
+                            ctype = parent.element_info.control_type
+                            if ctype in ["Button", "ListItem", "Group"]: # เจอพ่อที่เป็นปุ่ม
+                                log(f"[/] เจอ Parent เป็น {ctype} -> คลิกที่ Parent")
+                                parent.click_input()
+                                return True
+                            
+                            parent = parent.parent()
+                            attempts += 1
+                        
+                        # Case 3: หาพ่อไม่เจอ -> คลิกที่ข้อความนั้นตรงๆ (Fallback)
+                        log(f"[/] ไม่เจอ Parent ที่เป็นปุ่ม -> คลิกที่ข้อความโดยตรง")
+                        child.click_input()
+                        return True
+                except: continue
                 
     except Exception as e:
-        log(f"Error clicking largest element: {e}")
+        log(f"Error in click_button_containing_text: {e}")
+    
+    log(f"[X] ไม่พบปุ่มที่มีข้อความ {search_texts}")
     return False
 
 # ================= 3. Smart Input Functions =================
@@ -239,18 +249,14 @@ def run_smart_scenario(main_window, config):
         main_window.type_keys("{ENTER}")
 
     # ================= [STEP 6: เลือกบริการ] =================
-    log("STEP 6: เลือกบริการ (ตรวจสอบและค้างหน้าจอถ้าไม่ผ่าน)")
+    log("STEP 6: เลือกบริการ (Using Text Search)")
     
     log("...รอหน้าจอโหลด 2 วินาที...")
     time.sleep(2)
-    
-    # 1. พยายามกดปุ่มที่ใหญ่ที่สุด (น่าจะเป็น EMS)
-    success = click_largest_element(main_window)
 
-    # 2. ถ้ากดไม่เจอ ลองกด Text "EMS"
-    if not success:
-        log("...ไม่เจอปุ่มใหญ่ -> ลองหา Text 'บริการอีเอ็มเอส'...")
-        success = smart_click_by_text_location(main_window, "บริการอีเอ็มเอส", y_offset=40)
+    # ใช้ฟังก์ชันใหม่ ค้นหาจากชื่อปุ่ม/ข้อความ
+    # ใส่ Keyword หลายๆ แบบเผื่อไว้ (EMS, บริการอีเอ็มเอส, ในประเทศ)
+    success = click_button_containing_text(main_window, ["EMS", "บริการอีเอ็มเอส", "ในประเทศ"])
 
     # ================= [CHECK: ผ่านหรือไม่?] =================
     time.sleep(2)
@@ -259,20 +265,18 @@ def run_smart_scenario(main_window, config):
     still_on_main = wait_for_text(main_window, "บริการหลัก", timeout=1)
     
     if success and not still_on_main:
-        log("[SUCCESS] หน้าจอเปลี่ยนแล้ว (น่าจะผ่าน Step 6)")
+        log("[SUCCESS] หน้าจอเปลี่ยนแล้ว (ผ่าน Step 6)")
         time.sleep(1)
         log("...กด 0 เพื่อยืนยัน...")
         main_window.type_keys("0")
     else:
         log("\n[!!! PAUSED !!!] เกิดปัญหา: กดแล้วไม่ไป หรือ ยังอยู่หน้าเดิม")
         log(">> สคริปต์จะหยุดค้างอยู่ที่นี่เพื่อให้คุณตรวจสอบหน้าจอ")
-        log(">> กด Ctrl+C ใน Terminal เพื่อปิดโปรแกรม")
+        # แสดงโครงสร้างหน้าจอเพื่อช่วย Debug ว่าจริงๆ แล้ว text มันชื่ออะไรกันแน่
+        debug_ui_structure(main_window) 
         
-        # วนลูปค้างไว้ตามที่ขอ
         while True:
             time.sleep(5)
-            # สามารถ uncomment บรรทัดล่างถ้าอยากให้มัน report ซ้ำเรื่อยๆ
-            # debug_ui_structure(main_window) 
             
     log("--- จบการทำงาน ---")
     return
