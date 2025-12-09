@@ -113,14 +113,18 @@ def process_sender_info(window, phone_number):
         log("[Popup] ไม่เจอหน้าผู้ฝากส่ง -> ข้ามไปขั้นตอนต่อไป")
 
 def wait_for_text(window, text, timeout=10):
+    """รอให้ข้อความปรากฏ"""
+    log(f"...กำลังรอหน้า: '{text}'...")
     start = time.time()
     while time.time() - start < timeout:
         try:
             for child in window.descendants():
                 if text in child.window_text() and child.is_visible():
+                    log(f"[/] เจอข้อความ '{text}' แล้ว")
                     return True
         except: pass
         time.sleep(0.5)
+    log(f"[!] ไม่เจอข้อความ '{text}' (Timeout)")
     return False
 
 # ================= 4. Main Scenario =================
@@ -131,7 +135,7 @@ def run_smart_scenario(main_window, config):
         postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
         special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
         
-        # [NEW] อ่านค่า Config สำหรับประกัน
+        # [Config] ประกัน
         add_insurance = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False').lower() == 'true'
         insurance_amount = config['DEPOSIT_ENVELOPE'].get('InsuranceAmount', '0')
 
@@ -189,45 +193,63 @@ def run_smart_scenario(main_window, config):
         main_window.type_keys(str(postal), with_spaces=True)
     
     smart_next(main_window)
-    time.sleep(step_delay)
+    time.sleep(1)
+
+    # --- [UPDATED] เช็ค Popup รหัสไปรษณีย์ทับซ้อน ---
+    # ถ้ามี Popup 'ดำเนินการ' หรือ 'พื้นที่รหัสไปรษณีย์ทับซ้อน' ให้กด Enter
+    if smart_click(main_window, "ดำเนินการ", timeout=2, optional=True):
+        log("[Popup] รหัสไปรษณีย์ทับซ้อน -> กด 'ดำเนินการ' สำเร็จ")
+        time.sleep(1)
+    else:
+        # ลองเช็คจาก Text Title เพื่อความชัวร์ (บางทีปุ่มหาไม่เจอ)
+        try:
+            if main_window.child_window(title__contains="ทับซ้อน").exists(timeout=1):
+                log("[Popup] เจอป๊อปอัพทับซ้อน -> กด Enter")
+                main_window.type_keys("{ENTER}")
+                time.sleep(1)
+        except: pass
 
     # STEP 6: บริการหลัก (Service Selection)
+    # รอให้แน่ใจว่าเข้าหน้าบริการหลักแล้ว
+    wait_for_text(main_window, "บริการหลัก", timeout=5)
+    
     log("STEP 6: เลือกบริการหลัก (กด E -> กด 0)")
     main_window.type_keys("E")
     time.sleep(1)
     main_window.type_keys("0")
     time.sleep(step_delay)
 
-    # --- [UPDATED] STEP 7: เพิ่มประกัน (Insurance) ---
+    # --- STEP 7: เพิ่มประกัน (Insurance) ---
     if add_insurance:
         log(f"STEP 7: เพิ่มราคารับประกัน ({insurance_amount} บาท)")
-        # 1. กดปุ่ม +
-        if smart_click(main_window, ["+", "เพิ่ม"], timeout=3, optional=True):
-            log("[/] กดปุ่มเพิ่มประกันสำเร็จ -> รอ Popup")
-            time.sleep(1)
-            
-            # 2. พิมพ์จำนวนเงิน (Type Keys)
-            # ปกติเมื่อ Popup ขึ้น Cursor มักจะอยู่ที่ช่องกรอกอยู่แล้ว
-            log(f"...พิมพ์จำนวนเงิน: {insurance_amount}")
-            main_window.type_keys(str(insurance_amount))
-            time.sleep(0.5)
-            
-            # 3. กด Enter เพื่อยืนยัน Popup
-            main_window.type_keys("{ENTER}")
-            time.sleep(1)
-        else:
-            log("[!] หาปุ่มเพิ่มประกันไม่เจอ")
+        # ใช้วิธีกดปุ่ม + บนคีย์บอร์ดโดยตรง (แก้ปัญหาหาปุ่มไม่เจอ)
+        main_window.type_keys("+")
+        time.sleep(1)
+        
+        # พิมพ์จำนวนเงิน
+        log(f"...พิมพ์จำนวนเงิน: {insurance_amount}")
+        main_window.type_keys(str(insurance_amount))
+        time.sleep(0.5)
+        
+        # กด Enter เพื่อยืนยัน Popup วงเงิน
+        main_window.type_keys("{ENTER}")
+        time.sleep(1)
     else:
         log("STEP 7: ไม่เพิ่มประกัน (ข้าม)")
 
+    # กด Enter เพื่อไปหน้าถัดไป (จากหน้าบริการหลัก -> บริการพิเศษ)
+    log("...กด Enter เพื่อไปหน้าบริการพิเศษ")
+    main_window.type_keys("{ENTER}")
     time.sleep(step_delay)
 
-    # STEP 8: จบงาน (Finish)
-    log("STEP 8: จบงาน (Enter -> Z)")
-    main_window.type_keys("{ENTER}")
-    time.sleep(2)
+    # --- [NEW] STEP 8: บริการพิเศษ (Special Service) ---
+    wait_for_text(main_window, "บริการพิเศษ", timeout=5)
+    log("STEP 8: บริการพิเศษ (กด A)")
+    main_window.type_keys("A")
+    time.sleep(step_delay)
 
-    log("...กด Z เพื่อเสร็จสิ้น")
+    # --- STEP 9: จบงาน (Finish) ---
+    log("STEP 9: จบงาน (Z)")
     main_window.type_keys("Z")
 
     log("\n[SUCCESS] จบการทำงาน")
