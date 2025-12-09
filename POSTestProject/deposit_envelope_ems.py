@@ -19,32 +19,42 @@ def log(message):
 
 def debug_ui_structure(window):
     """
-    [NEW] ฟังก์ชันช่วย Debug ดูว่าหน้าจอมี Element อะไรบ้าง
+    [NEW] ฟังก์ชันช่วย Debug รายงานปุ่มบนหน้าจอ
     """
-    log("!!! DEBUG UI STRUCTURE !!!")
-    log("...กำลังสแกนหน้าจอเพื่อหาปุ่มที่กดได้...")
+    log("!!! DEBUG: รายงานโครงสร้างหน้าจอ (UI Report) !!!")
     try:
-        # ลองหา ListItem ก่อน
-        items = window.descendants(control_type="ListItem")
-        if items:
-            log(f"-> เจอ ListItem ทั้งหมด {len(items)} รายการ:")
-            for i, item in enumerate(items):
-                # พยายามดึงข้อมูลให้มากที่สุด
-                txt = item.window_text()
-                rect = item.rectangle()
-                log(f"   [{i}] Text: '{txt}', Size: {rect.width()}x{rect.height()}, Visible: {item.is_visible()}")
+        # สแกนหา ListItem และ Button
+        elements = window.descendants(control_type="ListItem") + window.descendants(control_type="Button")
         
-        # ลองหา Button
-        buttons = window.descendants(control_type="Button")
-        if buttons:
-            log(f"-> เจอ Button ทั้งหมด {len(buttons)} ปุ่ม (แสดง 5 ปุ่มแรก):")
-            for i, btn in enumerate(buttons[:5]):
-                txt = btn.window_text()
-                rect = btn.rectangle()
-                log(f"   [{i}] Text: '{txt}', Size: {rect.width()}x{rect.height()}")
+        log(f"-> พบ Element ทั้งหมด {len(elements)} รายการ (คัดเฉพาะที่มองเห็น):")
+        visible_elements = []
+        
+        for i, item in enumerate(elements):
+            if item.is_visible():
+                rect = item.rectangle()
+                area = rect.width() * rect.height()
+                txt = item.window_text()
+                # เก็บข้อมูลไว้เรียงลำดับ
+                visible_elements.append({
+                    'index': i,
+                    'text': txt,
+                    'width': rect.width(),
+                    'height': rect.height(),
+                    'area': area,
+                    'item': item
+                })
+        
+        # แสดงผลโดยเรียงจากขนาดใหญ่ไปเล็ก (เพื่อให้เห็นปุ่ม EMS ที่น่าจะใหญ่สุดก่อน)
+        visible_elements.sort(key=lambda x: x['area'], reverse=True)
+        
+        for e in visible_elements[:10]: # แสดง 10 อันดับแรก
+            log(f"   [Size: {e['width']}x{e['height']}] Text: '{e['text']}'")
+            
+        return visible_elements # ส่งกลับไปใช้ต่อได้
 
     except Exception as e:
         log(f"Debug Error: {e}")
+        return []
     log("------------------------------------------")
 
 # ================= 2. Helper Functions =================
@@ -92,38 +102,29 @@ def smart_click_by_text_location(window, target_text, y_offset=0):
     except: pass
     return False
 
-def click_first_list_item(window):
+def click_largest_element(window):
     """
-    [NEW] คลิก ListItem ตัวแรกที่เจอ (โดยไม่สน Text)
-    เพราะปกติเมนู EMS จะเป็น ListItem อันแรกเสมอ
+    [NEW] คลิก Element ที่มีขนาดใหญ่ที่สุดบนหน้าจอ (แก้ไขปัญหาไปกดโดนปุ่ม Back เล็กๆ)
     """
-    log("...พยายามหา ListItem ตัวแรก (ไม่ต้องพึ่งพิกัดหน้าจอ)...")
+    log("...ค้นหาปุ่มที่มีขนาดใหญ่ที่สุด (Smart Select)...")
     try:
-        list_items = window.descendants(control_type="ListItem")
-        # กรองเฉพาะอันที่มีขนาดใหญ่หน่อย (ป้องกันไปกดโดน list เล็กๆ ที่มองไม่เห็น)
-        valid_items = [item for item in list_items if item.rectangle().width() > 50 and item.rectangle().height() > 50]
+        # เรียกใช้ฟังก์ชัน Debug เพื่อดึงรายการ Element ที่เรียงตามขนาดมาแล้ว
+        elements = debug_ui_structure(window)
         
-        if valid_items:
-            # เรียงตามตำแหน่ง (ซ้ายไปขวา, บนลงล่าง)
-            # valid_items.sort(key=lambda x: (x.rectangle().top, x.rectangle().left))
+        if elements:
+            # เลือกตัวที่ใหญ่ที่สุด (ตัวแรกใน list เพราะ sort มาแล้ว)
+            target = elements[0]
             
-            target = valid_items[0] # เอาอันแรกสุด
-            log(f"[/] เจอ ListItem {len(valid_items)} รายการ -> คลิกรายการแรก (ขนาด {target.rectangle().width()}x{target.rectangle().height()})")
-            target.click_input()
-            return True
-        else:
-            log("[!] ไม่เจอ ListItem ที่มีขนาดใหญ่พอ")
-            # ถ้าไม่เจอ ListItem ลองหา Custom ที่ขนาดใหญ่
-            log("...ลองหา Custom Element ขนาดใหญ่แทน...")
-            customs = window.descendants(control_type="Custom")
-            valid_customs = [c for c in customs if c.rectangle().width() > 100 and c.rectangle().height() > 100]
-            if valid_customs:
-                log(f"[/] เจอ Custom Element ใหญ่ -> คลิกอันแรก")
-                valid_customs[0].click_input()
+            # กรองความปลอดภัย: ปุ่มบริการหลักควรมีขนาดใหญ่ (เช่น กว้าง > 200)
+            if target['width'] > 200 and target['height'] > 100:
+                log(f"[/] เลือกคลิกปุ่มขนาดใหญ่สุด: '{target['text']}' (Size: {target['width']}x{target['height']})")
+                target['item'].click_input()
                 return True
-
+            else:
+                log(f"[!] ปุ่มใหญ่สุดที่เจอมีขนาดเล็กเกินไป ({target['width']}x{target['height']}) - ไม่กล้ากด")
+                
     except Exception as e:
-        log(f"Error clicking list item: {e}")
+        log(f"Error clicking largest element: {e}")
     return False
 
 # ================= 3. Smart Input Functions =================
@@ -193,14 +194,12 @@ def run_smart_scenario(main_window, config):
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
         postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
         special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
-        # add_insurance = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False').lower() == 'true'
-        # insurance_amount = config['DEPOSIT_ENVELOPE'].get('InsuranceAmount', '0')
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
         step_delay = int(config['SETTINGS'].get('StepDelay', 1))
     except:
         weight, postal, special_options_str, phone, step_delay = '10', '10110', '', '0812345678', 1
 
-    log(f"\n--- เริ่มต้น Scenario (Focus STEP 6) ---")
+    log(f"\n--- เริ่มต้น Scenario ---")
     time.sleep(1)
 
     # 1. รับฝากสิ่งของ
@@ -240,39 +239,42 @@ def run_smart_scenario(main_window, config):
         main_window.type_keys("{ENTER}")
 
     # ================= [STEP 6: เลือกบริการ] =================
-    log("STEP 6: เลือกบริการ (Testing Mode)")
+    log("STEP 6: เลือกบริการ (ตรวจสอบและค้างหน้าจอถ้าไม่ผ่าน)")
     
-    # 1. รอหน้าจอ (ลดความเข้มงวดลง เผื่อ text หาไม่เจอ)
-    log("...รอหน้าจอ 2 วินาที...")
+    log("...รอหน้าจอโหลด 2 วินาที...")
     time.sleep(2)
     
-    # 2. ลองปริ้นท์ structure ดูก่อนว่ามีอะไรบ้าง (ถ้ากดไม่ได้เราจะใช้ log นี้แก้ต่อ)
-    # debug_ui_structure(main_window) # <--- เปิดบรรทัดนี้ถ้าอยากเห็น Log Element ทั้งหมด
-    
-    success = False
+    # 1. พยายามกดปุ่มที่ใหญ่ที่สุด (น่าจะเป็น EMS)
+    success = click_largest_element(main_window)
 
-    # วิธีที่ 1: หา ListItem ตัวแรก (น่าจะเป็น EMS) - **แนะนำสุด**
+    # 2. ถ้ากดไม่เจอ ลองกด Text "EMS"
     if not success:
-        success = click_first_list_item(main_window)
-
-    # วิธีที่ 2: หา Text แล้วคลิก
-    if not success:
+        log("...ไม่เจอปุ่มใหญ่ -> ลองหา Text 'บริการอีเอ็มเอส'...")
         success = smart_click_by_text_location(main_window, "บริการอีเอ็มเอส", y_offset=40)
 
-    # วิธีที่ 3: หา Text "EMS"
-    if not success:
-        success = smart_click_by_text_location(main_window, "EMS", y_offset=0)
+    # ================= [CHECK: ผ่านหรือไม่?] =================
+    time.sleep(2)
     
-    if success:
-        log("[SUCCESS] กดเลือกบริการได้แล้ว (ผ่าน STEP 6)")
+    # ตรวจสอบว่ายังอยู่หน้า "บริการหลัก" หรือไม่ (ถ้ายังอยู่แสดงว่ากดไม่ไป)
+    still_on_main = wait_for_text(main_window, "บริการหลัก", timeout=1)
+    
+    if success and not still_on_main:
+        log("[SUCCESS] หน้าจอเปลี่ยนแล้ว (น่าจะผ่าน Step 6)")
         time.sleep(1)
-        log("...กด 0 เพื่อยืนยัน (ถ้ามี)...")
+        log("...กด 0 เพื่อยืนยัน...")
         main_window.type_keys("0")
     else:
-        log("[FAIL] ยังกดเลือกบริการไม่ได้ -> แสดงโครงสร้างหน้าจอเพื่อ Debug")
-        debug_ui_structure(main_window)
-    
-    log("--- จบการทำงาน (ตามที่ขอให้หยุดหลังเลือกบริการ) ---")
+        log("\n[!!! PAUSED !!!] เกิดปัญหา: กดแล้วไม่ไป หรือ ยังอยู่หน้าเดิม")
+        log(">> สคริปต์จะหยุดค้างอยู่ที่นี่เพื่อให้คุณตรวจสอบหน้าจอ")
+        log(">> กด Ctrl+C ใน Terminal เพื่อปิดโปรแกรม")
+        
+        # วนลูปค้างไว้ตามที่ขอ
+        while True:
+            time.sleep(5)
+            # สามารถ uncomment บรรทัดล่างถ้าอยากให้มัน report ซ้ำเรื่อยๆ
+            # debug_ui_structure(main_window) 
+            
+    log("--- จบการทำงาน ---")
     return
 
 # ================= 5. Execution =================
