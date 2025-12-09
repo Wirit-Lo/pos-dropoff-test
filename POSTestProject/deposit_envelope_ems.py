@@ -223,66 +223,46 @@ def run_smart_scenario(main_window, config):
                 time.sleep(1)
         except: pass
 
-    # STEP 6: บริการหลัก (Service Selection) - [Select + Enter Strategy]
+    # STEP 6: บริการหลัก (Service Selection) - [Key Press Only]
     if wait_for_text(main_window, "บริการหลัก", timeout=10):
         log("...รอหน้าจอพร้อม 2 วินาที...")
         time.sleep(2)
         
         # 1. บังคับ Focus ที่หน้าต่างหลัก
         main_window.set_focus()
-        try:
-            main_window.child_window(title="บริการหลัก", control_type="Text").click_input()
-        except: pass
 
+        # 2. วนลูปกด E จนกว่าจะไป
         ems_selected = False
-        for attempt in range(3): 
-            log(f"STEP 6: เลือกบริการหลัก (รอบที่ {attempt+1})")
+        for attempt in range(5): # ลอง 5 รอบ
             
-            # Check if already passed
-            if wait_for_text(main_window, "EMS ในประเทศ", timeout=2):
+            # เช็คก่อนว่าเข้าหน้า EMS หรือยัง (เผื่อรอบก่อนหน้ากดติด)
+            if wait_for_text(main_window, "EMS ในประเทศ", timeout=0.5):
                 ems_selected = True
                 log("[/] ตรวจพบหน้า 'EMS ในประเทศ' เรียบร้อย")
                 break
             
-            # วิธีที่ 1: กด E แล้วตามด้วย Enter (เผื่อว่า E แค่ Select แต่ไม่ไปต่อ)
-            log("...กด E แล้วตามด้วย Enter...")
+            # กด E
+            log(f"[Attempt {attempt+1}] กด E...")
             main_window.type_keys("E")
-            time.sleep(1)
+            time.sleep(1.5) # รอผลลัพธ์นานขึ้นนิดนึง
             
-            # เช็คว่าไปหรือยัง ถ้ายังให้กด Enter ซ้ำ
-            if not wait_for_text(main_window, "EMS ในประเทศ", timeout=1):
-                 log("...หน้าจอยังไม่เปลี่ยน -> ลองกด Enter ย้ำ...")
+            # ถ้ากด E แล้วยังไม่ไป ลองกด Enter (เผื่อ E แค่เลือก)
+            if not wait_for_text(main_window, "EMS ในประเทศ", timeout=0.5):
+                 log(f"[Attempt {attempt+1}] ...หน้าจอยังไม่เปลี่ยน -> ลองกด Enter ย้ำ...")
                  main_window.type_keys("{ENTER}")
-                 time.sleep(1)
-
-            # เช็คผลลัพธ์
-            if wait_for_text(main_window, "EMS ในประเทศ", timeout=1):
-                ems_selected = True
-                break
-
-            # วิธีที่ 2: คลิกที่ข้อความ แล้วตามด้วย Enter
-            log("...ลองคลิกปุ่ม EMS (Text) แล้วกด Enter...")
-            if smart_click(main_window, ["บริการอีเอ็มเอส", "อีเอ็มเอส"], timeout=1, optional=True):
-                time.sleep(0.5)
-                # คลิกแล้วอาจจะแค่เลือก ต้องกด Enter เพื่อไปต่อ
-                main_window.type_keys("{ENTER}")
-                time.sleep(1)
-                
-            if wait_for_text(main_window, "EMS ในประเทศ", timeout=1):
-                ems_selected = True
-                break
+                 time.sleep(1.5)
 
         if not ems_selected:
             # เช็คครั้งสุดท้าย
             if wait_for_text(main_window, "EMS ในประเทศ", timeout=2):
                 log("[/] (Late Check) ตรวจพบหน้า 'EMS ในประเทศ'")
             else:
-                log("[X] ไม่สามารถเลือกบริการ EMS ได้")
+                log("[X] ไม่สามารถเลือกบริการ EMS ได้ด้วยคีย์บอร์ด")
                 debug_current_screen(main_window)
-                return
+                return # หยุดทำงานถ้าเข้าไม่ได้
 
         # 3. เลือกประเภทส่ง (กด 0)
-        log("STEP 6.5: เลือกประเภทส่ง (กด 0)")
+        log("STEP 6.5: เข้าหน้า EMS แล้ว -> กด 0")
         main_window.type_keys("0")
         time.sleep(step_delay)
     else:
