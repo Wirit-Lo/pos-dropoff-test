@@ -223,12 +223,12 @@ def run_smart_scenario(main_window, config):
                 time.sleep(1)
         except: pass
 
-    # STEP 6: บริการหลัก (Service Selection) - [Robust Click & Keys]
+    # STEP 6: บริการหลัก (Service Selection) - [Select + Enter Strategy]
     if wait_for_text(main_window, "บริการหลัก", timeout=10):
         log("...รอหน้าจอพร้อม 2 วินาที...")
         time.sleep(2)
         
-        # 1. บังคับ Focus ที่หน้าต่างหลัก และคลิกที่ว่างเพื่อ Activate Window
+        # 1. บังคับ Focus ที่หน้าต่างหลัก
         main_window.set_focus()
         try:
             main_window.child_window(title="บริการหลัก", control_type="Text").click_input()
@@ -238,31 +238,39 @@ def run_smart_scenario(main_window, config):
         for attempt in range(3): 
             log(f"STEP 6: เลือกบริการหลัก (รอบที่ {attempt+1})")
             
-            # Check Success
+            # Check if already passed
             if wait_for_text(main_window, "EMS ในประเทศ", timeout=2):
                 ems_selected = True
                 log("[/] ตรวจพบหน้า 'EMS ในประเทศ' เรียบร้อย")
                 break
             
-            # วิธีที่ 1: กด E โดยเพิ่มการกดปุ่มลูกศรนำทางก่อน
-            # บางครั้งโปรแกรมต้องมีการขยับ Selection ก่อนถึงจะรับ Hotkey
-            log("...ลองกด Right Arrow แล้วกด E...")
-            main_window.type_keys("{RIGHT}") 
-            time.sleep(0.5)
+            # วิธีที่ 1: กด E แล้วตามด้วย Enter (เผื่อว่า E แค่ Select แต่ไม่ไปต่อ)
+            log("...กด E แล้วตามด้วย Enter...")
             main_window.type_keys("E")
             time.sleep(1)
+            
+            # เช็คว่าไปหรือยัง ถ้ายังให้กด Enter ซ้ำ
+            if not wait_for_text(main_window, "EMS ในประเทศ", timeout=1):
+                 log("...หน้าจอยังไม่เปลี่ยน -> ลองกด Enter ย้ำ...")
+                 main_window.type_keys("{ENTER}")
+                 time.sleep(1)
 
             # เช็คผลลัพธ์
             if wait_for_text(main_window, "EMS ในประเทศ", timeout=1):
                 ems_selected = True
                 break
 
-            # วิธีที่ 2: ลองหาด้วยชื่อหลายๆ แบบ (เน้นหา Text Element)
-            # จากรูป Text คือ "บริการอีเอ็มเอส"
-            log("...ลองคลิกปุ่ม EMS จากข้อความ (Text)...")
+            # วิธีที่ 2: คลิกที่ข้อความ แล้วตามด้วย Enter
+            log("...ลองคลิกปุ่ม EMS (Text) แล้วกด Enter...")
             if smart_click(main_window, ["บริการอีเอ็มเอส", "อีเอ็มเอส"], timeout=1, optional=True):
+                time.sleep(0.5)
+                # คลิกแล้วอาจจะแค่เลือก ต้องกด Enter เพื่อไปต่อ
+                main_window.type_keys("{ENTER}")
                 time.sleep(1)
-                continue
+                
+            if wait_for_text(main_window, "EMS ในประเทศ", timeout=1):
+                ems_selected = True
+                break
 
         if not ems_selected:
             # เช็คครั้งสุดท้าย
