@@ -29,17 +29,35 @@ def force_scroll_down(window):
         log(f"[!] Keyboard scroll failed: {e}")
 
 def ensure_focus(window):
-    """ทำให้แน่ใจว่าหน้าจอ Focus อยู่"""
+    """ทำให้แน่ใจว่าหน้าจอ Focus อยู่ในพื้นที่ปลอดภัย (ไม่ใช่ช่อง Text Box)"""
     try:
         window.set_focus()
         time.sleep(0.5)
-        # คลิกกลางจอเบาๆ 1 ทีเพื่อเรียก Focus (เผื่อ set_focus ไม่ติด)
-        rect = window.rectangle()
-        center_x = rect.mid_point().x
-        center_y = rect.mid_point().y
-        mouse.click(coords=(center_x, center_y))
+        
+        # [แก้ไข] พยายามคลิกที่ Label "บริการหลัก" หรือพื้นที่ว่างด้านซ้ายบน
+        # เพื่อดึง Focus ออกจากช่อง Barcode ด้านขวา
+        found_safe_spot = False
+        
+        # ลองหาคำว่า "บริการหลัก"
+        for child in window.descendants():
+            if child.is_visible() and "บริการหลัก" in child.window_text():
+                # คลิกที่ตัวหนังสือเลย (ปลอดภัยกว่าคลิกกลางจอ)
+                child.click_input()
+                log("[/] คลิกที่พื้นที่ว่าง (บริการหลัก) เพื่อ Reset Focus สำเร็จ")
+                found_safe_spot = True
+                break
+        
+        if not found_safe_spot:
+            # ถ้าหาไม่เจอ ให้คลิกที่พิกัดซ้ายบนของ Content (เลี่ยง Header และ Sidebar)
+            rect = window.rectangle()
+            safe_x = rect.left + 150
+            safe_y = rect.top + 200 # ต่ำลงมาจาก Header พอสมควร
+            mouse.click(coords=(safe_x, safe_y))
+            log(f"[/] คลิกพื้นที่ปลอดภัย (Fallback {safe_x},{safe_y})")
+
         time.sleep(0.5)
-    except: pass
+    except: 
+        log("[!] ไม่สามารถคลิกพื้นที่ปลอดภัยได้")
 
 def smart_click(window, criteria_list, timeout=5, optional=False):
     """
@@ -115,19 +133,31 @@ def run_smart_scenario(main_window, config):
     if not check_exists(main_window, "บริการหลัก"):
         log("[Warning] ไม่พบข้อความ 'บริการหลัก' (อาจจะอยู่ผิดหน้า)")
 
-    # 1. เรียก Focus ให้ชัวร์ที่สุด
+    # 1. เรียก Focus ให้ชัวร์ที่สุด (สำคัญมาก! ต้องเอา Focus ออกจากช่อง Barcode)
     ensure_focus(main_window)
     
-    # 2. กดปุ่ม E (ใช้ send_keys เหมือนกดคีย์บอร์ดจริง)
+    # 2. กดปุ่ม E (เพิ่ม Logic การสลับภาษาและกด Spacebar)
     log("...กดปุ่ม 'e' (System Level)")
-    send_keys("e") 
-    time.sleep(1)
     
-    # กดซ้ำอีกทีเผื่อไม่ติด
-    send_keys("e")
-    time.sleep(1)
+    # ลองกด E ปกติ
+    send_keys("e") 
+    time.sleep(0.5)
+    
+    # ลองกด E ตัวใหญ่ (Shift+E) เผื่อระบบต้องการตัวใหญ่
+    send_keys("E")
+    time.sleep(0.5)
 
-    # 3. กด Enter
+    # [NEW] ลองกด Spacebar เผื่อว่า Focus อยู่ที่การ์ดแล้วแต่ยังไม่เลือก
+    # send_keys("{SPACE}")
+    
+    # [NEW] ถ้ายังไม่เปลี่ยน อาจเป็นเพราะภาษาไทย? ลองสลับภาษาแล้วกดใหม่
+    # (Uncomment บรรทัดล่างถ้าต้องการเปิดใช้งานการสลับภาษา)
+    # log("...ลองสลับภาษาแล้วกดซ้ำ")
+    # send_keys("#{SPACE}") # Win+Space
+    # time.sleep(0.5)
+    # send_keys("e")
+
+    # 3. กด Enter ยืนยัน
     log("...กด Enter เพื่อยืนยัน")
     send_keys("{ENTER}")
     time.sleep(3) # รอโหลด
@@ -151,7 +181,7 @@ def run_smart_scenario(main_window, config):
         # send_keys("{ENTER}")
 
         if check_exists(main_window, "บริการหลัก"):
-             log("\n[FAIL] ยังติดอยู่ที่หน้าบริการหลัก -> Hotkey ไม่ทำงาน ลองตรวจสอบภาษาแป้นพิมพ์ (ต้องเป็น ENG)")
+             log("\n[FAIL] ยังติดอยู่ที่หน้าบริการหลัก -> อาจติด Focus ที่ช่อง Barcode หรือ Hotkey ไม่ทำงาน")
              return
 
     # --- ส่วนประกัน ---
@@ -160,6 +190,7 @@ def run_smart_scenario(main_window, config):
         if smart_click(main_window, ["+", "AddService", "รับประกัน"], timeout=3, optional=True):
             time.sleep(1)
             try:
+                # คลิกพื้นที่ว่างอีกทีให้ชัวร์ก่อนพิมพ์ราคา
                 ensure_focus(main_window)
                 send_keys(str(insurance_amt))
             except: pass
