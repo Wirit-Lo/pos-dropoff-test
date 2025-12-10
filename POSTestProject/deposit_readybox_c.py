@@ -18,22 +18,27 @@ def log(message):
 # ================= 2. Helper Functions (Scroll & Search) =================
 def force_scroll_down(window):
     """
-    [Updated V2] ฟังก์ชันช่วยเลื่อนหน้าจอลง (Safe Mode)
-    แก้ไข: เปลี่ยนจุดคลิกเรียก Focus จาก 'กลางจอ' เป็น 'มุมซ้ายบน (Title Bar)'
-    เพื่อป้องกันไม่ให้เผลอไปกดโดนปุ่มเมนูอื่นกลางหน้าจอ
+    [Updated V3] ฟังก์ชันช่วยเลื่อนหน้าจอลง (Focus at Scrollbar)
+    แก้ไข: เปลี่ยนจุดคลิกเรียก Focus ไปที่ 'แถบ Scrollbar' โดยตรง
+    เพื่อแก้ปัญหาคลิกจุดอื่นแล้วเลื่อนไม่ไป
     """
-    log(f"...สั่งเลื่อนหน้าจอลง (Page Down)...")
+    log(f"...สั่งเลื่อนหน้าจอลง (Click Scrollbar -> Page Down)...")
     try:
         # 1. เรียก Focus มาที่หน้าต่าง
         window.set_focus()
         
-        # 2. คลิกที่ "พื้นที่ปลอดภัย" (Safe Zone) เพื่อย้ำ Focus
-        # เปลี่ยนจากกลางจอ เป็นมุมซ้ายบน (แถบ Title Bar)
+        # 2. คำนวณตำแหน่ง Scrollbar เพื่อคลิกเรียก Focus ให้ถูกจุด
+        # จากรูปภาพ: รายการสินค้าอยู่ตรงกลาง Scrollbar จะอยู่ประมาณ 70-75% ของความกว้างหน้าจอ
+        # และอยู่ทางขวาของรายการสินค้า ก่อนถึงแถบสรุปยอดเงิน
         rect = window.rectangle()
-        safe_x = rect.left + 50
-        safe_y = rect.top + 10 # ขอบบนสุด (Title Bar)
         
-        mouse.click(coords=(safe_x, safe_y))
+        # คำนวณพิกัด X ให้อยู่ตรงแถบ Scrollbar (ประมาณ 72% ของความกว้าง)
+        scrollbar_x = rect.left + int(rect.width() * 0.72)
+        # คำนวณพิกัด Y ให้อยู่กลางๆ จอ
+        scrollbar_y = rect.top + int(rect.height() * 0.5)
+        
+        # สั่งคลิกที่จุดนั้น (เพื่อบอกโปรแกรมว่า ฉันจะเลื่อนตรงนี้นะ)
+        mouse.click(coords=(scrollbar_x, scrollbar_y))
         time.sleep(0.5)
         
         # 3. กดปุ่ม Page Down เพื่อเลื่อนลง
@@ -42,7 +47,7 @@ def force_scroll_down(window):
         
     except Exception as e:
         log(f"[!] Scroll Error: {e}")
-        # กันเหนียว: ลองกดลูกศรลงรัวๆ 5 ครั้ง
+        # กันเหนียว: ลองกดลูกศรลงรัวๆ
         window.type_keys("{DOWN 5}")
 
 def smart_click(window, criteria_list, timeout=5, optional=False):
@@ -95,8 +100,7 @@ def smart_click_with_scroll(window, criteria, max_scrolls=5):
                 elem_rect = found_element.rectangle()
                 win_rect = window.rectangle()
                 
-                # [Logic ใหม่] เช็คว่าขอบล่างของปุ่ม (bottom) อยู่ใกล้ขอบล่างหน้าต่างเกินไปหรือไม่
-                # ถ้าปุ่มอยู่ต่ำกว่าขอบล่าง หรือเหลือที่น้อยกว่า 20 pixel (ตกขอบ) -> ให้เลื่อนจอก่อน
+                # [Logic] เช็คว่าขอบล่างของปุ่ม (bottom) อยู่ใกล้ขอบล่างหน้าต่างเกินไปหรือไม่ (ตกขอบ)
                 if elem_rect.bottom >= win_rect.bottom - 20:
                     log(f"   [!] เจอปุ่ม '{criteria}' แต่ตำแหน่งต่ำเกินไป (ตกขอบ) -> สั่งเลื่อนลง 1 ครั้ง")
                     force_scroll_down(window)
@@ -112,9 +116,8 @@ def smart_click_with_scroll(window, criteria, max_scrolls=5):
                 log(f"   [!] เจอแต่กดไม่ได้ ({e}) -> ลองเลื่อนต่อ")
 
         # 3. ถ้าไม่เจอ หรือ เจอแต่ตกขอบแล้วสั่งเลื่อนไปแล้ว -> วนรอบถัดไป
-        # แต่ถ้ายังไม่เจอเลยในรอบนี้ -> สั่งเลื่อนจอลง
         if i < max_scrolls:
-            if not found_element: # ถ้าเมื่อกี้เจอแล้วเลื่อนไปแล้ว ไม่ต้องเลื่อนซ้ำ
+            if not found_element:
                 log(f"   [Rotate {i+1}/{max_scrolls}] ยังไม่เจอ '{criteria}' -> สั่งเลื่อนลง")
                 force_scroll_down(window)
                 time.sleep(1)
