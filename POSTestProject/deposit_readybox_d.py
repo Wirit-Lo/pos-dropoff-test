@@ -16,19 +16,17 @@ def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
 # ================= 2. Helper Functions (Scroll & Search) =================
-def force_scroll_down(window):
+def force_scroll_down(window, scroll_dist=-5):
     """
-    [Updated V4] ฟังก์ชันช่วยเลื่อนหน้าจอลง (Mouse Scroll)
-    แก้ไข: ใช้คำสั่ง Mouse Scroll (หมุนลูกกลิ้ง) แทนการกดปุ่ม Page Down
-    โดยจะวางเมาส์ไว้ที่ตำแหน่ง Scrollbar เพื่อให้แน่ใจว่าเลื่อนได้จริง
+    [Updated V5] ฟังก์ชันช่วยเลื่อนหน้าจอลง (Mouse Scroll with Config)
+    แก้ไข: รับค่า scroll_dist เพื่อกำหนดระยะการหมุนได้ (ค่าลบ = ลง, ค่าบวก = ขึ้น)
     """
-    log(f"...สั่งเลื่อนหน้าจอลง (Mouse Scroll)...")
+    log(f"...สั่งเลื่อนหน้าจอลง (Scroll Distance: {scroll_dist})...")
     try:
         # 1. เรียก Focus มาที่หน้าต่าง
         window.set_focus()
         
         # 2. คำนวณตำแหน่ง Scrollbar (จุดที่ปลอดภัยสำหรับการ Scroll)
-        # ประมาณ 72% ของความกว้างหน้าจอ (ขวาของรายการสินค้า)
         rect = window.rectangle()
         scrollbar_x = rect.left + int(rect.width() * 0.72)
         scrollbar_y = rect.top + int(rect.height() * 0.5)
@@ -37,9 +35,8 @@ def force_scroll_down(window):
         mouse.click(coords=(scrollbar_x, scrollbar_y))
         time.sleep(0.5)
         
-        # 4. ใช้คำสั่ง Mouse Scroll (หมุนลูกกลิ้งลง)
-        # wheel_dist=-5 คือหมุนลง 5 จังหวะ (ปรับเลขได้ถ้าอยากให้ไปเร็ว/ช้ากว่านี้)
-        mouse.scroll(coords=(scrollbar_x, scrollbar_y), wheel_dist=-5)
+        # 4. ใช้คำสั่ง Mouse Scroll ตามระยะที่ส่งมา
+        mouse.scroll(coords=(scrollbar_x, scrollbar_y), wheel_dist=scroll_dist)
         time.sleep(1) # รอให้ภาพขยับเสร็จ
         
     except Exception as e:
@@ -73,12 +70,12 @@ def smart_click(window, criteria_list, timeout=5, optional=False):
         log(f"[X] หาปุ่ม {criteria_list} ไม่เจอ!")
     return False
 
-def smart_click_with_scroll(window, criteria, max_scrolls=5):
+def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
     """
-    [Updated V2] คลิกปุ่มแบบเลื่อนหา (Smart Bounds Check)
-    แก้ปัญหา: เจอปุ่มแต่กดไม่ได้เพราะตกขอบ -> เช็คพิกัดก่อน ถ้าต่ำไปให้เลื่อนก่อนกด
+    [Updated V3] คลิกปุ่มแบบเลื่อนหา (รับค่า Scroll Distance)
+    เพิ่ม: รับค่า scroll_dist เพื่อส่งต่อไปยัง force_scroll_down
     """
-    log(f"...กำลังค้นหาปุ่ม '{criteria}' (โหมดเลื่อนหาและเช็คขอบ)...")
+    log(f"...กำลังค้นหาปุ่ม '{criteria}' (โหมดเลื่อนหา)...")
     
     for i in range(max_scrolls + 1):
         found_element = None
@@ -99,10 +96,10 @@ def smart_click_with_scroll(window, criteria, max_scrolls=5):
                 
                 # [Logic] เช็คว่าขอบล่างของปุ่ม (bottom) อยู่ใกล้ขอบล่างหน้าต่างเกินไปหรือไม่ (ตกขอบ)
                 if elem_rect.bottom >= win_rect.bottom - 20:
-                    log(f"   [!] เจอปุ่ม '{criteria}' แต่ตำแหน่งต่ำเกินไป (ตกขอบ) -> สั่งเลื่อนลง 1 ครั้ง")
-                    force_scroll_down(window)
+                    log(f"   [!] เจอปุ่ม '{criteria}' แต่ตำแหน่งต่ำเกินไป (ตกขอบ) -> สั่งเลื่อนลง")
+                    force_scroll_down(window, scroll_dist)
                     time.sleep(1)
-                    continue # วนลูปใหม่ เพื่อหาปุ่มในตำแหน่งใหม่ที่ขยับขึ้นมาแล้ว
+                    continue 
                 
                 # ถ้าตำแหน่ง OK (ไม่ตกขอบ) -> กดเลย
                 found_element.click_input()
@@ -116,7 +113,7 @@ def smart_click_with_scroll(window, criteria, max_scrolls=5):
         if i < max_scrolls:
             if not found_element:
                 log(f"   [Rotate {i+1}/{max_scrolls}] ยังไม่เจอ '{criteria}' -> สั่งเลื่อนลง")
-                force_scroll_down(window)
+                force_scroll_down(window, scroll_dist)
                 time.sleep(1)
             
     log(f"[X] หมดความพยายามในการหาปุ่ม '{criteria}'")
@@ -140,13 +137,12 @@ def smart_input_weight(window, value):
     window.type_keys(str(value), with_spaces=True)
     return True
 
-def smart_input_with_scroll(window, label_text, value, scroll_times=2):
+def smart_input_with_scroll(window, label_text, value, scroll_times=2, scroll_dist=-5):
     """
-    ฟังก์ชันกรอกข้อมูลที่รองรับการเลื่อนหน้าจอ (สำหรับเบอร์โทร หรือช่องที่อยู่ด้านล่าง)
+    ฟังก์ชันกรอกข้อมูลที่รองรับการเลื่อนหน้าจอ (รับค่า Scroll Distance)
     """
     log(f"...กำลังพยายามกรอก '{label_text}': {value}")
 
-    # ลองหา 2-3 รอบ (รอบแรกหาเลย, รอบต่อไปลอง Scroll แล้วหา)
     for i in range(scroll_times + 1):
         try:
             # 1. พยายามหา Edit Box โดยตรงจากชื่อ
@@ -175,7 +171,7 @@ def smart_input_with_scroll(window, label_text, value, scroll_times=2):
         # ถ้ายังไม่เจอ ให้เลื่อนจอลง
         if i < scroll_times:
             log(f"[Rotate {i+1}] หาช่องไม่เจอ... กำลังเลื่อนหน้าจอลง...")
-            force_scroll_down(window)
+            force_scroll_down(window, scroll_dist)
             time.sleep(1)
 
     log(f"[X] หมดความพยายามในการหาช่อง '{label_text}'")
@@ -195,51 +191,34 @@ def process_sender_info(window, phone_number, default_postal):
     """
     log("...เช็คหน้า Popup ผู้ฝากส่ง...")
 
-    # 1. กดปุ่มอ่านบัตรประชาชน
     if smart_click(window, "อ่านบัตรประชาชน", timeout=5, optional=True):
         log("[Popup] เจอหน้าผู้ฝากส่ง -> กดอ่านบัตรเรียบร้อย")
-        
-        # รอให้ข้อมูลจากบัตรวิ่งลงช่อง (เพิ่มเวลาหน่อยเพื่อให้ชัวร์)
         time.sleep(3) 
 
-        # ---------------------------------------------------------
-        # 2. ส่วนที่เพิ่ม: ตรวจสอบและเติมรหัสไปรษณีย์ (ถ้าว่าง)
-        # ---------------------------------------------------------
         log("...ตรวจสอบช่องรหัสไปรษณีย์...")
         try:
             found_postal_box = False
-            # ค้นหาช่อง Edit ทั้งหมดในหน้านั้น
             edits = window.descendants(control_type="Edit")
-            
             for edit in edits:
-                # ตรวจสอบชื่อของช่องว่าใช่ "รหัสไปรษณีย์" หรือไม่
-                # (บางทีชื่ออาจจะเป็น "ZipCode" หรือ "PostCode" แล้วแต่โปรแกรม แต่ส่วนใหญ่จะใช้ชื่อภาษาไทยตาม Label)
                 if "รหัสไปรษณีย์" in edit.element_info.name or "รหัสไปรษณีย์" in edit.window_text():
-                    
-                    # ดึงค่าปัจจุบันในช่องออกมาดู (สำหรับ UIA Backend ใช้ get_value)
                     current_val = edit.get_value() 
-                    
                     if current_val is None or str(current_val).strip() == "":
                         log(f"   [Auto-Fix] รหัสไปรษณีย์ว่างเปล่า -> กำลังเติมค่า Config: {default_postal}")
                         edit.click_input()
                         edit.type_keys(str(default_postal), with_spaces=True)
                     else:
                         log(f"   [Skip] มีรหัสไปรษณีย์แล้ว ({current_val}) -> ไม่ต้องเติม")
-                    
                     found_postal_box = True
-                    break # เจอแล้ว ออกจาก Loop
+                    break 
             
             if not found_postal_box:
                 log("   [!] หาช่องรหัสไปรษณีย์แบบระบุชื่อไม่เจอ (ข้ามขั้นตอนซ่อมแซม)")
 
         except Exception as e:
             log(f"   [Error] เกิดข้อผิดพลาดตอนเช็ค ปณ.: {e}")
-        # ---------------------------------------------------------
 
-        # 3. กรอกเบอร์โทรศัพท์ต่อ (ตามปกติ)
         smart_input_with_scroll(window, "หมายเลขโทรศัพท์", phone_number)
         
-        # 4. กดถัดไป
         log("...ข้อมูลครบถ้วน กดถัดไป...")
         smart_next(window)
     else:
@@ -260,34 +239,26 @@ def wait_for_text(window, text, timeout=10):
 def handle_prohibited_items_warning(window):
     """
     [Updated V3 - Key Sequence] ฟังก์ชันจัดการหน้า 'สิ่งของต้องห้าม'
-    Logic:
-    1. รอตรวจจับหน้า 'สิ่งของต้องห้าม'
-    2. เนื่องจาก Focus อยู่ที่ปุ่มปฏิเสธ -> กดขวา 2 ที ({RIGHT}{RIGHT}) เพื่อไปหายืนยัน
-    3. กด Enter ({ENTER})
+    Logic: กดขวา 2 ที ({RIGHT}{RIGHT}) เพื่อไปหายืนยัน แล้วกด Enter ({ENTER})
     """
     log("...รอตรวจสอบหน้าสิ่งของต้องห้าม (Prohibited Items)...")
     
-    # 1. รอตรวจจับว่าหน้า 'สิ่งของต้องห้าม' เด้งขึ้นมาจริงหรือไม่ (Timeout 5 วิ)
     if wait_for_text(window, "สิ่งของต้องห้าม", timeout=5):
         log("[Detect] พบหน้า 'สิ่งของต้องห้าม' -> (Default Focus: ปฏิเสธ)")
-        time.sleep(1) # รอให้หน้าจอพร้อมรับ Input (สำคัญมาก)
+        time.sleep(1) 
         
-        # 2. กดปุ่มลูกศรขวา 2 ครั้ง เพื่อเลื่อนไปหาปุ่มยืนยัน
         log("   [Action] กดลูกศรขวา 2 ครั้ง (Move Focus >> Confirm)")
         window.type_keys("{RIGHT}{RIGHT}")
-        time.sleep(0.5) # พักนิดนึงให้ Focus เปลี่ยน
+        time.sleep(0.5)
         
-        # 3. กด Enter
         log("   [Action] กด Enter เพื่อยืนยัน")
         window.type_keys("{ENTER}")
-        time.sleep(1) # รอผลลัพธ์
+        time.sleep(1) 
         
-        # เช็คว่าผ่านจริงไหม (Optional)
         if not wait_for_text(window, "สิ่งของต้องห้าม", timeout=1):
             log("   [/] Success: หน้าสิ่งของต้องห้ามหายไปแล้ว")
         else:
             log("   [Warning] หน่ายังค้างอยู่ (อาจต้องเช็คจังหวะการกดอีกครั้ง)")
-
     else:
         log("[Skip] ไม่พบหน้าแจ้งเตือนสิ่งของต้องห้าม (ภายใน 5 วินาที) -> ข้ามไปขั้นตอนถัดไป")
 
@@ -297,57 +268,54 @@ def run_smart_scenario(main_window, config):
         # อ่านค่าจาก Config
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
         postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
-        # อ่านค่าลักษณะเฉพาะ (SpecialOptions) เช่น "LQ, FR"
         special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
         
-        # อ่านเบอร์โทรจาก TEST_DATA
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
         step_delay = int(config['SETTINGS'].get('StepDelay', 1))
+        
+        # [NEW] อ่านค่า ScrollDistance จาก Config (ถ้าไม่มีให้ใช้ -5 เป็นค่า Default)
+        # ค่าลบ = เลื่อนลง, ค่าบวก = เลื่อนขึ้น (เช่น -20 จะเลื่อนเร็วกว่า -5)
+        scroll_dist = int(config['SETTINGS'].get('ScrollDistance', -5))
+        
     except Exception as e: 
         log(f"[Error] Config ผิดพลาด: {e}")
         return
 
     log(f"\n--- เริ่มต้น Scenario (Options: {special_options_str}) Phone: {phone} ---")
+    log(f"--- Scroll Distance setting: {scroll_dist} ---")
     time.sleep(1)
 
     # 1. รับฝากสิ่งของ
     if not smart_click(main_window, "รับฝากสิ่งของ"): return
     time.sleep(step_delay)
 
-    # --- ขั้นตอนผู้ฝากส่ง (อ่านบัตร + กรอกเบอร์) ---
+    # --- ขั้นตอนผู้ฝากส่ง ---
     process_sender_info(main_window, phone, postal) 
     time.sleep(step_delay)
 
-    # 2. เลือกกล่อง (ใช้ฟังก์ชันใหม่ คลิก+เลื่อนหา)
-    # เปลี่ยนเป้าหมายเป็น "กล่องสำเร็จรูปแบบ ค." (ซึ่งมักอยู่ด้านล่าง)
-    if not smart_click_with_scroll(main_window, "กล่องสำเร็จรูปแบบ ค."): 
-        log("[Error] หา 'กล่องสำเร็จรูปแบบ ค.' ไม่เจอ แม้เลื่อนจอแล้ว")
+    # 2. เลือกกล่อง (ใช้ฟังก์ชันใหม่ คลิก+เลื่อนหา + ส่งค่า Scroll จาก Config)
+    if not smart_click_with_scroll(main_window, "กล่องสำเร็จรูปแบบ ง.", scroll_dist=scroll_dist): 
+        log("[Error] หา 'กล่องสำเร็จรูปแบบ ง.' ไม่เจอ แม้เลื่อนจอแล้ว")
         return
     time.sleep(step_delay)
 
-    # --- STEP 3: เลือกหมวดหมู่ / ลักษณะเฉพาะ ตาม Config ---
+    # --- STEP 3: เลือกหมวดหมู่ / ลักษณะเฉพาะ ---
     log("STEP 3: เลือกหมวดหมู่/ลักษณะเฉพาะ")
-    
-    # ตรวจสอบว่าใน Config มีค่าหรือไม่
     if special_options_str.strip():
-        # แยกข้อความด้วยเครื่องหมายคอมมา (,) เช่น "LQ, FR" -> ["LQ", "FR"]
         options = [opt.strip() for opt in special_options_str.split(',')]
-        
         log(f"...กำลังเลือกรายการพิเศษ: {options}")
         for opt in options:
-            if opt: # ป้องกันค่าว่าง
-                # พยายามกดปุ่มที่มีข้อความตรงกับ Config
+            if opt: 
                 smart_click(main_window, opt, timeout=2, optional=True)
                 time.sleep(0.5)
     else:
         log("...ไม่มีการระบุลักษณะเฉพาะ (ข้าม)")
 
-    # กด Enter เพื่อไปต่อ (ต้องกดเสมอเพื่อผ่านหน้านี้)
     log("...กด Enter เพื่อไปหน้าถัดไป")
     main_window.type_keys("{ENTER}")
     time.sleep(step_delay)
 
-    # เรียกใช้ฟังก์ชันจัดการหน้าสิ่งของต้องห้าม (แบบกด Key: Right x2 -> Enter)
+    # จัดการหน้าสิ่งของต้องห้าม
     handle_prohibited_items_warning(main_window)
     time.sleep(step_delay)
 
