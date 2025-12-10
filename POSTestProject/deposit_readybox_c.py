@@ -351,9 +351,13 @@ def run_smart_scenario(main_window, config):
     
     final_buttons = ["เสร็จสิ้น", "Settle", "ยืนยัน", "ตกลง"]
     smart_click(main_window, final_buttons, timeout=3, optional=True)
-    main_window.type_keys("{ENTER}")
+    
+    # [NEW] ปิดการกด Enter อัตโนมัติ เพื่อให้หน้าจอค้างไว้ให้ดูผลลัพธ์
+    # main_window.type_keys("{ENTER}")
 
-    log("\n[SUCCESS] จบการทำงาน")
+    log("\n[SUCCESS] จบการทำงาน - ระบบค้างหน้าจอนี้ไว้")
+    print("\n>>> กด Enter ที่หน้าต่างนี้ (Console) เพื่อปิดโปรแกรม... <<<")
+    input() # หยุดรอ Input จากผู้ใช้
 
 # ================= 5. Execution =================
 if __name__ == "__main__":
