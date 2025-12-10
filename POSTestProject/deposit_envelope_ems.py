@@ -218,44 +218,59 @@ def run_smart_scenario(main_window, config):
     # =========================================================
     log("STEP 5.5: เข้าสู่หน้าเลือกบริการหลัก (EMS)")
     
-    # ตรวจสอบก่อนว่าอยู่หน้า "บริการหลัก" จริงไหม
-    if not check_exists(main_window, "บริการหลัก"):
-        log("[Warning] ไม่พบข้อความ 'บริการหลัก' อาจจะยังโหลดไม่เสร็จ หรือข้ามหน้าไปแล้ว")
-    
-    # กดเลือกบริการ EMS
+    # คำที่ใช้ค้นหาปุ่ม EMS
     ems_keywords = ["บริการอีเอ็มเอส", "EMS", "E", "บริการด่วนพิเศษ"]
+    
+    # 1. พยายามกดปุ่ม EMS
     if smart_click(main_window, ems_keywords, timeout=5, optional=False):
         log("[/] กดเลือก EMS แล้ว... กำลังตรวจสอบการเปลี่ยนหน้า")
-        time.sleep(2) # รอ Animation เปลี่ยนหน้า
+        time.sleep(2) 
 
-        # [Check Point] ตรวจสอบว่าเปลี่ยนหน้าจริงหรือไม่?
-        # วิธีเช็ค: ถ้ายังเจอคำว่า "บริการหลัก" อยู่ แสดงว่ายังไม่ไปไหน (หรือต้องกด Enter ซ้ำ)
-        is_still_main_service = check_exists(main_window, "บริการหลัก")
+        # 2. ตรวจสอบว่าหน้าจอเปลี่ยนเป็นหน้าสรุป (เหมือนในรูป) หรือไม่
+        # คีย์เวิร์ดที่ควรเจอเมื่อเปลี่ยนหน้าสำเร็จ: "EMS ในประเทศ", "รับประกัน", หรือ "1-2 วันทำการ" (ที่อยู่ในกล่องสรุป)
+        success_markers = ["EMS ในประเทศ", "รับประกัน", "1-2 วันทำการ", "เพิ่ม:", "Expected"]
         
-        # หรือเช็คว่าเจอ "ข้อมูลเพิ่มเติม" (หน้าถัดไป) ไหม
-        is_next_page = check_exists(main_window, "ข้อมูลเพิ่มเติม") or check_exists(main_window, "รับประกัน")
-
-        if is_still_main_service and not is_next_page:
-            log("[!] กด EMS แล้วแต่หน้าจอยังไม่เปลี่ยน... ลองกด Enter ย้ำ")
-            main_window.type_keys("{ENTER}")
-            time.sleep(2)
+        is_page_updated = False
+        for marker in success_markers:
+            if check_exists(main_window, marker):
+                is_page_updated = True
+                log(f"[/] พบข้อความยืนยัน: '{marker}' -> หน้าจอเปลี่ยนสำเร็จ")
+                break
+        
+        # 3. ถ้ายังไม่เปลี่ยน -> ลองกดปุ่ม "ถัดไป" หรือ "Enter" ย้ำอีกที
+        # เพราะบางทีการกดการ์ดแค่เลือก (Select) แต่ต้องกด Next เพื่อไปต่อ
+        if not is_page_updated:
+            log("[!] หน้าจอยังไม่เปลี่ยนเป็นหน้าสรุป... กำลังกดปุ่ม 'ถัดไป' หรือ 'Enter' เพื่อยืนยัน")
+            smart_next(main_window) # สั่งกด Next หรือ Enter
+            time.sleep(3) # รอโหลด
             
             # เช็คอีกรอบ
-            if check_exists(main_window, "บริการหลัก"):
-                log("\n[STOP] หยุดการทำงาน: กดเลือก EMS แล้วแต่หน้าจอไม่เปลี่ยนไปขั้นตอนถัดไป")
-                return # หยุดทำงานตรงนี้ตามคำขอ
-        else:
-            log("[/] ตรวจสอบผ่าน: หน้าจอเปลี่ยนไปขั้นตอนถัดไปแล้ว")
+            for marker in success_markers:
+                if check_exists(main_window, marker):
+                    is_page_updated = True
+                    log(f"[/] พบข้อความยืนยันหลังกดถัดไป: '{marker}'")
+                    break
+        
+        # 4. ถ้ายังไม่เปลี่ยนจริงๆ ให้หยุดทำงาน
+        if not is_page_updated:
+             log("\n[STOP] หยุดการทำงาน: เลือก EMS แล้วแต่หน้าจอไม่เปลี่ยนไปหน้าสรุป (ไม่พบคำว่า 'EMS ในประเทศ')")
+             raise RuntimeError("Selected EMS but page did not update to Summary state.")
 
-        # --- ส่วนประกัน (ถ้าผ่านการตรวจสอบหน้าจอมาได้) ---
+        # --- ส่วนประกัน (ทำงานต่อเมื่อหน้าจอเปลี่ยนสำเร็จแล้ว) ---
         if add_insurance.lower() == 'true':
             log(f"...ตรวจสอบประกันภัย (วงเงิน: {insurance_amt})")
+            # เช็คว่ามีปุ่มให้กดเพิ่มประกันไหม (บางทีมันอาจจะอยู่ในกล่องสรุป)
             if smart_click(main_window, ["+", "AddService", "รับประกัน"], timeout=3, optional=True):
                 time.sleep(1)
                 smart_input_with_scroll(main_window, "วงเงิน", insurance_amt)
                 smart_click(main_window, ["ตกลง", "OK"], timeout=2, optional=True)
             else:
-                log("[Info] หาปุ่มกดเพิ่มประกันไม่เจอ")
+                log("[Info] หาปุ่มกดเพิ่มประกันไม่เจอ (อาจจะถูกเพิ่มแล้ว หรือไม่มีปุ่ม)")
+
+    else:
+        # ถ้าหาปุ่ม EMS ไม่เจอตั้งแต่แรก
+        log("[!] หาปุ่มเลือกบริการ EMS ไม่เจอ")
+        raise RuntimeError("Cannot find EMS service button.")
 
     # 6. จบงาน
     log("STEP 6: จบงาน")
