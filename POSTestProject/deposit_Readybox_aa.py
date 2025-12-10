@@ -199,25 +199,23 @@ def wait_for_text(window, text, timeout=10):
 
 def handle_prohibited_items_warning(window):
     """
-    [NEW] ฟังก์ชันจัดการหน้า 'สิ่งของต้องห้าม'
-    ตรวจสอบว่ามีข้อความเตือนหรือไม่ ถ้ามีให้กด 'ยืนยัน'
+    [Updated] ฟังก์ชันจัดการหน้า 'สิ่งของต้องห้าม'
+    ปรับปรุงใหม่: เน้นหาปุ่ม 'ยืนยัน' ทันทีเพื่อความรวดเร็วและแม่นยำ
     """
-    log("...ตรวจสอบการแจ้งเตือนสิ่งของต้องห้าม...")
+    log("...ตรวจสอบหน้าสิ่งของต้องห้าม...")
     
-    # รอเช็คว่ามีคำว่า "สิ่งของต้องห้าม" หรือ "Confirm" โผล่มาไหม
-    # (timeout=3 คือรอสูงสุด 3 วินาที ถ้าไม่มาถือว่าไม่มี)
-    if wait_for_text(window, "สิ่งของต้องห้าม", timeout=3):
-        log("[Detect] พบหน้าแจ้งเตือนสิ่งของต้องห้าม!")
-        time.sleep(0.5)
-        
-        # พยายามกดปุ่มยืนยัน
-        if smart_click(window, "ยืนยัน", timeout=3):
-            log("[/] กดปุ่ม 'ยืนยัน' เรียบร้อย")
-        else:
-            log("[!] เจอหน้าเตือน แต่หาปุ่มยืนยันไม่เจอ (ลองกด Enter)")
-            window.type_keys("{ENTER}")
+    # วิธีที่ 1: หาปุ่ม "ยืนยัน" (หรือ Confirm) โดยตรงเลย ไม่ต้องรออ่าน Title
+    # เพราะถ้าหน้าไม่เด้งมา มันก็จะหาไม่เจอแล้วข้ามไปเอง (ใช้ optional=True)
+    if smart_click(window, ["ยืนยัน", "Confirm"], timeout=3, optional=True):
+        log("[/] กด 'ยืนยัน' หน้าสิ่งของต้องห้ามเรียบร้อย")
+        return
+
+    # วิธีที่ 2: ถ้าหาปุ่มไม่เจอ ลองเช็ค Title ดูเผื่อปุ่มมันชื่ออื่น หรือต้องกด Enter
+    if wait_for_text(window, "สิ่งของต้องห้าม", timeout=1):
+        log("[Detect] เจอข้อความ 'สิ่งของต้องห้าม' แต่หาปุ่มไม่เจอ -> ลองกด Enter")
+        window.type_keys("{ENTER}")
     else:
-        log("[Skip] ไม่พบหน้าแจ้งเตือนสิ่งของต้องห้าม (ไปต่อ)")
+        log("[Skip] ไม่พบปุ่มยืนยัน หรือหน้าสิ่งของต้องห้าม (ไปต่อ)")
 
 # ================= 4. Main Scenario =================
 def run_smart_scenario(main_window, config):
@@ -243,7 +241,6 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
 
     # --- ขั้นตอนผู้ฝากส่ง (อ่านบัตร + กรอกเบอร์) ---
-    # [FIXED] เพิ่ม postal เข้าไปเป็น Argument ตัวที่ 3
     process_sender_info(main_window, phone, postal) 
     time.sleep(step_delay)
 
@@ -273,6 +270,7 @@ def run_smart_scenario(main_window, config):
     main_window.type_keys("{ENTER}")
     time.sleep(step_delay)
 
+    # เรียกใช้ฟังก์ชันจัดการหน้าสิ่งของต้องห้าม (ฉบับปรับปรุง)
     handle_prohibited_items_warning(main_window)
     time.sleep(step_delay)
 
