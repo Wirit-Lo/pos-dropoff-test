@@ -3,7 +3,7 @@ import os
 import time
 import datetime
 from pywinauto.application import Application
-# ใช้ send_keys เพื่อจำลองการกดคีย์บอร์ดระดับ System (แม่นยำกว่า type_keys)
+# ใช้ send_keys เพื่อจำลองการกดคีย์บอร์ดระดับ System
 from pywinauto.keyboard import send_keys 
 from pywinauto import mouse
 
@@ -17,187 +17,80 @@ def load_config(filename='config.ini'):
 def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
-# ================= 2. Helper Functions (Keyboard Only) =================
-def force_scroll_down(window):
-    """ฟังก์ชันช่วยเลื่อนหน้าจอลงโดยใช้ปุ่ม PageDown"""
-    log(f"...กดปุ่ม PageDown เพื่อเลื่อนหน้าจอ...")
-    try:
-        window.set_focus()
-        send_keys("{PGDN}")
-        time.sleep(0.5)
-    except Exception as e:
-        log(f"[!] Keyboard scroll failed: {e}")
-
+# ================= 2. Helper Functions =================
 def ensure_focus(window):
-    """ทำให้แน่ใจว่าหน้าจอ Focus อยู่ในพื้นที่ปลอดภัย (ไม่ใช่ช่อง Text Box)"""
+    """ทำให้แน่ใจว่าหน้าจอ Focus อยู่"""
     try:
         window.set_focus()
         time.sleep(0.5)
-        
-        # [แก้ไข] พยายามคลิกที่ Label "บริการหลัก" หรือพื้นที่ว่างด้านซ้ายบน
-        # เพื่อดึง Focus ออกจากช่อง Barcode ด้านขวา
-        found_safe_spot = False
-        
-        # ลองหาคำว่า "บริการหลัก"
-        for child in window.descendants():
-            if child.is_visible() and "บริการหลัก" in child.window_text():
-                # คลิกที่ตัวหนังสือเลย (ปลอดภัยกว่าคลิกกลางจอ)
-                child.click_input()
-                log("[/] คลิกที่พื้นที่ว่าง (บริการหลัก) เพื่อ Reset Focus สำเร็จ")
-                found_safe_spot = True
-                break
-        
-        if not found_safe_spot:
-            # ถ้าหาไม่เจอ ให้คลิกที่พิกัดซ้ายบนของ Content (เลี่ยง Header และ Sidebar)
-            rect = window.rectangle()
-            safe_x = rect.left + 150
-            safe_y = rect.top + 200 # ต่ำลงมาจาก Header พอสมควร
-            mouse.click(coords=(safe_x, safe_y))
-            log(f"[/] คลิกพื้นที่ปลอดภัย (Fallback {safe_x},{safe_y})")
-
-        time.sleep(0.5)
-    except: 
-        log("[!] ไม่สามารถคลิกพื้นที่ปลอดภัยได้")
-
-def smart_click(window, criteria_list, timeout=5, optional=False):
-    """
-    คลิกปุ่มโดยใช้ UIA Invoke Pattern
-    """
-    if isinstance(criteria_list, str): criteria_list = [criteria_list]
-    
-    start = time.time()
-    while time.time() - start < timeout:
-        for criteria in criteria_list:
-            try:
-                for child in window.descendants():
-                    if child.is_visible() and criteria in child.window_text():
-                        try:
-                            child.invoke()
-                            log(f"[/] สั่งงานปุ่ม '{criteria}' สำเร็จ (Invoke)")
-                            return True
-                        except:
-                            try:
-                                child.select()
-                                log(f"[/] เลือกปุ่ม '{criteria}' สำเร็จ (Select)")
-                                return True
-                            except:
-                                child.set_focus()
-                                send_keys("{ENTER}")
-                                log(f"[/] กด Enter ใส่ปุ่ม '{criteria}'")
-                                return True
-            except: pass
-        time.sleep(0.5)
-
-    if not optional:
-        log(f"[X] หาปุ่ม {criteria_list} ไม่เจอ!")
-    return False
-
-def check_exists(window, text):
-    """เช็คว่ามีข้อความปรากฏบนหน้าจอหรือไม่"""
-    try:
-        for child in window.descendants():
-            if child.is_visible() and text in child.window_text():
-                return True
+        rect = window.rectangle()
+        # คลิกที่มุมซ้ายบนที่เป็นพื้นที่ว่างๆ เพื่อ Reset Focus
+        mouse.click(coords=(rect.left + 50, rect.top + 150))
     except: pass
-    return False
 
-def smart_input_with_keyboard(window, label_text, value):
-    """กรอกข้อมูลโดยใช้การ Tab หาช่อง"""
-    log(f"...กำลังพยายามกรอก '{label_text}': {value}")
-    try:
-        edits = window.descendants(control_type="Edit")
-        for edit in edits:
-            if edit.is_visible() and (label_text in edit.element_info.name or label_text in edit.window_text()):
-                edit.set_focus()
-                send_keys(str(value), with_spaces=True)
-                return True
-    except: pass
-    return False
-
-# ================= 3. Main Scenario (เฉพาะส่วนบริการหลัก) =================
-def run_smart_scenario(main_window, config):
-    try:
-        add_insurance = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
-        insurance_amt = config['DEPOSIT_ENVELOPE'].get('InsuranceAmount', '0')
-    except: return
-
-    log(f"\n--- เริ่มต้นทดสอบ (Test Mode: Direct Keyboard Send) ---")
+# ================= 3. UI Inspector Mode (โหมดดึงค่า ID) =================
+def run_ui_inspector(main_window):
+    log(f"\n--- เริ่มต้นโหมด X-RAY (ค้นหา ID ปุ่ม) ---")
     log("กรุณาตรวจสอบว่าเปิดหน้า 'บริการหลัก' รอไว้แล้ว")
     time.sleep(2)
 
-    # =========================================================
-    # --- STEP: เลือกบริการ (EMS) ด้วย Hotkey (วิธีใหม่) ---
-    # =========================================================
-    log("STEP: ใช้ Hotkey เลือกบริการ EMS (วิธี Direct SendKeys)")
-    
-    if not check_exists(main_window, "บริการหลัก"):
-        log("[Warning] ไม่พบข้อความ 'บริการหลัก' (อาจจะอยู่ผิดหน้า)")
-
-    # 1. เรียก Focus ให้ชัวร์ที่สุด (สำคัญมาก! ต้องเอา Focus ออกจากช่อง Barcode)
     ensure_focus(main_window)
     
-    # 2. กดปุ่ม E (เพิ่ม Logic การสลับภาษาและกด Spacebar)
-    log("...กดปุ่ม 'e' (System Level)")
-    
-    # ลองกด E ปกติ
-    send_keys("e") 
-    time.sleep(0.5)
-    
-    # ลองกด E ตัวใหญ่ (Shift+E) เผื่อระบบต้องการตัวใหญ่
-    send_keys("E")
-    time.sleep(0.5)
+    output_file = "UI_DUMP_SERVICE_PAGE.txt"
+    log(f"...กำลังวิเคราะห์โครงสร้างหน้าจอ และบันทึกลงไฟล์ '{output_file}'...")
+    log("(อาจใช้เวลาสักครู่ หน้าจออาจจะกะพริบหรือมีกรอบสีแดงขึ้น)")
 
-    # [NEW] ลองกด Spacebar เผื่อว่า Focus อยู่ที่การ์ดแล้วแต่ยังไม่เลือก
-    # send_keys("{SPACE}")
-    
-    # [NEW] ถ้ายังไม่เปลี่ยน อาจเป็นเพราะภาษาไทย? ลองสลับภาษาแล้วกดใหม่
-    # (Uncomment บรรทัดล่างถ้าต้องการเปิดใช้งานการสลับภาษา)
-    # log("...ลองสลับภาษาแล้วกดซ้ำ")
-    # send_keys("#{SPACE}") # Win+Space
-    # time.sleep(0.5)
-    # send_keys("e")
+    try:
+        # 1. บันทึกโครงสร้างทั้งหมดลงไฟล์ (เผื่อไว้ดูละเอียด)
+        main_window.print_control_identifiers(depth=None, filename=output_file)
+        log(f"[/] บันทึกไฟล์สำเร็จ! ลองเปิด '{output_file}' ดูได้ครับ")
 
-    # 3. กด Enter ยืนยัน
-    log("...กด Enter เพื่อยืนยัน")
-    send_keys("{ENTER}")
-    time.sleep(3) # รอโหลด
-
-    # --- ตรวจสอบผลลัพธ์ ---
-    success_markers = ["EMS ในประเทศ", "รับประกัน", "1-2 วันทำการ", "เพิ่ม:", "Expected", "ข้อมูลเพิ่มเติม"]
-    is_success = False
-    
-    for marker in success_markers:
-        if check_exists(main_window, marker):
-            is_success = True
-            log(f"[/] สำเร็จ! พบข้อความ '{marker}' -> หน้าจอเปลี่ยนแล้ว")
-            break
-    
-    if not is_success:
-        log("[!] หน้าจอยังไม่เปลี่ยน... ลองวิธีกดปุ่มลูกศร + Enter")
+        # 2. ค้นหาและโชว์ ID ของปุ่มที่น่าจะเป็น EMS บนหน้าจอ Console เลย
+        log("\n" + "="*50)
+        log("    ผลการค้นหาปุ่ม EMS / E / บริการ บนหน้าจอ    ")
+        log("="*50)
         
-        # ลองกดลูกศรขวา (เผื่อ EMS เป็นตัวเลือกที่ 2) หรือกด Tab
-        # send_keys("{RIGHT}")
-        # time.sleep(0.5)
-        # send_keys("{ENTER}")
-
-        if check_exists(main_window, "บริการหลัก"):
-             log("\n[FAIL] ยังติดอยู่ที่หน้าบริการหลัก -> อาจติด Focus ที่ช่อง Barcode หรือ Hotkey ไม่ทำงาน")
-             return
-
-    # --- ส่วนประกัน ---
-    if is_success and add_insurance.lower() == 'true':
-        log(f"...ตรวจสอบประกันภัย")
-        if smart_click(main_window, ["+", "AddService", "รับประกัน"], timeout=3, optional=True):
-            time.sleep(1)
+        found_candidate = False
+        # วนลูปหาทุก Element ในหน้าต่าง
+        for child in main_window.descendants():
             try:
-                # คลิกพื้นที่ว่างอีกทีให้ชัวร์ก่อนพิมพ์ราคา
-                ensure_focus(main_window)
-                send_keys(str(insurance_amt))
+                # ดึงค่าต่างๆ ของ Element
+                text = child.window_text()
+                auto_id = child.element_info.automation_id
+                control_type = child.element_info.control_type
+                
+                # กรองเฉพาะสิ่งที่น่าจะเป็นปุ่มที่เราหา
+                keywords = ["EMS", "E", "อีเอ็มเอส", "บริการ", "ด่วน", "Service"]
+                is_match = False
+                
+                # เช็คว่ามี keyword อยู่ใน text หรือ id ไหม
+                if text and any(k in text for k in keywords): is_match = True
+                if auto_id and any(k in auto_id for k in keywords): is_match = True
+                
+                # ถ้าเจอที่น่าสนใจ ให้ปริ้นออกมา
+                if is_match:
+                    found_candidate = True
+                    print(f"\n[เจอเป้าหมาย!] Type: {control_type}")
+                    print(f"   Name (Text) : '{text}'")
+                    print(f"   AutomationId: '{auto_id}'  <-- ลองใช้ค่านี้!")
+                    
+                    # วาดกรอบให้ดูด้วยว่าคือปุ่มไหนบนจอ
+                    try:
+                        child.draw_outline(colour='green', thickness=2)
+                    except: pass
             except: pass
-            
-            send_keys("{ENTER}")
 
-    log("\n[TEST COMPLETED] จบการทดสอบแบบ Direct Keys")
+        if not found_candidate:
+            log("[!] ไม่พบ Element ที่มีคำว่า EMS/E ในชื่อหรือ ID เลย")
+            log("    ลองเปิดไฟล์ Text ที่สร้างขึ้นเพื่อไล่ดูด้วยตาอีกทีครับ")
+        else:
+            log("\n" + "="*50)
+            log("วิธีใช้: นำค่า AutomationId ที่ได้ ไปใส่ในฟังก์ชัน smart_click")
+            log("ตัวอย่าง: smart_click(window, 'ค่า_AutomationId_ที่เจอ')")
+            log("="*50)
+
+    except Exception as e:
+        log(f"[Error] เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
 
 # ================= 4. Execution =================
 if __name__ == "__main__":
@@ -209,6 +102,9 @@ if __name__ == "__main__":
             app = Application(backend="uia").connect(title_re=conf['APP']['WindowTitle'], timeout=connect_wait)
             win = app.top_window()
             win.set_focus()
-            run_smart_scenario(win, conf)
+            
+            # รันโหมดดึงค่า ID แทนโหมดเทสปกติ
+            run_ui_inspector(win)
+            
         except Exception as e:
             log(f"Error: {e}")
