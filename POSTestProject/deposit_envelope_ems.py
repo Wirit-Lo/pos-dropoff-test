@@ -19,43 +19,37 @@ def log(message):
 
 def debug_ui_structure(window):
     """
-    [NEW] ฟังก์ชันช่วย Debug รายงานปุ่มบนหน้าจอ
+    [NEW] ฟังก์ชันช่วย Debug รายงาน ID และคุณสมบัติของปุ่มแบบละเอียด
     """
-    log("!!! DEBUG: รายงานโครงสร้างหน้าจอ (UI Report) !!!")
+    log("\n!!! DEBUG: รายงานโครงสร้างหน้าจอ (UI Report - Full IDs) !!!")
     try:
-        # สแกนหา ListItem และ Button
-        elements = window.descendants(control_type="ListItem") + window.descendants(control_type="Button")
+        # ดึง Element ทั้งหมดที่มองเห็น
+        elements = window.descendants()
         
-        log(f"-> พบ Element ทั้งหมด {len(elements)} รายการ (คัดเฉพาะที่มองเห็น):")
-        visible_elements = []
-        
+        found_count = 0
         for i, item in enumerate(elements):
-            if item.is_visible():
-                rect = item.rectangle()
-                area = rect.width() * rect.height()
-                txt = item.window_text()
-                # เก็บข้อมูลไว้เรียงลำดับ
-                visible_elements.append({
-                    'index': i,
-                    'text': txt,
-                    'width': rect.width(),
-                    'height': rect.height(),
-                    'area': area,
-                    'item': item
-                })
+            try:
+                if item.is_visible():
+                    ctype = item.element_info.control_type
+                    
+                    # กรองเฉพาะ Control ที่น่าจะเป็นปุ่มหรือเมนู
+                    if ctype in ["Button", "ListItem", "Image", "Text", "Group", "Pane", "Custom"]:
+                        rect = item.rectangle()
+                        txt = item.window_text()
+                        auto_id = item.element_info.automation_id
+                        name = item.element_info.name
+                        
+                        # เงื่อนไขการแสดงผล: ต้องมี ID หรือ มีข้อความ หรือเป็นปุ่ม
+                        if (auto_id or txt.strip() or ctype in ["Button", "ListItem"]) and rect.width() > 0:
+                            found_count += 1
+                            log(f"   [{ctype}] Text:'{txt}' | ID:'{auto_id}' | Name:'{name}' | Size:{rect.width()}x{rect.height()}")
+            except: pass
         
-        # แสดงผลโดยเรียงจากขนาดใหญ่ไปเล็ก (เพื่อให้เห็นปุ่ม EMS ที่น่าจะใหญ่สุดก่อน)
-        visible_elements.sort(key=lambda x: x['area'], reverse=True)
-        
-        for e in visible_elements[:10]: # แสดง 10 อันดับแรก
-            log(f"   [Size: {e['width']}x{e['height']}] Text: '{e['text']}'")
-            
-        return visible_elements # ส่งกลับไปใช้ต่อได้
+        log(f"-> สแกนเสร็จสิ้น พบ {found_count} รายการที่น่าสนใจ")
 
     except Exception as e:
         log(f"Debug Error: {e}")
-        return []
-    log("------------------------------------------")
+    log("------------------------------------------\n")
 
 # ================= 2. Helper Functions =================
 def force_scroll_down(window, scroll_dist=-5):
@@ -85,56 +79,6 @@ def smart_click(window, criteria_list, timeout=5, optional=False):
     
     if not optional:
         log(f"[X] หาปุ่ม {criteria_list} ไม่เจอ!")
-    return False
-
-def click_button_containing_text(window, search_texts):
-    """
-    [NEW] ค้นหาข้อความ แล้วย้อนหาปุ่มแม่ (Parent Button/ListItem) เพื่อคลิก
-    วิธีนี้แม่นยำกว่าการกดที่ข้อความตรงๆ หรือกดตามขนาด
-    """
-    if isinstance(search_texts, str): search_texts = [search_texts]
-    log(f"...กำลังค้นหาปุ่มที่มีข้อความ: {search_texts}...")
-
-    try:
-        # ดึงทุก Element ออกมาสแกน (อาจจะเยอะหน่อยแต่มั่นใจ)
-        all_elements = window.descendants()
-        
-        for text_keyword in search_texts:
-            for child in all_elements:
-                try:
-                    # ตรวจสอบว่ามองเห็นและมีข้อความตรงกับที่เราหาไหม
-                    if child.is_visible() and text_keyword in child.window_text():
-                        log(f"   -> เจอข้อความ '{child.window_text()}' (Type: {child.element_info.control_type})")
-                        
-                        # Case 1: ตัวมันเองเป็นปุ่มอยู่แล้ว -> กดเลย
-                        if child.element_info.control_type in ["Button", "ListItem"]:
-                            log(f"[/] ตัว Element เป็นปุ่มอยู่แล้ว -> คลิกเลย")
-                            child.click_input()
-                            return True
-                        
-                        # Case 2: มันเป็น Text หรือ Image -> ให้ไต่ระดับขึ้นไปหาพ่อ (Parent) ที่เป็นปุ่ม
-                        parent = child.parent()
-                        attempts = 0
-                        while parent and attempts < 3: # ลองหาขึ้นไป 3 ชั้น
-                            ctype = parent.element_info.control_type
-                            if ctype in ["Button", "ListItem", "Group"]: # เจอพ่อที่เป็นปุ่ม
-                                log(f"[/] เจอ Parent เป็น {ctype} -> คลิกที่ Parent")
-                                parent.click_input()
-                                return True
-                            
-                            parent = parent.parent()
-                            attempts += 1
-                        
-                        # Case 3: หาพ่อไม่เจอ -> คลิกที่ข้อความนั้นตรงๆ (Fallback)
-                        log(f"[/] ไม่เจอ Parent ที่เป็นปุ่ม -> คลิกที่ข้อความโดยตรง")
-                        child.click_input()
-                        return True
-                except: continue
-                
-    except Exception as e:
-        log(f"Error in click_button_containing_text: {e}")
-    
-    log(f"[X] ไม่พบปุ่มที่มีข้อความ {search_texts}")
     return False
 
 # ================= 3. Smart Input Functions =================
@@ -248,45 +192,33 @@ def run_smart_scenario(main_window, config):
     else:
         main_window.type_keys("{ENTER}")
 
-    # ================= [STEP 6: เลือกบริการ (KEYBOARD MODE)] =================
-    log("STEP 6: เลือกบริการ (Keyboard Mode: Press E)")
+    # ================= [STEP 6: เลือกบริการ (DEBUG MODE)] =================
+    log("STEP 6: เลือกบริการ (ตรวจสอบ ID)")
     
-    # 1. รอให้เข้าหน้า 'บริการหลัก' ชัวร์ๆ ก่อน (ตามที่ขอ)
-    log("...รอตรวจสอบหน้า 'บริการหลัก'...")
-    # รอได้สูงสุด 15 วินาที เพื่อให้แน่ใจว่าหน้าโหลดเสร็จจริง
+    log("...รอหน้าจอ 'บริการหลัก'...")
     if wait_for_text(main_window, "บริการหลัก", timeout=15):
-        log("[/] ตรวจพบหน้า 'บริการหลัก' เรียบร้อย")
-        # เพิ่ม Wait อีกนิดเพื่อให้ UI พร้อมรับ Input จริงๆ
-        log("...รอ UI พร้อม (2 วินาที)...")
+        log("[/] หน้าจอพร้อมแล้ว (รออีก 2 วินาที)")
         time.sleep(2)
         
-        # 2. กดคีย์บอร์ด E
-        log("...กดปุ่ม 'E' เพื่อเลือก EMS...")
-        main_window.set_focus() # บังคับ Focus หน้าจอก่อนกด
+        # ลองกด E ดูก่อน
+        log("...ลองกด E...")
+        main_window.set_focus()
         main_window.type_keys("E")
         time.sleep(2)
 
-        # 3. ตรวจสอบผลลัพธ์
-        # ถ้าหน้าจอยังมีคำว่า "บริการหลัก" แสดงว่ายังไม่ไป
         if not wait_for_text(main_window, "บริการหลัก", timeout=1):
-            log("[SUCCESS] หน้าจอเปลี่ยนแล้ว (ผ่าน Step 6)")
-            time.sleep(1)
-            log("...กด 0 เพื่อยืนยัน...")
-            main_window.type_keys("0")
+             log("[SUCCESS] กด E ผ่านแล้ว (หน้าจอเปลี่ยน)")
+             main_window.type_keys("0")
         else:
-            log("[WARN] กด E แล้วยังอยู่หน้าเดิม -> ลองกด Enter ย้ำ")
-            main_window.type_keys("{ENTER}")
-            time.sleep(1)
-            
-            if not wait_for_text(main_window, "บริการหลัก", timeout=1):
-                 log("[SUCCESS] หน้าจอเปลี่ยนแล้วหลังกด Enter")
-                 main_window.type_keys("0")
-            else:
-                 log("[FAIL] กด E ไม่ทำงาน (ติดอยู่ที่หน้าบริการหลัก)")
-                 debug_ui_structure(main_window)
-                 while True: time.sleep(5)
+             log("\n[FAIL] กด E ไม่ผ่าน -> เริ่มสร้าง Report เพื่อหา ID ปุ่ม...")
+             
+             # เรียกฟังก์ชัน Debug เพื่อดู ID
+             debug_ui_structure(main_window)
+             
+             log("[!!! PAUSED !!!] หยุดค้างหน้าจอเพื่อให้ตรวจสอบ Log ด้านบน")
+             while True: time.sleep(5)
     else:
-        log("[!] ไม่เจอหน้า 'บริการหลัก' (Timeout) - หยุดทำงาน")
+        log("[!] Timeout: หาหน้าบริการหลักไม่เจอ")
         debug_ui_structure(main_window)
         while True: time.sleep(5)
             
