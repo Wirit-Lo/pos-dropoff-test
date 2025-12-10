@@ -199,23 +199,46 @@ def wait_for_text(window, text, timeout=10):
 
 def handle_prohibited_items_warning(window):
     """
-    [Updated] ฟังก์ชันจัดการหน้า 'สิ่งของต้องห้าม'
-    ปรับปรุงใหม่: เน้นหาปุ่ม 'ยืนยัน' ทันทีเพื่อความรวดเร็วและแม่นยำ
+    [Updated V2] ฟังก์ชันจัดการหน้า 'สิ่งของต้องห้าม'
+    Logic ใหม่:
+    1. รอจนกว่าจะเจอข้อความ 'สิ่งของต้องห้าม' จริงๆ (Timeout 5 วิ)
+    2. ถ้าเจอ -> ให้กด 'ยืนยัน' แล้ววนลูปเช็คว่าหน้าหายไปหรือยัง (Retry Loop)
+    3. ถ้าไม่เจอแต่แรก -> ข้ามทันที (ประหยัดเวลา)
     """
-    log("...ตรวจสอบหน้าสิ่งของต้องห้าม...")
+    log("...รอตรวจสอบหน้าสิ่งของต้องห้าม (Prohibited Items)...")
     
-    # วิธีที่ 1: หาปุ่ม "ยืนยัน" (หรือ Confirm) โดยตรงเลย ไม่ต้องรออ่าน Title
-    # เพราะถ้าหน้าไม่เด้งมา มันก็จะหาไม่เจอแล้วข้ามไปเอง (ใช้ optional=True)
-    if smart_click(window, ["ยืนยัน", "Confirm"], timeout=3, optional=True):
-        log("[/] กด 'ยืนยัน' หน้าสิ่งของต้องห้ามเรียบร้อย")
-        return
+    # 1. รอตรวจจับว่าหน้า 'สิ่งของต้องห้าม' เด้งขึ้นมาจริงหรือไม่ (เพิ่ม Timeout เป็น 5 วิ เผื่อเครื่องหน่วง)
+    if wait_for_text(window, "สิ่งของต้องห้าม", timeout=5):
+        log("[Detect] พบหน้า 'สิ่งของต้องห้าม' ชัดเจน -> กำลังพยายามกด 'ยืนยัน'")
+        time.sleep(1) # รอให้ปุ่ม Render และ Interactive ได้เต็มที่
+        
+        # 2. Loop พยายามกดจนกว่าหน้านี้จะหายไป
+        max_retries = 5
+        for i in range(max_retries):
+            # หาปุ่มยืนยันและกด
+            if smart_click(window, ["ยืนยัน", "Confirm", "ตกลง"], timeout=2, optional=True):
+                log(f"   [/] สั่งกดปุ่มยืนยัน (ความพยายามครั้งที่ {i+1})")
+                time.sleep(1) # รอผลหลังกด
+                
+                # เช็คว่าหน้าต่างหายไปหรือยัง
+                if not wait_for_text(window, "สิ่งของต้องห้าม", timeout=1):
+                    log("   [/] Success: หน้าสิ่งของต้องห้ามหายไปแล้ว -> ไปต่อได้")
+                    return
+                else:
+                    log("   [!] หน่ายังค้างอยู่... (อาจกดไม่ติด หรือ UI ช้า) -> ลองกดซ้ำ")
+            else:
+                # ถ้าหาปุ่มไม่เจอ ให้ลองกด Enter ช่วย
+                log("   [!] หาปุ่มยืนยันไม่เจอในรอบนี้ -> ลองกด Enter")
+                window.type_keys("{ENTER}")
+                time.sleep(1)
+                
+                if not wait_for_text(window, "สิ่งของต้องห้าม", timeout=1):
+                    log("   [/] Success: หน้าหายไปแล้วหลังกด Enter")
+                    return
 
-    # วิธีที่ 2: ถ้าหาปุ่มไม่เจอ ลองเช็ค Title ดูเผื่อปุ่มมันชื่ออื่น หรือต้องกด Enter
-    if wait_for_text(window, "สิ่งของต้องห้าม", timeout=1):
-        log("[Detect] เจอข้อความ 'สิ่งของต้องห้าม' แต่หาปุ่มไม่เจอ -> ลองกด Enter")
-        window.type_keys("{ENTER}")
+        log("[Warning] พยายามกดครบกำหนดแล้ว แต่หน้านี้อาจยังค้างอยู่ (จะพยายามไปต่อ)")
     else:
-        log("[Skip] ไม่พบปุ่มยืนยัน หรือหน้าสิ่งของต้องห้าม (ไปต่อ)")
+        log("[Skip] ไม่พบหน้าแจ้งเตือนสิ่งของต้องห้าม (ภายใน 5 วินาที) -> ข้ามไปขั้นตอนถัดไป")
 
 # ================= 4. Main Scenario =================
 def run_smart_scenario(main_window, config):
@@ -270,7 +293,7 @@ def run_smart_scenario(main_window, config):
     main_window.type_keys("{ENTER}")
     time.sleep(step_delay)
 
-    # เรียกใช้ฟังก์ชันจัดการหน้าสิ่งของต้องห้าม (ฉบับปรับปรุง)
+    # เรียกใช้ฟังก์ชันจัดการหน้าสิ่งของต้องห้าม (ฉบับปรับปรุง V2)
     handle_prohibited_items_warning(main_window)
     time.sleep(step_delay)
 
