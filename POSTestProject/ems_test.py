@@ -81,6 +81,32 @@ def run_hover_inspector():
 
 # ================= 3. Execution =================
 if __name__ == "__main__":
-    # ไม่ต้อง Connect แอพ แค่รันฟังก์ชัน Inspector เลย
-    # เพราะ Desktop().from_point ทำงานระดับ Global
-    run_hover_inspector()
+    conf = load_config()
+    if conf:
+        log("Connecting to POS Application...")
+        try:
+            # 1. เชื่อมต่อโปรแกรมก่อน เพื่อดึงหน้าจอขึ้นมา
+            connect_wait = int(conf['SETTINGS'].get('ConnectTimeout', 10))
+            app = Application(backend="uia").connect(title_re=conf['APP']['WindowTitle'], timeout=connect_wait)
+            win = app.top_window()
+            
+            # 2. เด้งหน้าต่างขึ้นมา (Focus) เพื่อให้พร้อมเอาเมาส์ชี้
+            win.set_focus()
+            try:
+                # ลอง restore ถ้ามัน minimize อยู่
+                if win.get_show_state() == 2: # Minimized
+                    win.restore()
+            except: pass
+
+            log("[/] เชื่อมต่อและดึงหน้าจอขึ้นมาสำเร็จ")
+            log("    กรุณาเตรียมตัวชี้เมาส์...")
+            time.sleep(1) # รอจังหวะหน้าจอเด้งนิดนึง
+            
+            # 3. เริ่มโหมด Inspector
+            run_hover_inspector()
+            
+        except Exception as e:
+            log(f"Error Connecting: {e}")
+            log("ตรวจสอบว่าเปิดโปรแกรม POS อยู่และค่า Config ถูกต้อง")
+    else:
+        log("ไม่พบไฟล์ Config")
