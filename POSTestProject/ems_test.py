@@ -3,8 +3,9 @@ import os
 import time
 import datetime
 from pywinauto.application import Application
-# เอา mouse ออก เพราะเราจะไม่ใช้แล้ว
-# from pywinauto import mouse 
+# ใช้ send_keys เพื่อจำลองการกดคีย์บอร์ดระดับ System (แม่นยำกว่า type_keys)
+from pywinauto.keyboard import send_keys 
+from pywinauto import mouse
 
 # ================= 1. Config & Log =================
 def load_config(filename='config.ini'):
@@ -18,18 +19,31 @@ def log(message):
 
 # ================= 2. Helper Functions (Keyboard Only) =================
 def force_scroll_down(window):
-    """ฟังก์ชันช่วยเลื่อนหน้าจอลงโดยใช้ปุ่ม PageDown (ไม่ใช้เมาส์)"""
+    """ฟังก์ชันช่วยเลื่อนหน้าจอลงโดยใช้ปุ่ม PageDown"""
     log(f"...กดปุ่ม PageDown เพื่อเลื่อนหน้าจอ...")
     try:
-        window.type_keys("{PGDN}")
+        window.set_focus()
+        send_keys("{PGDN}")
         time.sleep(0.5)
     except Exception as e:
         log(f"[!] Keyboard scroll failed: {e}")
 
+def ensure_focus(window):
+    """ทำให้แน่ใจว่าหน้าจอ Focus อยู่"""
+    try:
+        window.set_focus()
+        time.sleep(0.5)
+        # คลิกกลางจอเบาๆ 1 ทีเพื่อเรียก Focus (เผื่อ set_focus ไม่ติด)
+        rect = window.rectangle()
+        center_x = rect.mid_point().x
+        center_y = rect.mid_point().y
+        mouse.click(coords=(center_x, center_y))
+        time.sleep(0.5)
+    except: pass
+
 def smart_click(window, criteria_list, timeout=5, optional=False):
     """
-    คลิกปุ่มโดยใช้ UIA Invoke Pattern (ไม่ขยับเมาส์)
-    หรือใช้ Hotkey ถ้าจำเป็น
+    คลิกปุ่มโดยใช้ UIA Invoke Pattern
     """
     if isinstance(criteria_list, str): criteria_list = [criteria_list]
     
@@ -38,25 +52,19 @@ def smart_click(window, criteria_list, timeout=5, optional=False):
         for criteria in criteria_list:
             try:
                 for child in window.descendants():
-                    # หา Element ที่มองเห็นและชื่อตรง
                     if child.is_visible() and criteria in child.window_text():
                         try:
-                            # [NEW] ใช้ invoke() แทน click_input() 
-                            # invoke คือการสั่งให้ปุ่มทำงานโดยตรงผ่าน Code (เหมือนกด Enter ใส่ปุ่ม)
-                            # วิธีนี้เมาส์จะไม่ขยับ และไม่กดพลาดไปโดน Header
                             child.invoke()
                             log(f"[/] สั่งงานปุ่ม '{criteria}' สำเร็จ (Invoke)")
                             return True
                         except:
-                            # ถ้า invoke ไม่ได้ (บางปุ่มไม่รองรับ) ให้ลอง select หรือกด Spacebar ใส่
                             try:
                                 child.select()
                                 log(f"[/] เลือกปุ่ม '{criteria}' สำเร็จ (Select)")
                                 return True
                             except:
-                                # Fallback สุดท้าย: set focus แล้วเคาะ Enter
                                 child.set_focus()
-                                child.type_keys("{ENTER}")
+                                send_keys("{ENTER}")
                                 log(f"[/] กด Enter ใส่ปุ่ม '{criteria}'")
                                 return True
             except: pass
@@ -76,66 +84,52 @@ def check_exists(window, text):
     return False
 
 def smart_input_with_keyboard(window, label_text, value):
-    """กรอกข้อมูลโดยใช้การ Tab หาช่อง (ไม่ใช้เมาส์คลิก)"""
+    """กรอกข้อมูลโดยใช้การ Tab หาช่อง"""
     log(f"...กำลังพยายามกรอก '{label_text}': {value}")
-    
-    # 1. พยายามหา Edit Box แล้ว Focus
     try:
         edits = window.descendants(control_type="Edit")
         for edit in edits:
             if edit.is_visible() and (label_text in edit.element_info.name or label_text in edit.window_text()):
                 edit.set_focus()
-                edit.type_keys(str(value), with_spaces=True)
+                send_keys(str(value), with_spaces=True)
                 return True
     except: pass
-
-    # 2. ถ้าหาไม่เจอ ให้ลองกด Tab ไล่หา (วิธีแบบ Keyboard User)
-    # วิธีนี้อาจจะต้องปรับจำนวน Tab ตามหน้าจอจริง
-    # แต่เบื้องต้นลองหา Label แล้ว Tab 1 ที
-    try:
-        labels = [c for c in window.descendants(control_type="Text") if label_text in c.window_text() and c.is_visible()]
-        if labels:
-            # แค่ Focus ไปที่ Label (ถ้าทำได้) หรือสมมติว่า Cursor อยู่ใกล้ๆ
-            # ในกรณี UIA อาจจะยากถ้าระบบไม่อนุญาตให้ Focus text
-            pass 
-    except: pass
-    
-    # Fallback: พิมพ์ลงไปเลยถ้าคิดว่า Cursor อยู่ถูกที่
-    # window.type_keys(str(value), with_spaces=True)
     return False
 
 # ================= 3. Main Scenario (เฉพาะส่วนบริการหลัก) =================
 def run_smart_scenario(main_window, config):
     try:
-        # Load Config
         add_insurance = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
         insurance_amt = config['DEPOSIT_ENVELOPE'].get('InsuranceAmount', '0')
     except: return
 
-    log(f"\n--- เริ่มต้นทดสอบ (Test Mode: Keyboard Only) ---")
+    log(f"\n--- เริ่มต้นทดสอบ (Test Mode: Direct Keyboard Send) ---")
     log("กรุณาตรวจสอบว่าเปิดหน้า 'บริการหลัก' รอไว้แล้ว")
     time.sleep(2)
 
     # =========================================================
-    # --- STEP: เลือกบริการ (EMS) ด้วย Hotkey ---
+    # --- STEP: เลือกบริการ (EMS) ด้วย Hotkey (วิธีใหม่) ---
     # =========================================================
-    log("STEP: ใช้ Hotkey เลือกบริการ EMS")
+    log("STEP: ใช้ Hotkey เลือกบริการ EMS (วิธี Direct SendKeys)")
     
-    # ตรวจสอบเบื้องต้น
     if not check_exists(main_window, "บริการหลัก"):
         log("[Warning] ไม่พบข้อความ 'บริการหลัก' (อาจจะอยู่ผิดหน้า)")
 
-    # ลองกด E (ตามที่คุณแจ้งว่ามี Hotkey)
-    # การกดคีย์บอร์ดแม่นยำกว่าการคลิกตำแหน่งแน่นอน
-    log("...กดปุ่ม 'E' บนคีย์บอร์ดเพื่อเลือก EMS")
-    main_window.type_keys("e") 
+    # 1. เรียก Focus ให้ชัวร์ที่สุด
+    ensure_focus(main_window)
+    
+    # 2. กดปุ่ม E (ใช้ send_keys เหมือนกดคีย์บอร์ดจริง)
+    log("...กดปุ่ม 'e' (System Level)")
+    send_keys("e") 
     time.sleep(1)
-    main_window.type_keys("E") # กดซ้ำเผื่อเป็น Case sensitive หรือกันพลาด
-    time.sleep(2)
+    
+    # กดซ้ำอีกทีเผื่อไม่ติด
+    send_keys("e")
+    time.sleep(1)
 
-    # กด Enter เพื่อยืนยัน (เหมือนการกดปุ่ม 'ถัดไป')
-    log("...กด Enter เพื่อยืนยันรายการ")
-    main_window.type_keys("{ENTER}")
+    # 3. กด Enter
+    log("...กด Enter เพื่อยืนยัน")
+    send_keys("{ENTER}")
     time.sleep(3) # รอโหลด
 
     # --- ตรวจสอบผลลัพธ์ ---
@@ -149,35 +143,30 @@ def run_smart_scenario(main_window, config):
             break
     
     if not is_success:
-        log("[!] หน้าจอยังไม่เปลี่ยน... ลองกด Hotkey อื่น (เช่น F12 หรือ Tab->Enter)")
+        log("[!] หน้าจอยังไม่เปลี่ยน... ลองวิธีกดปุ่มลูกศร + Enter")
         
-        # ลองกด F12 (ปุ่ม Next มาตรฐานของหลายโปรแกรม POS)
-        # main_window.type_keys("{F12}") 
-        
-        # หรือลองกด Tab เพื่อเลื่อน Focus แล้ว Enter
-        # main_window.type_keys("{TAB}")
-        # main_window.type_keys("{ENTER}")
+        # ลองกดลูกศรขวา (เผื่อ EMS เป็นตัวเลือกที่ 2) หรือกด Tab
+        # send_keys("{RIGHT}")
+        # time.sleep(0.5)
+        # send_keys("{ENTER}")
 
         if check_exists(main_window, "บริการหลัก"):
-             log("\n[FAIL] ยังติดอยู่ที่หน้าบริการหลัก -> Hotkey E อาจจะไม่ทำงาน หรือต้องกดปุ่มอื่น")
+             log("\n[FAIL] ยังติดอยู่ที่หน้าบริการหลัก -> Hotkey ไม่ทำงาน ลองตรวจสอบภาษาแป้นพิมพ์ (ต้องเป็น ENG)")
              return
 
     # --- ส่วนประกัน ---
     if is_success and add_insurance.lower() == 'true':
         log(f"...ตรวจสอบประกันภัย")
-        # ใช้ smart_click แบบ invoke (ไม่ใช้เมาส์)
         if smart_click(main_window, ["+", "AddService", "รับประกัน"], timeout=3, optional=True):
             time.sleep(1)
-            # กรอกวงเงิน
             try:
-                # ลองพิมพ์ตัวเลขเลย เพราะ Popup เด้งมา Cursor มักจะรออยู่แล้ว
-                main_window.type_keys(str(insurance_amt))
+                ensure_focus(main_window)
+                send_keys(str(insurance_amt))
             except: pass
             
-            # กด Enter เพื่อตกลง (แทนการหาปุ่ม OK)
-            main_window.type_keys("{ENTER}")
+            send_keys("{ENTER}")
 
-    log("\n[TEST COMPLETED] จบการทดสอบแบบไม่ใช้เมาส์")
+    log("\n[TEST COMPLETED] จบการทดสอบแบบ Direct Keys")
 
 # ================= 4. Execution =================
 if __name__ == "__main__":
