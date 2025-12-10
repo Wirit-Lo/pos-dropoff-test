@@ -3,6 +3,7 @@ import os
 import time
 import ctypes
 from pywinauto.application import Application
+from pywinauto import Desktop
 
 # โหลด Config เพื่อหาชื่อหน้าต่าง
 def load_config(filename='config.ini'):
@@ -19,7 +20,7 @@ def get_mouse_pos():
     ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
     return pt.x, pt.y
 
-def run_coordinate_finder():
+def run_element_inspector():
     conf = load_config()
     if not conf:
         print("ไม่พบไฟล์ config.ini")
@@ -27,62 +28,80 @@ def run_coordinate_finder():
 
     print("Connecting...")
     try:
-        # เชื่อมต่อเพื่อหาตำแหน่งหน้าต่างหลัก
+        # เชื่อมต่อเพื่อดึงหน้าต่างขึ้นมา
         app = Application(backend="uia").connect(title_re=conf['APP']['WindowTitle'], timeout=10)
         win = app.top_window()
         win.set_focus()
         
-        # ดึงตำแหน่งหน้าต่างหลัก
-        rect = win.rectangle()
-        win_w = rect.width()
-        win_h = rect.height()
-        
-        print(f"\n[INFO] หน้าต่างโปรแกรมอยู่ที่: {rect}")
-        print(f"[INFO] ขนาดหน้าต่าง: กว้าง={win_w}, สูง={win_h}")
-        
-        print("\n" + "="*50)
-        print("   เครื่องมือหาพิกัดปุ่ม (Coordinate Finder V2)   ")
-        print("="*50)
-        print("คำแนะนำ: เอาเมาส์ไปชี้ที่ 'กึ่งกลางปุ่ม EMS' แล้วอยู่นิ่งๆ")
-        print("นับถอยหลัง 5 วินาที...")
+        # ดึงหน้าต่างขึ้นมา (Restore if minimized)
+        if win.get_show_state() == 2:
+            win.restore()
+
+        print("\n" + "="*60)
+        print("   เครื่องมือค้นหาชื่อปุ่มที่แท้จริง (Name Inspector)   ")
+        print("="*60)
+        print("คำแนะนำ: เอาเมาส์ไปชี้ที่ 'ปุ่มบริการ EMS' แล้วอยู่นิ่งๆ")
+        print("ระบบจะดึง 'ชื่อ (Text)' ที่คอมพิวเตอร์มองเห็นออกมาให้")
+        print("นับถอยหลัง 5 วินาที... เริ่ม!")
         
         for i in range(5, 0, -1):
             print(f"... {i} ...")
             time.sleep(1)
             
-        # จับพิกัดเมาส์
+        # 1. จับพิกัดเมาส์
         mx, my = get_mouse_pos()
+        print(f"\n[CAPTURE] ดึงข้อมูลที่พิกัดเมาส์ ({mx}, {my})...")
         
-        # คำนวณ Offset (ระยะห่างจากมุมซ้ายบนของหน้าต่าง)
-        offset_x = mx - rect.left
-        offset_y = my - rect.top
+        # 2. หา Element ที่เมาส์ชี้อยู่ (UIA Backend)
+        elem = Desktop(backend="uia").from_point(mx, my)
         
-        # [NEW] คำนวณเป็นเปอร์เซ็นต์ (Ratio) เพื่อความยืดหยุ่น
-        ratio_x = offset_x / win_w
-        ratio_y = offset_y / win_h
+        # 3. แสดงผลลัพธ์แบบเจาะลึก (ดูทั้งตัวมันเอง และตัวแม่)
+        # บ่อยครั้งที่ Text เป็นแค่ป้ายชื่อ แต่ตัวปุ่มจริงๆ คือตัวแม่ (Parent)
         
-        print("\n" + ">"*10 + " ผลลัพธ์ (CAPTURE) " + "<"*10)
-        print(f"พิกัดเมาส์จริง : ({mx}, {my})")
-        print(f"พิกัดสัมพัทธ์  : (x={offset_x}, y={offset_y})")
-        print(f"สัดส่วน (Ratio): (x={ratio_x:.4f}, y={ratio_y:.4f})")
-        print("-" * 50)
-        
-        print(f"วิธีที่ 1 (แบบ Fix พิกัด - พังถ้าจอเปลี่ยนขนาด):")
-        print(f"   click_at_offset(main_window, {offset_x}, {offset_y})")
-        
-        print(f"\nวิธีที่ 2 (แบบ Ratio - รองรับการย่อขยายจอ):")
-        print(f"   # แปะฟังก์ชันนี้ไว้ในไฟล์หลัก")
-        print(f"   def click_at_ratio(window, rx, ry):")
-        print(f"       rect = window.rectangle()")
-        print(f"       target_x = rect.left + int(rect.width() * rx)")
-        print(f"       target_y = rect.top + int(rect.height() * ry)")
-        print(f"       mouse.click(coords=(target_x, target_y))")
-        print(f"\n   # เรียกใช้ด้วยโค้ดนี้:")
-        print(f"   click_at_ratio(main_window, {ratio_x:.4f}, {ratio_y:.4f})")
-        print("-" * 50)
+        print("\n" + "-"*30)
+        print(" 1. สิ่งที่เมาส์ชี้อยู่ (Child/Text) ")
+        print("-" * 30)
+        try:
+            # วาดกรอบสีเขียว
+            elem.draw_outline(colour='green', thickness=2)
+            
+            wrapper = elem.wrapper_object()
+            text = wrapper.window_text()
+            control_type = wrapper.element_info.control_type
+            
+            print(f"   ชื่อที่เห็น (Text)   : '{text}'  <-- ลองก๊อปปี้ค่านี้ไปใช้")
+            print(f"   ชนิด (Type)          : {control_type}")
+            print(f"   AutomationId         : '{wrapper.element_info.automation_id}'")
+        except Exception as e:
+            print(f"   Error reading element: {e}")
+
+        # ดูตัวแม่ (Parent) - เผื่อปุ่มจริงคือกรอบนอก
+        parent = elem.parent()
+        if parent:
+            print("\n" + "-"*30)
+            print(" 2. ตัวแม่/กรอบนอก (Parent) ")
+            print("-" * 30)
+            try:
+                # วาดกรอบสีเหลือง
+                parent.draw_outline(colour='yellow', thickness=2)
+                
+                p_wrapper = parent.wrapper_object()
+                p_text = p_wrapper.window_text()
+                p_type = p_wrapper.element_info.control_type
+                
+                print(f"   ชื่อที่เห็น (Text)   : '{p_text}'  <-- หรือค่านี้")
+                print(f"   ชนิด (Type)          : {p_type}")
+                print(f"   AutomationId         : '{p_wrapper.element_info.automation_id}'")
+            except:
+                print("   (ไม่สามารถอ่านค่า Parent ได้)")
+
+        print("\n" + "="*60)
+        print("สรุป: ให้ก๊อปปี้ข้อความในช่อง 'ชื่อที่เห็น (Text)' ไปใส่ในโค้ด")
+        print("ตัวอย่าง: smart_click(window, 'ค่าที่คุณเห็นตรงนี้')")
+        print("="*60)
         
     except Exception as e:
         print(f"Error: {e}")
 
 if __name__ == "__main__":
-    run_coordinate_finder()
+    run_element_inspector()
