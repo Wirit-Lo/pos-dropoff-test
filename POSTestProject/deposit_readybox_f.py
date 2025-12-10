@@ -72,8 +72,8 @@ def smart_click(window, criteria_list, timeout=5, optional=False):
 
 def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
     """
-    [Updated V3] คลิกปุ่มแบบเลื่อนหา (รับค่า Scroll Distance)
-    เพิ่ม: รับค่า scroll_dist เพื่อส่งต่อไปยัง force_scroll_down
+    [Updated V4] คลิกปุ่มแบบเลื่อนหา (Strict Bounds Check)
+    เพิ่ม: Safety Margin 150px เพื่อกันไม่ให้คลิกโดนแถบ Footer ด้านล่าง
     """
     log(f"...กำลังค้นหาปุ่ม '{criteria}' (โหมดเลื่อนหา)...")
     
@@ -88,22 +88,26 @@ def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
                     break
         except: pass
 
-        # 2. ถ้าเจอ Element -> เช็คตำแหน่งก่อนกด
+        # 2. ถ้าเจอ Element -> เช็คตำแหน่งอย่างละเอียดก่อนกด
         if found_element:
             try:
                 elem_rect = found_element.rectangle()
                 win_rect = window.rectangle()
                 
-                # [Logic] เช็คว่าขอบล่างของปุ่ม (bottom) อยู่ใกล้ขอบล่างหน้าต่างเกินไปหรือไม่ (ตกขอบ)
-                if elem_rect.bottom >= win_rect.bottom - 20:
-                    log(f"   [!] เจอปุ่ม '{criteria}' แต่ตำแหน่งต่ำเกินไป (ตกขอบ) -> สั่งเลื่อนลง")
+                # [New Logic] กำหนดเส้นตาย (Dead Zone) ด้านล่าง
+                # เผื่อไว้ 150 pixel สำหรับแถบ Footer สีฟ้า/เทา ด้านล่าง
+                safe_bottom_limit = win_rect.bottom - 150 
+                
+                # เช็คว่าขอบล่างของปุ่ม อยู่ต่ำกว่าเส้นตายหรือไม่
+                if elem_rect.bottom >= safe_bottom_limit:
+                    log(f"   [!] เจอปุ่ม '{criteria}' แต่อยู่ต่ำเกินไป (ติด Footer) -> สั่งเลื่อนลงเพื่อให้เห็นเต็มกล่อง")
                     force_scroll_down(window, scroll_dist)
                     time.sleep(1)
-                    continue 
+                    continue # วนลูปใหม่ เพื่อหาปุ่มในตำแหน่งใหม่ที่ขยับขึ้นมาแล้ว
                 
-                # ถ้าตำแหน่ง OK (ไม่ตกขอบ) -> กดเลย
+                # ถ้าตำแหน่ง OK (อยู่สูงกว่า Footer) -> กดเลย
                 found_element.click_input()
-                log(f"   [/] เจอและกดปุ่ม '{criteria}' สำเร็จ")
+                log(f"   [/] เจอและกดปุ่ม '{criteria}' สำเร็จ (ตำแหน่งปลอดภัย)")
                 return True
                 
             except Exception as e:
@@ -274,7 +278,6 @@ def run_smart_scenario(main_window, config):
         step_delay = int(config['SETTINGS'].get('StepDelay', 1))
         
         # [NEW] อ่านค่า ScrollDistance จาก Config (ถ้าไม่มีให้ใช้ -5 เป็นค่า Default)
-        # ค่าลบ = เลื่อนลง, ค่าบวก = เลื่อนขึ้น (เช่น -20 จะเลื่อนเร็วกว่า -5)
         scroll_dist = int(config['SETTINGS'].get('ScrollDistance', -5))
         
     except Exception as e: 
