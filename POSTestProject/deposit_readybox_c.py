@@ -16,25 +16,29 @@ def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
 # ================= 2. Helper Functions (Scroll & Search) =================
-def force_scroll_down(window, scroll_dist=-5):
-    """ฟังก์ชันช่วยเลื่อนหน้าจอลงโดยใช้ Mouse Wheel"""
-    log(f"...กำลังเลื่อนหน้าจอลง (Mouse Wheel {scroll_dist})...")
+def force_scroll_down(window):
+    """
+    [Updated] ฟังก์ชันช่วยเลื่อนหน้าจอลง
+    แก้ไข: เปลี่ยนมาใช้การกดปุ่ม Page Down ({PGDN}) ซึ่งชัวร์กว่าการใช้ Mouse Scroll
+    """
+    log(f"...สั่งเลื่อนหน้าจอลง (Page Down)...")
     try:
+        # 1. คลิกที่กลางจอ 1 ครั้งเพื่อให้แน่ใจว่า Window กำลังถูก Focus อยู่
         rect = window.rectangle()
-        # หาจุดกลางหน้าจอเพื่อวางเมาส์
-        center_x = rect.left + 300
-        center_y = rect.top + 300
+        center_x = rect.left + int(rect.width() / 2)
+        center_y = rect.top + int(rect.height() / 2)
         
-        # คลิกเพื่อให้หน้าจอ Focus ก่อนเลื่อน
         mouse.click(coords=(center_x, center_y))
         time.sleep(0.5)
-        # สั่งเลื่อนเมาส์
-        mouse.scroll(coords=(center_x, center_y), wheel_dist=scroll_dist)
-        time.sleep(1)
-    except Exception as e:
-        log(f"[!] Mouse scroll failed: {e}")
-        # ถ้าใช้เมาส์ไม่ได้ ให้ลองกดปุ่ม Page Down แทน
+        
+        # 2. กดปุ่ม Page Down เพื่อเลื่อนลง
         window.type_keys("{PGDN}")
+        time.sleep(1) # รอให้หน้าจอเลื่อนเสร็จและนิ่ง
+        
+    except Exception as e:
+        log(f"[!] Scroll Error: {e}")
+        # กันเหนียว: ลองกดลูกศรลงรัวๆ 5 ครั้ง
+        window.type_keys("{DOWN 5}")
 
 def smart_click(window, criteria_list, timeout=5, optional=False):
     """คลิกปุ่มตามรายการชื่อ (รองรับหลายชื่อ)"""
@@ -62,24 +66,27 @@ def smart_click(window, criteria_list, timeout=5, optional=False):
         log(f"[X] หาปุ่ม {criteria_list} ไม่เจอ!")
     return False
 
-def smart_click_with_scroll(window, criteria, max_scrolls=3):
+def smart_click_with_scroll(window, criteria, max_scrolls=5):
     """
-    [New Function] คลิกปุ่มแบบเลื่อนหา (สำหรับปุ่มที่อยู่ด้านล่างจอ)
+    [Updated] คลิกปุ่มแบบเลื่อนหา (Check -> Click -> Stop Logic)
+    หลักการ: หาเจอกดเลยแล้วหยุด ถ้าไม่เจอค่อยเลื่อน
     """
-    log(f"...กำลังค้นหาปุ่ม '{criteria}' (พร้อมเลื่อนจอ)...")
+    log(f"...กำลังค้นหาปุ่ม '{criteria}' (โหมดเลื่อนหา)...")
     
     for i in range(max_scrolls + 1):
-        # ลองใช้ smart_click แบบเร็ว (timeout สั้นๆ)
+        # 1. ลองหาปุ่มในหน้าจอปัจจุบันก่อน
+        # ใช้ timeout น้อยๆ เพื่อความรวดเร็วในการเช็ค
         if smart_click(window, criteria, timeout=2, optional=True):
-            return True
+            log(f"   [/] เจอและกดปุ่ม '{criteria}' แล้ว -> หยุดการเลื่อน")
+            return True # เจอแล้ว จบฟังก์ชันทันที (Stop)
             
-        # ถ้าหาไม่เจอ และยังไม่ครบจำนวนรอบ ให้เลื่อนจอลง
+        # 2. ถ้าหาไม่เจอ และยังไม่ครบจำนวนรอบ -> ให้เลื่อนจอลง
         if i < max_scrolls:
-            log(f"[Rotate {i+1}] ยังหาปุ่ม '{criteria}' ไม่เจอ -> เลื่อนจอลง")
-            force_scroll_down(window, scroll_dist=-5) # เลื่อนลง
-            time.sleep(1) # รอให้หน้าจอนิ่ง
+            log(f"   [Rotate {i+1}/{max_scrolls}] ยังไม่เจอ '{criteria}' -> สั่งเลื่อนลง")
+            force_scroll_down(window)
+            # วนกลับไปข้อ 1 ใหม่ (Loop)
             
-    log(f"[X] หมดความพยายามในการหาปุ่ม '{criteria}'")
+    log(f"[X] หมดความพยายามในการหาปุ่ม '{criteria}' (หาไม่เจอ)")
     return False
 
 # ================= 3. Smart Input Functions =================
@@ -135,7 +142,7 @@ def smart_input_with_scroll(window, label_text, value, scroll_times=2):
         # ถ้ายังไม่เจอ ให้เลื่อนจอลง
         if i < scroll_times:
             log(f"[Rotate {i+1}] หาช่องไม่เจอ... กำลังเลื่อนหน้าจอลง...")
-            force_scroll_down(window, scroll_dist=-5)
+            force_scroll_down(window)
             time.sleep(1)
 
     log(f"[X] หมดความพยายามในการหาช่อง '{label_text}'")
