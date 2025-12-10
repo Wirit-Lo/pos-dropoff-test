@@ -2,8 +2,9 @@ import configparser
 import os
 import time
 import datetime
+import ctypes # [NEW] ใช้ตัวนี้จับเมาส์แทน ชัวร์กว่า
 from pywinauto.application import Application
-from pywinauto import Desktop, mouse
+from pywinauto import Desktop
 
 # ================= 1. Config & Log =================
 def load_config(filename='config.ini'):
@@ -16,6 +17,16 @@ def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
 # ================= 2. Inspector Mode (โหมดดึงค่า ID จากเมาส์) =================
+# สร้าง Structure สำหรับรับค่าพิกัดเมาส์จาก Windows API
+class POINT(ctypes.Structure):
+    _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+def get_mouse_position_windows():
+    """ดึงตำแหน่งเมาส์โดยใช้ Windows API โดยตรง"""
+    pt = POINT()
+    ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
+    return pt.x, pt.y
+
 def run_hover_inspector():
     """
     โหมดโหด: ดึง ID จากตำแหน่งที่เมาส์ชี้อยู่ (ไม่ต้องคลิก ไม่ต้องเดา)
@@ -34,8 +45,8 @@ def run_hover_inspector():
     log("\n[CAPTURE] กำลังดึงข้อมูลตรงจุดที่เมาส์ชี้...")
     
     try:
-        # 1. ดึงพิกัดเมาส์ปัจจุบัน
-        x, y = mouse.get_cursor_pos()
+        # 1. ดึงพิกัดเมาส์ปัจจุบัน (ใช้วิธีใหม่ ผ่าน ctypes)
+        x, y = get_mouse_position_windows()
         log(f"พิกัดเมาส์: ({x}, {y})")
 
         # 2. เจาะจง Element ตรงนั้นโดยตรง (Backend UIA)
