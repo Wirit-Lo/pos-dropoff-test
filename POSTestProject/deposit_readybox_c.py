@@ -18,37 +18,34 @@ def log(message):
 # ================= 2. Helper Functions (Scroll & Search) =================
 def force_scroll_down(window):
     """
-    [Updated V3] ฟังก์ชันช่วยเลื่อนหน้าจอลง (Focus at Scrollbar)
-    แก้ไข: เปลี่ยนจุดคลิกเรียก Focus ไปที่ 'แถบ Scrollbar' โดยตรง
-    เพื่อแก้ปัญหาคลิกจุดอื่นแล้วเลื่อนไม่ไป
+    [Updated V4] ฟังก์ชันช่วยเลื่อนหน้าจอลง (Mouse Scroll)
+    แก้ไข: ใช้คำสั่ง Mouse Scroll (หมุนลูกกลิ้ง) แทนการกดปุ่ม Page Down
+    โดยจะวางเมาส์ไว้ที่ตำแหน่ง Scrollbar เพื่อให้แน่ใจว่าเลื่อนได้จริง
     """
-    log(f"...สั่งเลื่อนหน้าจอลง (Click Scrollbar -> Page Down)...")
+    log(f"...สั่งเลื่อนหน้าจอลง (Mouse Scroll)...")
     try:
         # 1. เรียก Focus มาที่หน้าต่าง
         window.set_focus()
         
-        # 2. คำนวณตำแหน่ง Scrollbar เพื่อคลิกเรียก Focus ให้ถูกจุด
-        # จากรูปภาพ: รายการสินค้าอยู่ตรงกลาง Scrollbar จะอยู่ประมาณ 70-75% ของความกว้างหน้าจอ
-        # และอยู่ทางขวาของรายการสินค้า ก่อนถึงแถบสรุปยอดเงิน
+        # 2. คำนวณตำแหน่ง Scrollbar (จุดที่ปลอดภัยสำหรับการ Scroll)
+        # ประมาณ 72% ของความกว้างหน้าจอ (ขวาของรายการสินค้า)
         rect = window.rectangle()
-        
-        # คำนวณพิกัด X ให้อยู่ตรงแถบ Scrollbar (ประมาณ 72% ของความกว้าง)
         scrollbar_x = rect.left + int(rect.width() * 0.72)
-        # คำนวณพิกัด Y ให้อยู่กลางๆ จอ
         scrollbar_y = rect.top + int(rect.height() * 0.5)
         
-        # สั่งคลิกที่จุดนั้น (เพื่อบอกโปรแกรมว่า ฉันจะเลื่อนตรงนี้นะ)
+        # 3. คลิก 1 ครั้งเพื่อเรียก Focus ที่จุดนั้นก่อน
         mouse.click(coords=(scrollbar_x, scrollbar_y))
         time.sleep(0.5)
         
-        # 3. กดปุ่ม Page Down เพื่อเลื่อนลง
-        window.type_keys("{PGDN}")
-        time.sleep(1) # รอให้หน้าจอเลื่อนเสร็จและนิ่ง
+        # 4. ใช้คำสั่ง Mouse Scroll (หมุนลูกกลิ้งลง)
+        # wheel_dist=-5 คือหมุนลง 5 จังหวะ (ปรับเลขได้ถ้าอยากให้ไปเร็ว/ช้ากว่านี้)
+        mouse.scroll(coords=(scrollbar_x, scrollbar_y), wheel_dist=-5)
+        time.sleep(1) # รอให้ภาพขยับเสร็จ
         
     except Exception as e:
         log(f"[!] Scroll Error: {e}")
-        # กันเหนียว: ลองกดลูกศรลงรัวๆ
-        window.type_keys("{DOWN 5}")
+        # กันเหนียว: ถ้าเมาส์พัง ให้กดปุ่ม Page Down แทน
+        window.type_keys("{PGDN}")
 
 def smart_click(window, criteria_list, timeout=5, optional=False):
     """คลิกปุ่มตามรายการชื่อ (รองรับหลายชื่อ)"""
