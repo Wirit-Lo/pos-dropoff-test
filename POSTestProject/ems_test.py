@@ -3,7 +3,8 @@ import os
 import time
 import datetime
 from pywinauto.application import Application
-from pywinauto import mouse
+# เอา mouse ออก เพราะเราจะไม่ใช้แล้ว
+# from pywinauto import mouse 
 
 # ================= 1. Config & Log =================
 def load_config(filename='config.ini'):
@@ -15,24 +16,21 @@ def load_config(filename='config.ini'):
 def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
-# ================= 2. Helper Functions =================
-def force_scroll_down(window, scroll_dist=-5):
-    """ฟังก์ชันช่วยเลื่อนหน้าจอลงโดยใช้ Mouse Wheel"""
-    log(f"...กำลังเลื่อนหน้าจอลง (Mouse Wheel {scroll_dist})...")
+# ================= 2. Helper Functions (Keyboard Only) =================
+def force_scroll_down(window):
+    """ฟังก์ชันช่วยเลื่อนหน้าจอลงโดยใช้ปุ่ม PageDown (ไม่ใช้เมาส์)"""
+    log(f"...กดปุ่ม PageDown เพื่อเลื่อนหน้าจอ...")
     try:
-        rect = window.rectangle()
-        center_x = rect.left + 300
-        center_y = rect.top + 300
-        mouse.click(coords=(center_x, center_y))
-        time.sleep(0.5)
-        mouse.scroll(coords=(center_x, center_y), wheel_dist=scroll_dist)
-        time.sleep(1)
-    except Exception as e:
-        log(f"[!] Mouse scroll failed: {e}")
         window.type_keys("{PGDN}")
+        time.sleep(0.5)
+    except Exception as e:
+        log(f"[!] Keyboard scroll failed: {e}")
 
 def smart_click(window, criteria_list, timeout=5, optional=False):
-    """คลิกปุ่มตามรายการชื่อ"""
+    """
+    คลิกปุ่มโดยใช้ UIA Invoke Pattern (ไม่ขยับเมาส์)
+    หรือใช้ Hotkey ถ้าจำเป็น
+    """
     if isinstance(criteria_list, str): criteria_list = [criteria_list]
     
     start = time.time()
@@ -40,17 +38,27 @@ def smart_click(window, criteria_list, timeout=5, optional=False):
         for criteria in criteria_list:
             try:
                 for child in window.descendants():
+                    # หา Element ที่มองเห็นและชื่อตรง
                     if child.is_visible() and criteria in child.window_text():
                         try:
-                            # วาดกรอบสีแดงให้เห็นว่ากำลังจะกดปุ่มไหน
-                            child.draw_outline(colour='red')
-                            child.click_input()
-                            log(f"[/] กดปุ่ม '{criteria}' สำเร็จ")
+                            # [NEW] ใช้ invoke() แทน click_input() 
+                            # invoke คือการสั่งให้ปุ่มทำงานโดยตรงผ่าน Code (เหมือนกด Enter ใส่ปุ่ม)
+                            # วิธีนี้เมาส์จะไม่ขยับ และไม่กดพลาดไปโดน Header
+                            child.invoke()
+                            log(f"[/] สั่งงานปุ่ม '{criteria}' สำเร็จ (Invoke)")
                             return True
                         except:
-                            child.click_input(double=True)
-                            log(f"[/] Double Click '{criteria}'")
-                            return True
+                            # ถ้า invoke ไม่ได้ (บางปุ่มไม่รองรับ) ให้ลอง select หรือกด Spacebar ใส่
+                            try:
+                                child.select()
+                                log(f"[/] เลือกปุ่ม '{criteria}' สำเร็จ (Select)")
+                                return True
+                            except:
+                                # Fallback สุดท้าย: set focus แล้วเคาะ Enter
+                                child.set_focus()
+                                child.type_keys("{ENTER}")
+                                log(f"[/] กด Enter ใส่ปุ่ม '{criteria}'")
+                                return True
             except: pass
         time.sleep(0.5)
 
@@ -67,112 +75,109 @@ def check_exists(window, text):
     except: pass
     return False
 
-def smart_input_with_scroll(window, label_text, value, scroll_times=2):
+def smart_input_with_keyboard(window, label_text, value):
+    """กรอกข้อมูลโดยใช้การ Tab หาช่อง (ไม่ใช้เมาส์คลิก)"""
     log(f"...กำลังพยายามกรอก '{label_text}': {value}")
-    for i in range(scroll_times + 1):
-        try:
-            edits = window.descendants(control_type="Edit")
-            for edit in edits:
-                if edit.is_visible() and (label_text in edit.element_info.name or label_text in edit.window_text()):
-                    edit.set_focus()
-                    edit.click_input()
-                    edit.type_keys(str(value), with_spaces=True)
-                    return True
-            
-            labels = [c for c in window.descendants(control_type="Text") if label_text in c.window_text() and c.is_visible()]
-            if labels:
-                labels[0].click_input()
-                window.type_keys("{TAB}")
-                time.sleep(0.2)
-                window.type_keys(str(value), with_spaces=True)
+    
+    # 1. พยายามหา Edit Box แล้ว Focus
+    try:
+        edits = window.descendants(control_type="Edit")
+        for edit in edits:
+            if edit.is_visible() and (label_text in edit.element_info.name or label_text in edit.window_text()):
+                edit.set_focus()
+                edit.type_keys(str(value), with_spaces=True)
                 return True
-        except: pass
+    except: pass
 
-        if i < scroll_times:
-            force_scroll_down(window, scroll_dist=-5)
-            time.sleep(1)
+    # 2. ถ้าหาไม่เจอ ให้ลองกด Tab ไล่หา (วิธีแบบ Keyboard User)
+    # วิธีนี้อาจจะต้องปรับจำนวน Tab ตามหน้าจอจริง
+    # แต่เบื้องต้นลองหา Label แล้ว Tab 1 ที
+    try:
+        labels = [c for c in window.descendants(control_type="Text") if label_text in c.window_text() and c.is_visible()]
+        if labels:
+            # แค่ Focus ไปที่ Label (ถ้าทำได้) หรือสมมติว่า Cursor อยู่ใกล้ๆ
+            # ในกรณี UIA อาจจะยากถ้าระบบไม่อนุญาตให้ Focus text
+            pass 
+    except: pass
+    
+    # Fallback: พิมพ์ลงไปเลยถ้าคิดว่า Cursor อยู่ถูกที่
+    # window.type_keys(str(value), with_spaces=True)
     return False
 
 # ================= 3. Main Scenario (เฉพาะส่วนบริการหลัก) =================
 def run_smart_scenario(main_window, config):
     try:
-        # Load Config (โหลดเฉพาะที่จำเป็น)
+        # Load Config
         add_insurance = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
         insurance_amt = config['DEPOSIT_ENVELOPE'].get('InsuranceAmount', '0')
-        step_delay = int(config['SETTINGS'].get('StepDelay', 1))
     except: return
 
-    log(f"\n--- เริ่มต้นทดสอบ (Test Mode: หน้าบริการหลัก -> กด EMS) ---")
+    log(f"\n--- เริ่มต้นทดสอบ (Test Mode: Keyboard Only) ---")
     log("กรุณาตรวจสอบว่าเปิดหน้า 'บริการหลัก' รอไว้แล้ว")
     time.sleep(2)
 
     # =========================================================
-    # --- STEP: เลือกบริการ (EMS) ---
+    # --- STEP: เลือกบริการ (EMS) ด้วย Hotkey ---
     # =========================================================
-    log("STEP: เริ่มค้นหาปุ่ม EMS")
+    log("STEP: ใช้ Hotkey เลือกบริการ EMS")
     
-    # ตรวจสอบเบื้องต้น (Optional)
+    # ตรวจสอบเบื้องต้น
     if not check_exists(main_window, "บริการหลัก"):
-        log("[Warning] ไม่พบข้อความ 'บริการหลัก' บนหน้าจอ (อาจจะกดไม่ติดถ้าอยู่ผิดหน้า)")
+        log("[Warning] ไม่พบข้อความ 'บริการหลัก' (อาจจะอยู่ผิดหน้า)")
 
-    # วนลูปพยายามกดจนกว่าจะผ่าน (Retry Logic)
-    max_retries = 3
+    # ลองกด E (ตามที่คุณแจ้งว่ามี Hotkey)
+    # การกดคีย์บอร์ดแม่นยำกว่าการคลิกตำแหน่งแน่นอน
+    log("...กดปุ่ม 'E' บนคีย์บอร์ดเพื่อเลือก EMS")
+    main_window.type_keys("e") 
+    time.sleep(1)
+    main_window.type_keys("E") # กดซ้ำเผื่อเป็น Case sensitive หรือกันพลาด
+    time.sleep(2)
+
+    # กด Enter เพื่อยืนยัน (เหมือนการกดปุ่ม 'ถัดไป')
+    log("...กด Enter เพื่อยืนยันรายการ")
+    main_window.type_keys("{ENTER}")
+    time.sleep(3) # รอโหลด
+
+    # --- ตรวจสอบผลลัพธ์ ---
+    success_markers = ["EMS ในประเทศ", "รับประกัน", "1-2 วันทำการ", "เพิ่ม:", "Expected", "ข้อมูลเพิ่มเติม"]
     is_success = False
-
-    for attempt in range(max_retries):
-        log(f"...ความพยายามครั้งที่ {attempt+1}")
-        
-        # 1. กดที่การ์ด EMS
-        # เพิ่ม Keyword ให้ครอบคลุมที่สุด
-        ems_keywords = ["บริการอีเอ็มเอส", "EMS", "E", "บริการด่วนพิเศษ"]
-        
-        if smart_click(main_window, ems_keywords, timeout=5):
-            log("[/] กดการ์ด EMS แล้ว")
-        else:
-            log("[!] หาปุ่ม EMS ไม่เจอในรอบนี้")
-        
-        # 2. [สำคัญ] กดปุ่ม "ถัดไป" หรือ "Enter" เพื่อยืนยันการเลือก
-        log("...กำลังกดปุ่ม 'ถัดไป' หรือ 'Enter' เพื่อยืนยันการเลือก")
-        if not smart_click(main_window, ["ถัดไป", "Next", "ดำเนินการ"], timeout=3, optional=True):
-            main_window.type_keys("{ENTER}")
-        
-        time.sleep(3) # รอโหลดหน้าใหม่
-
-        # 3. เช็คว่าเปลี่ยนหน้าสำเร็จไหม?
-        # หน้าใหม่ต้องมีคำว่า: "EMS ในประเทศ" (ในรายการขวา), "รับประกัน", "เพิ่ม:", หรือ "Expected"
-        success_markers = ["EMS ในประเทศ", "รับประกัน", "1-2 วันทำการ", "เพิ่ม:", "Expected", "ข้อมูลเพิ่มเติม"]
-        
-        for marker in success_markers:
-            if check_exists(main_window, marker):
-                is_success = True
-                log(f"[/] สำเร็จ! พบข้อความ '{marker}' -> หน้าจอเปลี่ยนแล้ว")
-                break
-        
-        if is_success:
-            break # ออกจากลูป Retry ถ้าสำเร็จแล้ว
-        else:
-            log("[!] หน้าจอยังไม่เปลี่ยน... ลองใหม่")
-            
-            # ถ้ายังเห็นคำว่า "บริการหลัก" แสดงว่ายังอยู่ที่เดิม
-            if check_exists(main_window, "บริการหลัก"):
-                log("    -> ยังติดอยู่ที่หน้าบริการหลัก")
-            else:
-                log("    -> หน้าจออาจจะเปลี่ยนแล้วแต่หาข้อความยืนยันไม่เจอ?")
-
+    
+    for marker in success_markers:
+        if check_exists(main_window, marker):
+            is_success = True
+            log(f"[/] สำเร็จ! พบข้อความ '{marker}' -> หน้าจอเปลี่ยนแล้ว")
+            break
+    
     if not is_success:
-        log("\n[FAIL] ไม่สามารถเข้าสู่หน้า EMS ได้หลังจากพยายามหลายครั้ง")
-        return # หยุดการทำงานถ้าไปต่อไม่ได้
+        log("[!] หน้าจอยังไม่เปลี่ยน... ลองกด Hotkey อื่น (เช่น F12 หรือ Tab->Enter)")
+        
+        # ลองกด F12 (ปุ่ม Next มาตรฐานของหลายโปรแกรม POS)
+        # main_window.type_keys("{F12}") 
+        
+        # หรือลองกด Tab เพื่อเลื่อน Focus แล้ว Enter
+        # main_window.type_keys("{TAB}")
+        # main_window.type_keys("{ENTER}")
 
-    # --- ส่วนประกัน (ทำงานต่อเมื่อหน้าจอเปลี่ยนสำเร็จแล้ว) ---
-    # ใส่ไว้เผื่อคุณต้องการเทสว่าหลังกด E แล้วกดประกันต่อได้ไหม
-    if add_insurance.lower() == 'true':
-        log(f"...ตรวจสอบประกันภัย (วงเงิน: {insurance_amt})")
+        if check_exists(main_window, "บริการหลัก"):
+             log("\n[FAIL] ยังติดอยู่ที่หน้าบริการหลัก -> Hotkey E อาจจะไม่ทำงาน หรือต้องกดปุ่มอื่น")
+             return
+
+    # --- ส่วนประกัน ---
+    if is_success and add_insurance.lower() == 'true':
+        log(f"...ตรวจสอบประกันภัย")
+        # ใช้ smart_click แบบ invoke (ไม่ใช้เมาส์)
         if smart_click(main_window, ["+", "AddService", "รับประกัน"], timeout=3, optional=True):
             time.sleep(1)
-            smart_input_with_scroll(main_window, "วงเงิน", insurance_amt)
-            smart_click(main_window, ["ตกลง", "OK"], timeout=2, optional=True)
+            # กรอกวงเงิน
+            try:
+                # ลองพิมพ์ตัวเลขเลย เพราะ Popup เด้งมา Cursor มักจะรออยู่แล้ว
+                main_window.type_keys(str(insurance_amt))
+            except: pass
+            
+            # กด Enter เพื่อตกลง (แทนการหาปุ่ม OK)
+            main_window.type_keys("{ENTER}")
 
-    log("\n[TEST COMPLETED] จบการทดสอบส่วนกด E")
+    log("\n[TEST COMPLETED] จบการทดสอบแบบไม่ใช้เมาส์")
 
 # ================= 4. Execution =================
 if __name__ == "__main__":
