@@ -126,20 +126,60 @@ def smart_next(window):
     if not smart_click(window, "ถัดไป", timeout=2, optional=True):
         window.type_keys("{ENTER}")
 
-def process_sender_info(window, phone_number):
+def process_sender_info(window, phone_number, default_postal):
     """
-    ฟังก์ชันจัดการหน้าผู้ฝากส่ง: อ่านบัตร -> กรอกเบอร์ให้ครบ -> กดถัดไป
+    ฟังก์ชันจัดการหน้าผู้ฝากส่ง: 
+    1. อ่านบัตร 
+    2. เช็คปณ. (ถ้าว่างให้เติม) 
+    3. กรอกเบอร์ -> กดถัดไป
     """
     log("...เช็คหน้า Popup ผู้ฝากส่ง...")
-    # เช็คว่ามีปุ่มอ่านบัตรประชาชนหรือไม่
+
+    # 1. กดปุ่มอ่านบัตรประชาชน
     if smart_click(window, "อ่านบัตรประชาชน", timeout=5, optional=True):
         log("[Popup] เจอหน้าผู้ฝากส่ง -> กดอ่านบัตรเรียบร้อย")
-        time.sleep(1) # รอข้อมูลบัตรขึ้น
         
-        # [แก้ไข] กรอกเบอร์โทรศัพท์ก่อนกดถัดไป (เลื่อนหาถ้าจำเป็น)
+        # รอให้ข้อมูลจากบัตรวิ่งลงช่อง (เพิ่มเวลาหน่อยเพื่อให้ชัวร์)
+        time.sleep(3) 
+
+        # ---------------------------------------------------------
+        # 2. ส่วนที่เพิ่ม: ตรวจสอบและเติมรหัสไปรษณีย์ (ถ้าว่าง)
+        # ---------------------------------------------------------
+        log("...ตรวจสอบช่องรหัสไปรษณีย์...")
+        try:
+            found_postal_box = False
+            # ค้นหาช่อง Edit ทั้งหมดในหน้านั้น
+            edits = window.descendants(control_type="Edit")
+            
+            for edit in edits:
+                # ตรวจสอบชื่อของช่องว่าใช่ "รหัสไปรษณีย์" หรือไม่
+                # (บางทีชื่ออาจจะเป็น "ZipCode" หรือ "PostCode" แล้วแต่โปรแกรม แต่ส่วนใหญ่จะใช้ชื่อภาษาไทยตาม Label)
+                if "รหัสไปรษณีย์" in edit.element_info.name or "รหัสไปรษณีย์" in edit.window_text():
+                    
+                    # ดึงค่าปัจจุบันในช่องออกมาดู (สำหรับ UIA Backend ใช้ get_value)
+                    current_val = edit.get_value() 
+                    
+                    if current_val is None or str(current_val).strip() == "":
+                        log(f"   [Auto-Fix] รหัสไปรษณีย์ว่างเปล่า -> กำลังเติมค่า Config: {default_postal}")
+                        edit.click_input()
+                        edit.type_keys(str(default_postal), with_spaces=True)
+                    else:
+                        log(f"   [Skip] มีรหัสไปรษณีย์แล้ว ({current_val}) -> ไม่ต้องเติม")
+                    
+                    found_postal_box = True
+                    break # เจอแล้ว ออกจาก Loop
+            
+            if not found_postal_box:
+                log("   [!] หาช่องรหัสไปรษณีย์แบบระบุชื่อไม่เจอ (ข้ามขั้นตอนซ่อมแซม)")
+
+        except Exception as e:
+            log(f"   [Error] เกิดข้อผิดพลาดตอนเช็ค ปณ.: {e}")
+        # ---------------------------------------------------------
+
+        # 3. กรอกเบอร์โทรศัพท์ต่อ (ตามปกติ)
         smart_input_with_scroll(window, "หมายเลขโทรศัพท์", phone_number)
         
-        # [แก้ไข] เมื่อกรอกเสร็จแล้ว ค่อยกดถัดไปเพื่อปิด Popup
+        # 4. กดถัดไป
         log("...ข้อมูลครบถ้วน กดถัดไป...")
         smart_next(window)
     else:
