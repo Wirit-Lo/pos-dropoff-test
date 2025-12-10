@@ -231,7 +231,8 @@ if __name__ == "__main__":
     if conf:
         log("Connecting...")
         try:
-            app = Application(backend="uia").connect(title_re=".*POS.*", timeout=15)
+            # [FIXED] เพิ่ม found_index=0 เพื่อแก้ปัญหาเจอ 2 หน้าต่าง
+            app = Application(backend="uia").connect(title_re=".*POS.*", found_index=0, timeout=15)
             win = app.top_window()
             win.set_focus()
             run_smart_scenario(win, conf)
