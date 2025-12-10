@@ -221,7 +221,8 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
 
     # --- ขั้นตอนผู้ฝากส่ง (อ่านบัตร + กรอกเบอร์) ---
-    process_sender_info(main_window, phone)
+    # [FIXED] เพิ่ม postal เข้าไปเป็น Argument ตัวที่ 3
+    process_sender_info(main_window, phone, postal) 
     time.sleep(step_delay)
 
     # 2. ซอง A4 เอกสาร (รูปร่าง)
