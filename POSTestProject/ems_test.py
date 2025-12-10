@@ -2,7 +2,7 @@ import configparser
 import os
 import time
 import datetime
-import ctypes # [NEW] ใช้ตัวนี้จับเมาส์แทน ชัวร์กว่า
+import ctypes 
 from pywinauto.application import Application
 from pywinauto import Desktop
 
@@ -16,8 +16,7 @@ def load_config(filename='config.ini'):
 def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
-# ================= 2. Inspector Mode (โหมดดึงค่า ID จากเมาส์) =================
-# สร้าง Structure สำหรับรับค่าพิกัดเมาส์จาก Windows API
+# ================= 2. Inspector Mode (โหมดดึงค่า ID แบบเจาะลึก) =================
 class POINT(ctypes.Structure):
     _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
 
@@ -27,68 +26,108 @@ def get_mouse_position_windows():
     ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
     return pt.x, pt.y
 
+def print_element_details(element, level_name):
+    """ฟังก์ชันช่วยปริ้นข้อมูล Element แบบละเอียดและปลอดภัย"""
+    try:
+        wrapper = element.wrapper_object()
+        print(f"\n[{level_name}] ----------------------------------------")
+        
+        # พยายามอ่านค่าทีละตัว กัน Error
+        try:
+            ctype = wrapper.element_info.control_type
+            print(f"  Type          : {ctype}")
+        except: print("  Type          : <Error>")
+
+        try:
+            text = wrapper.window_text()
+            print(f"  Text (Name)   : '{text}'")
+        except: print("  Text          : <Error>")
+
+        try:
+            aid = wrapper.element_info.automation_id
+            print(f"  AutomationId  : '{aid}'   <--- มองหาตัวนี้!")
+        except: 
+            aid = ""
+            print("  AutomationId  : <Error>")
+
+        try:
+            cls = wrapper.element_info.class_name
+            print(f"  ClassName     : {cls}")
+        except: print("  ClassName     : <Error>")
+        
+        return aid # ส่ง ID กลับไปเช็ค
+        
+    except Exception as e:
+        print(f"  [!] อ่านข้อมูล {level_name} ไม่ได้: {e}")
+        return None
+
 def run_hover_inspector():
     """
-    โหมดโหด: ดึง ID จากตำแหน่งที่เมาส์ชี้อยู่ (ไม่ต้องคลิก ไม่ต้องเดา)
+    โหมดโหด V2: ดึง ID แบบเจาะลึก (Leaf -> Parent -> Grandparent)
     """
-    log("\n" + "="*50)
-    log("       โหมดดึง ID ด้วยการชี้เมาส์ (Mouse Hover)       ")
-    log("="*50)
-    log("คำแนะนำ: เตรียมเอาเมาส์ไปชี้ที่ปุ่ม 'บริการ EMS' หรือปุ่มที่ต้องการ")
-    log("ระบบจะนับถอยหลัง 5 วินาที... เริ่ม!")
+    log("\n" + "="*60)
+    log("       โหมดดึง ID V2: Deep Inspect (ชี้แล้วขุดหาตัวแม่)       ")
+    log("="*60)
+    log("คำแนะนำ: เอาเมาส์ไปชี้ที่ปุ่ม 'บริการ EMS' ไว้")
+    log("ระบบจะนับถอยหลัง 5 วินาที... (เตรียมตัว)")
 
-    # นับถอยหลังให้เวลาผู้ใช้เลื่อนเมาส์
     for i in range(5, 0, -1):
         log(f"... {i} ...")
         time.sleep(1)
 
-    log("\n[CAPTURE] กำลังดึงข้อมูลตรงจุดที่เมาส์ชี้...")
+    log("\n[CAPTURE] เริ่มการวิเคราะห์...")
     
     try:
-        # 1. ดึงพิกัดเมาส์ปัจจุบัน (ใช้วิธีใหม่ ผ่าน ctypes)
+        # 1. ดึงพิกัด
         x, y = get_mouse_position_windows()
         log(f"พิกัดเมาส์: ({x}, {y})")
 
-        # 2. เจาะจง Element ตรงนั้นโดยตรง (Backend UIA)
-        # ใช้วิธีนี้จะแม่นยำที่สุดเพราะได้สิ่งที่อยู่ใต้เมาส์จริงๆ
-        element = Desktop(backend="uia").from_point(x, y)
-
-        # 3. แสดงผลลัพธ์
-        log("\n" + "-"*30)
-        log("   ข้อมูลปุ่มที่เจอ (Element Info)   ")
-        log("-"*30)
+        # 2. จับ Element ที่เมาส์ชี้ (ตัวลูกสุด)
+        target_elem = Desktop(backend="uia").from_point(x, y)
         
-        # วาดกรอบสีเขียวรอบๆ เพื่อยืนยันว่าจับถูกตัว
-        try:
-            element.draw_outline(colour='green', thickness=3)
+        # วาดกรอบสีเขียว (จุดที่ชี้)
+        try: target_elem.draw_outline(colour='green', thickness=3)
         except: pass
 
-        # ดึงค่าต่างๆ
-        wrapper = element.wrapper_object()
-        print(f"Text (ชื่อที่แสดง)    : '{wrapper.window_text()}'")
-        print(f"Control Type        : '{wrapper.element_info.control_type}'")
-        print(f"Automation ID       : '{wrapper.element_info.automation_id}'  <-- ตัวนี้สำคัญ!")
-        print(f"Class Name          : '{wrapper.element_info.class_name}'")
+        # 3. เริ่มรายงานผล (ไต่ระดับขึ้นไปหา ID)
+        print("\n" + ">"*20 + " ผลการตรวจสอบ " + "<"*20)
         
-        # 4. ดึงข้อมูลตัวแม่ (Parent) เผื่อว่า ID อยู่ที่กล่องครอบ
-        parent = wrapper.parent()
-        if parent:
-            print("\n--- ข้อมูลตัวแม่ (Parent Container) ---")
-            print(f"Parent Type         : '{parent.element_info.control_type}'")
-            print(f"Parent Text         : '{parent.window_text()}'")
-            print(f"Parent ID           : '{parent.element_info.automation_id}'")
+        # Level 0: จุดที่ชี้
+        found_id = print_element_details(target_elem, "Level 0: จุดที่เมาส์ชี้ (Leaf)")
+        
+        # ถ้า Level 0 ไม่มี ID หรือ Text ให้ลองดูตัวแม่ (Parent)
+        current_elem = target_elem
+        for i in range(1, 4): # เช็คย้อนขึ้นไป 3 ระดับ
             try:
-                parent.draw_outline(colour='yellow', thickness=2)
-            except: pass
-        
-        log("\n" + "="*50)
-        log("วิธีใช้: นำค่า Automation ID ที่ได้ ไปใส่ใน smart_click แทนชื่อปุ่ม")
-        log("ตัวอย่าง: smart_click(window, ['AutomationID_ที่เจอ'])")
-        log("="*50)
+                parent = current_elem.wrapper_object().parent()
+                if not parent:
+                    print(f"\n[End] ไม่มี Parent ต่อแล้ว")
+                    break
+                
+                # วาดกรอบสีเหลือง (ตัวแม่)
+                try: parent.draw_outline(colour='yellow', thickness=2)
+                except: pass
+
+                pid = print_element_details(parent, f"Level {i}: ตัวแม่ (Parent)")
+                
+                # ถ้าเจอ ID ที่ไม่ใช่ค่าว่าง ให้ไฮไลท์บอกเลย
+                if pid and pid.strip() != "":
+                    print(f"\n*** เจอ ID ที่น่าใช้ใน Level {i} !!! ***")
+                    print(f"*** แนะนำให้ใช้: '{pid}' ***")
+                
+                current_elem = parent
+            except Exception as e:
+                print(f"\n[!] ไม่สามารถดึง Parent Level {i}: {e}")
+                break
+
+        log("\n" + "="*60)
+        log("วิธีใช้: เลือก AutomationId ที่ดูสื่อความหมายที่สุด (มักจะอยู่ Level 1 หรือ 2)")
+        log("นำไปใส่ในโค้ด: smart_click(window, ['ค่าIDที่เจอ'])")
+        log("="*60)
 
     except Exception as e:
-        log(f"[Error] เกิดข้อผิดพลาด: {e}")
-        log("ลองรันใหม่อีกครั้ง และตรวจสอบว่าหน้าต่างโปรแกรม Active อยู่")
+        log(f"[Error] เกิดข้อผิดพลาดร้ายแรง: {e}")
+        log("ลองรันใหม่อีกครั้ง")
 
 # ================= 3. Execution =================
 if __name__ == "__main__":
@@ -96,28 +135,22 @@ if __name__ == "__main__":
     if conf:
         log("Connecting to POS Application...")
         try:
-            # 1. เชื่อมต่อโปรแกรมก่อน เพื่อดึงหน้าจอขึ้นมา
             connect_wait = int(conf['SETTINGS'].get('ConnectTimeout', 10))
             app = Application(backend="uia").connect(title_re=conf['APP']['WindowTitle'], timeout=connect_wait)
             win = app.top_window()
             
-            # 2. เด้งหน้าต่างขึ้นมา (Focus) เพื่อให้พร้อมเอาเมาส์ชี้
+            # เด้งหน้าต่างขึ้นมา
             win.set_focus()
             try:
-                # ลอง restore ถ้ามัน minimize อยู่
-                if win.get_show_state() == 2: # Minimized
-                    win.restore()
+                if win.get_show_state() == 2: win.restore()
             except: pass
 
-            log("[/] เชื่อมต่อและดึงหน้าจอขึ้นมาสำเร็จ")
-            log("    กรุณาเตรียมตัวชี้เมาส์...")
-            time.sleep(1) # รอจังหวะหน้าจอเด้งนิดนึง
+            log("[/] Ready! เตรียมชี้เมาส์...")
+            time.sleep(1) 
             
-            # 3. เริ่มโหมด Inspector
             run_hover_inspector()
             
         except Exception as e:
             log(f"Error Connecting: {e}")
-            log("ตรวจสอบว่าเปิดโปรแกรม POS อยู่และค่า Config ถูกต้อง")
     else:
         log("ไม่พบไฟล์ Config")
