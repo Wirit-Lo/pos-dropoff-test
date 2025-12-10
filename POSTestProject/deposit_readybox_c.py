@@ -18,20 +18,25 @@ def log(message):
 # ================= 2. Helper Functions (Scroll & Search) =================
 def force_scroll_down(window):
     """
-    [Updated] ฟังก์ชันช่วยเลื่อนหน้าจอลง
-    แก้ไข: เปลี่ยนมาใช้การกดปุ่ม Page Down ({PGDN}) ซึ่งชัวร์กว่าการใช้ Mouse Scroll
+    [Updated V2] ฟังก์ชันช่วยเลื่อนหน้าจอลง (Safe Mode)
+    แก้ไข: เปลี่ยนจุดคลิกเรียก Focus จาก 'กลางจอ' เป็น 'มุมซ้ายบน (Title Bar)'
+    เพื่อป้องกันไม่ให้เผลอไปกดโดนปุ่มเมนูอื่นกลางหน้าจอ
     """
     log(f"...สั่งเลื่อนหน้าจอลง (Page Down)...")
     try:
-        # 1. คลิกที่กลางจอ 1 ครั้งเพื่อให้แน่ใจว่า Window กำลังถูก Focus อยู่
-        rect = window.rectangle()
-        center_x = rect.left + int(rect.width() / 2)
-        center_y = rect.top + int(rect.height() / 2)
+        # 1. เรียก Focus มาที่หน้าต่าง
+        window.set_focus()
         
-        mouse.click(coords=(center_x, center_y))
+        # 2. คลิกที่ "พื้นที่ปลอดภัย" (Safe Zone) เพื่อย้ำ Focus
+        # เปลี่ยนจากกลางจอ เป็นมุมซ้ายบน (แถบ Title Bar)
+        rect = window.rectangle()
+        safe_x = rect.left + 50
+        safe_y = rect.top + 10 # ขอบบนสุด (Title Bar)
+        
+        mouse.click(coords=(safe_x, safe_y))
         time.sleep(0.5)
         
-        # 2. กดปุ่ม Page Down เพื่อเลื่อนลง
+        # 3. กดปุ่ม Page Down เพื่อเลื่อนลง
         window.type_keys("{PGDN}")
         time.sleep(1) # รอให้หน้าจอเลื่อนเสร็จและนิ่ง
         
