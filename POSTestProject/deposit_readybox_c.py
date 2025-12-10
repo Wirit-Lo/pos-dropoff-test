@@ -68,25 +68,53 @@ def smart_click(window, criteria_list, timeout=5, optional=False):
 
 def smart_click_with_scroll(window, criteria, max_scrolls=5):
     """
-    [Updated] คลิกปุ่มแบบเลื่อนหา (Check -> Click -> Stop Logic)
-    หลักการ: หาเจอกดเลยแล้วหยุด ถ้าไม่เจอค่อยเลื่อน
+    [Updated V2] คลิกปุ่มแบบเลื่อนหา (Smart Bounds Check)
+    แก้ปัญหา: เจอปุ่มแต่กดไม่ได้เพราะตกขอบ -> เช็คพิกัดก่อน ถ้าต่ำไปให้เลื่อนก่อนกด
     """
-    log(f"...กำลังค้นหาปุ่ม '{criteria}' (โหมดเลื่อนหา)...")
+    log(f"...กำลังค้นหาปุ่ม '{criteria}' (โหมดเลื่อนหาและเช็คขอบ)...")
     
     for i in range(max_scrolls + 1):
-        # 1. ลองหาปุ่มในหน้าจอปัจจุบันก่อน
-        # ใช้ timeout น้อยๆ เพื่อความรวดเร็วในการเช็ค
-        if smart_click(window, criteria, timeout=2, optional=True):
-            log(f"   [/] เจอและกดปุ่ม '{criteria}' แล้ว -> หยุดการเลื่อน")
-            return True # เจอแล้ว จบฟังก์ชันทันที (Stop)
-            
-        # 2. ถ้าหาไม่เจอ และยังไม่ครบจำนวนรอบ -> ให้เลื่อนจอลง
+        found_element = None
+        
+        # 1. พยายามค้นหา Element ในหน้าจอปัจจุบัน
+        try:
+            for child in window.descendants():
+                if child.is_visible() and criteria in child.window_text():
+                    found_element = child
+                    break
+        except: pass
+
+        # 2. ถ้าเจอ Element -> เช็คตำแหน่งก่อนกด
+        if found_element:
+            try:
+                elem_rect = found_element.rectangle()
+                win_rect = window.rectangle()
+                
+                # [Logic ใหม่] เช็คว่าขอบล่างของปุ่ม (bottom) อยู่ใกล้ขอบล่างหน้าต่างเกินไปหรือไม่
+                # ถ้าปุ่มอยู่ต่ำกว่าขอบล่าง หรือเหลือที่น้อยกว่า 20 pixel (ตกขอบ) -> ให้เลื่อนจอก่อน
+                if elem_rect.bottom >= win_rect.bottom - 20:
+                    log(f"   [!] เจอปุ่ม '{criteria}' แต่ตำแหน่งต่ำเกินไป (ตกขอบ) -> สั่งเลื่อนลง 1 ครั้ง")
+                    force_scroll_down(window)
+                    time.sleep(1)
+                    continue # วนลูปใหม่ เพื่อหาปุ่มในตำแหน่งใหม่ที่ขยับขึ้นมาแล้ว
+                
+                # ถ้าตำแหน่ง OK (ไม่ตกขอบ) -> กดเลย
+                found_element.click_input()
+                log(f"   [/] เจอและกดปุ่ม '{criteria}' สำเร็จ")
+                return True
+                
+            except Exception as e:
+                log(f"   [!] เจอแต่กดไม่ได้ ({e}) -> ลองเลื่อนต่อ")
+
+        # 3. ถ้าไม่เจอ หรือ เจอแต่ตกขอบแล้วสั่งเลื่อนไปแล้ว -> วนรอบถัดไป
+        # แต่ถ้ายังไม่เจอเลยในรอบนี้ -> สั่งเลื่อนจอลง
         if i < max_scrolls:
-            log(f"   [Rotate {i+1}/{max_scrolls}] ยังไม่เจอ '{criteria}' -> สั่งเลื่อนลง")
-            force_scroll_down(window)
-            # วนกลับไปข้อ 1 ใหม่ (Loop)
+            if not found_element: # ถ้าเมื่อกี้เจอแล้วเลื่อนไปแล้ว ไม่ต้องเลื่อนซ้ำ
+                log(f"   [Rotate {i+1}/{max_scrolls}] ยังไม่เจอ '{criteria}' -> สั่งเลื่อนลง")
+                force_scroll_down(window)
+                time.sleep(1)
             
-    log(f"[X] หมดความพยายามในการหาปุ่ม '{criteria}' (หาไม่เจอ)")
+    log(f"[X] หมดความพยายามในการหาปุ่ม '{criteria}'")
     return False
 
 # ================= 3. Smart Input Functions =================
