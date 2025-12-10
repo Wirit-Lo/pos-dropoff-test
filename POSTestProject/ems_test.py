@@ -3,9 +3,7 @@ import os
 import time
 import datetime
 from pywinauto.application import Application
-# ใช้ send_keys เพื่อจำลองการกดคีย์บอร์ดระดับ System
-from pywinauto.keyboard import send_keys 
-from pywinauto import mouse
+from pywinauto import Desktop, mouse
 
 # ================= 1. Config & Log =================
 def load_config(filename='config.ini'):
@@ -17,94 +15,72 @@ def load_config(filename='config.ini'):
 def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
-# ================= 2. Helper Functions =================
-def ensure_focus(window):
-    """ทำให้แน่ใจว่าหน้าจอ Focus อยู่"""
-    try:
-        window.set_focus()
-        time.sleep(0.5)
-        rect = window.rectangle()
-        # คลิกที่มุมซ้ายบนที่เป็นพื้นที่ว่างๆ เพื่อ Reset Focus
-        mouse.click(coords=(rect.left + 50, rect.top + 150))
-    except: pass
+# ================= 2. Inspector Mode (โหมดดึงค่า ID จากเมาส์) =================
+def run_hover_inspector():
+    """
+    โหมดโหด: ดึง ID จากตำแหน่งที่เมาส์ชี้อยู่ (ไม่ต้องคลิก ไม่ต้องเดา)
+    """
+    log("\n" + "="*50)
+    log("       โหมดดึง ID ด้วยการชี้เมาส์ (Mouse Hover)       ")
+    log("="*50)
+    log("คำแนะนำ: เตรียมเอาเมาส์ไปชี้ที่ปุ่ม 'บริการ EMS' หรือปุ่มที่ต้องการ")
+    log("ระบบจะนับถอยหลัง 5 วินาที... เริ่ม!")
 
-# ================= 3. UI Inspector Mode (โหมดดึงค่า ID) =================
-def run_ui_inspector(main_window):
-    log(f"\n--- เริ่มต้นโหมด X-RAY (ค้นหา ID ปุ่ม) ---")
-    log("กรุณาตรวจสอบว่าเปิดหน้า 'บริการหลัก' รอไว้แล้ว")
-    time.sleep(2)
+    # นับถอยหลังให้เวลาผู้ใช้เลื่อนเมาส์
+    for i in range(5, 0, -1):
+        log(f"... {i} ...")
+        time.sleep(1)
 
-    ensure_focus(main_window)
+    log("\n[CAPTURE] กำลังดึงข้อมูลตรงจุดที่เมาส์ชี้...")
     
-    output_file = "UI_DUMP_SERVICE_PAGE.txt"
-    log(f"...กำลังวิเคราะห์โครงสร้างหน้าจอ และบันทึกลงไฟล์ '{output_file}'...")
-    log("(อาจใช้เวลาสักครู่ หน้าจออาจจะกะพริบหรือมีกรอบสีแดงขึ้น)")
-
     try:
-        # 1. บันทึกโครงสร้างทั้งหมดลงไฟล์ (เผื่อไว้ดูละเอียด)
-        main_window.print_control_identifiers(depth=None, filename=output_file)
-        log(f"[/] บันทึกไฟล์สำเร็จ! ลองเปิด '{output_file}' ดูได้ครับ")
+        # 1. ดึงพิกัดเมาส์ปัจจุบัน
+        x, y = mouse.get_cursor_pos()
+        log(f"พิกัดเมาส์: ({x}, {y})")
 
-        # 2. ค้นหาและโชว์ ID ของปุ่มที่น่าจะเป็น EMS บนหน้าจอ Console เลย
-        log("\n" + "="*50)
-        log("    ผลการค้นหาปุ่ม EMS / E / บริการ บนหน้าจอ    ")
-        log("="*50)
+        # 2. เจาะจง Element ตรงนั้นโดยตรง (Backend UIA)
+        # ใช้วิธีนี้จะแม่นยำที่สุดเพราะได้สิ่งที่อยู่ใต้เมาส์จริงๆ
+        element = Desktop(backend="uia").from_point(x, y)
+
+        # 3. แสดงผลลัพธ์
+        log("\n" + "-"*30)
+        log("   ข้อมูลปุ่มที่เจอ (Element Info)   ")
+        log("-"*30)
         
-        found_candidate = False
-        # วนลูปหาทุก Element ในหน้าต่าง
-        for child in main_window.descendants():
-            try:
-                # ดึงค่าต่างๆ ของ Element
-                text = child.window_text()
-                auto_id = child.element_info.automation_id
-                control_type = child.element_info.control_type
-                
-                # กรองเฉพาะสิ่งที่น่าจะเป็นปุ่มที่เราหา
-                keywords = ["EMS", "E", "อีเอ็มเอส", "บริการ", "ด่วน", "Service"]
-                is_match = False
-                
-                # เช็คว่ามี keyword อยู่ใน text หรือ id ไหม
-                if text and any(k in text for k in keywords): is_match = True
-                if auto_id and any(k in auto_id for k in keywords): is_match = True
-                
-                # ถ้าเจอที่น่าสนใจ ให้ปริ้นออกมา
-                if is_match:
-                    found_candidate = True
-                    print(f"\n[เจอเป้าหมาย!] Type: {control_type}")
-                    print(f"   Name (Text) : '{text}'")
-                    print(f"   AutomationId: '{auto_id}'  <-- ลองใช้ค่านี้!")
-                    
-                    # วาดกรอบให้ดูด้วยว่าคือปุ่มไหนบนจอ
-                    try:
-                        child.draw_outline(colour='green', thickness=2)
-                    except: pass
-            except: pass
+        # วาดกรอบสีเขียวรอบๆ เพื่อยืนยันว่าจับถูกตัว
+        try:
+            element.draw_outline(colour='green', thickness=3)
+        except: pass
 
-        if not found_candidate:
-            log("[!] ไม่พบ Element ที่มีคำว่า EMS/E ในชื่อหรือ ID เลย")
-            log("    ลองเปิดไฟล์ Text ที่สร้างขึ้นเพื่อไล่ดูด้วยตาอีกทีครับ")
-        else:
-            log("\n" + "="*50)
-            log("วิธีใช้: นำค่า AutomationId ที่ได้ ไปใส่ในฟังก์ชัน smart_click")
-            log("ตัวอย่าง: smart_click(window, 'ค่า_AutomationId_ที่เจอ')")
-            log("="*50)
+        # ดึงค่าต่างๆ
+        wrapper = element.wrapper_object()
+        print(f"Text (ชื่อที่แสดง)    : '{wrapper.window_text()}'")
+        print(f"Control Type        : '{wrapper.element_info.control_type}'")
+        print(f"Automation ID       : '{wrapper.element_info.automation_id}'  <-- ตัวนี้สำคัญ!")
+        print(f"Class Name          : '{wrapper.element_info.class_name}'")
+        
+        # 4. ดึงข้อมูลตัวแม่ (Parent) เผื่อว่า ID อยู่ที่กล่องครอบ
+        parent = wrapper.parent()
+        if parent:
+            print("\n--- ข้อมูลตัวแม่ (Parent Container) ---")
+            print(f"Parent Type         : '{parent.element_info.control_type}'")
+            print(f"Parent Text         : '{parent.window_text()}'")
+            print(f"Parent ID           : '{parent.element_info.automation_id}'")
+            try:
+                parent.draw_outline(colour='yellow', thickness=2)
+            except: pass
+        
+        log("\n" + "="*50)
+        log("วิธีใช้: นำค่า Automation ID ที่ได้ ไปใส่ใน smart_click แทนชื่อปุ่ม")
+        log("ตัวอย่าง: smart_click(window, ['AutomationID_ที่เจอ'])")
+        log("="*50)
 
     except Exception as e:
-        log(f"[Error] เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
+        log(f"[Error] เกิดข้อผิดพลาด: {e}")
+        log("ลองรันใหม่อีกครั้ง และตรวจสอบว่าหน้าต่างโปรแกรม Active อยู่")
 
-# ================= 4. Execution =================
+# ================= 3. Execution =================
 if __name__ == "__main__":
-    conf = load_config()
-    if conf:
-        log("Connecting...")
-        try:
-            connect_wait = int(conf['SETTINGS'].get('ConnectTimeout', 10))
-            app = Application(backend="uia").connect(title_re=conf['APP']['WindowTitle'], timeout=connect_wait)
-            win = app.top_window()
-            win.set_focus()
-            
-            # รันโหมดดึงค่า ID แทนโหมดเทสปกติ
-            run_ui_inspector(win)
-            
-        except Exception as e:
-            log(f"Error: {e}")
+    # ไม่ต้อง Connect แอพ แค่รันฟังก์ชัน Inspector เลย
+    # เพราะ Desktop().from_point ทำงานระดับ Global
+    run_hover_inspector()
