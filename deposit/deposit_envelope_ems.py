@@ -274,9 +274,11 @@ def run_smart_scenario(main_window, config):
     smart_next(main_window)
     time.sleep(step_delay)
 
-    # --- ส่วนเดิม: กดดำเนินการ/เสร็จสิ้น ---
-    smart_click(main_window, "ดำเนินการ", timeout=2, optional=True)
-    smart_click(main_window, ["เสร็จสิ้น", "Settle", "ยืนยัน"], timeout=2, optional=True)
+    # --- ส่วนเดิม: กดดำเนินการ/เสร็จสิ้น (ปิดการใช้งานตามที่แจ้งปัญหา) ---
+    # [แก้ไข] ผู้ใช้แจ้งว่าส่วนนี้ทำให้ระบบกดกลับหน้าแรก หรือจบบิลผิด
+    # จึงปิดไว้เพื่อให้ระบบไหลไปสู่หน้าเลือกบริการหลักได้ถูกต้อง
+    # smart_click(main_window, "ดำเนินการ", timeout=2, optional=True)
+    # smart_click(main_window, ["เสร็จสิ้น", "Settle", "ยืนยัน"], timeout=2, optional=True)
 
     # --- ส่วนใหม่: ไปกด EMS ต่อ ---
     log("...กำลังไปที่หน้าบริการหลัก เพื่อเลือก EMS...")
