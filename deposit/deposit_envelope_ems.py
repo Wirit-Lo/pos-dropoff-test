@@ -15,6 +15,22 @@ def load_config(filename='config.ini'):
 def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
+# [NEW] ฟังก์ชันช่วย Debug: ปริ้นท์ข้อความทุกอย่างที่โปรแกรมเห็นออกมา
+def debug_dump_ui(window):
+    log("!!! หาไม่เจอ -> กำลังลิสต์ข้อความที่โปรแกรมมองเห็น (Debug) !!!")
+    try:
+        visible_texts = []
+        for child in window.descendants():
+            if child.is_visible():
+                txt = child.window_text().strip()
+                if txt: visible_texts.append(txt)
+        # ลบข้อความซ้ำและปริ้นท์
+        unique_texts = list(set(visible_texts))
+        log(f"รายการ Text ที่เจอในหน้านี้: {unique_texts}")
+        log("!!! กรุณาตรวจสอบว่ามีคำที่ต้องการหรือไม่ หรือสะกดผิดตรงไหน !!!")
+    except Exception as e:
+        log(f"Debug Error: {e}")
+
 # ================= 2. Helper Functions (Scroll & Search) =================
 def force_scroll_down(window, scroll_dist=-5):
     """
@@ -27,10 +43,12 @@ def force_scroll_down(window, scroll_dist=-5):
         scrollbar_x = rect.left + int(rect.width() * 0.72)
         scrollbar_y = rect.top + int(rect.height() * 0.5)
         
+        # คลิกเพื่อเรียก Focus ก่อน Scroll
         mouse.click(coords=(scrollbar_x, scrollbar_y))
+        time.sleep(0.2) # รอ Focus นิดนึง
         
         mouse.scroll(coords=(scrollbar_x, scrollbar_y), wheel_dist=scroll_dist)
-        time.sleep(0.5)
+        time.sleep(0.8) # [Adjust] เพิ่มเวลาหลัง Scroll ให้ UI โหลดทัน
         
     except Exception as e:
         log(f"[!] Scroll Error: {e}")
@@ -45,10 +63,12 @@ def smart_click(window, criteria_list, timeout=5, optional=False):
         for criteria in criteria_list:
             try:
                 for child in window.descendants():
-                    if child.is_visible() and criteria in child.window_text():
+                    # เพิ่มเงื่อนไข .strip() เพื่อตัดช่องว่างหน้าหลังออกก่อนเช็ค
+                    text_on_screen = child.window_text().strip()
+                    if child.is_visible() and criteria in text_on_screen:
                         try:
                             child.click_input()
-                            log(f"[/] กดปุ่ม '{criteria}' สำเร็จ")
+                            log(f"[/] กดปุ่ม '{criteria}' สำเร็จ (เจอใน: '{text_on_screen}')")
                             return True
                         except:
                             child.click_input(double=True)
@@ -59,6 +79,8 @@ def smart_click(window, criteria_list, timeout=5, optional=False):
 
     if not optional:
         log(f"[X] หาปุ่ม {criteria_list} ไม่เจอ!")
+        # [NEW] ถ้าหาไม่เจอจริงๆ ให้ Dump UI ออกมาดู
+        debug_dump_ui(window)
     return False
 
 def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
@@ -67,6 +89,9 @@ def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
     """
     log(f"...ค้นหา '{criteria}' (โหมดเลื่อนหาไว)...")
     
+    # [Tweak] ลองลดระยะ Scroll ลงครึ่งหนึ่ง ถ้าหาไม่เจอ เพื่อความละเอียด
+    current_scroll_dist = scroll_dist
+
     for i in range(max_scrolls + 1):
         found_element = None
         
@@ -90,8 +115,8 @@ def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
                 # เช็คว่าปุ่มอยู่ต่ำกว่าเส้นตายหรือไม่
                 if elem_rect.bottom >= safe_bottom_limit:
                     log(f"   [!] เจอปุ่ม '{criteria}' แต่อยู่ต่ำมาก -> ขยับนิดเดียว")
-                    force_scroll_down(window, -4)
-                    time.sleep(0.3)
+                    force_scroll_down(window, -3) # Scroll นิดเดียวพอ
+                    time.sleep(0.5)
                     continue 
                 
                 # ถ้าตำแหน่ง OK -> กดเลย
@@ -106,9 +131,11 @@ def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
         if i < max_scrolls:
             if not found_element:
                 log(f"   [Rotate {i+1}] ไม่เจอ '{criteria}' -> เลื่อนหา (Scroll)")
-                force_scroll_down(window, scroll_dist)
+                force_scroll_down(window, current_scroll_dist)
             
     log(f"[X] หมดความพยายามในการหาปุ่ม '{criteria}'")
+    # [NEW] เรียก Debug dump เพื่อดูว่าโปรแกรมเห็นอะไรบ้าง
+    debug_dump_ui(window)
     return False
 
 # ================= 3. Smart Input Functions =================
@@ -255,16 +282,28 @@ def run_smart_scenario(main_window, config):
     log("...กำลังไปที่หน้าบริการหลัก เพื่อเลือก EMS...")
     time.sleep(step_delay + 1.0) # รอหน้าจอเปลี่ยนนิดหน่อย
 
-    # ใช้ smart_click_with_scroll เพื่อความชัวร์ เผื่อปุ่มไม่ได้อยู่บนสุด
-    if smart_click_with_scroll(main_window, "จดหมายในประเทศซอง", scroll_dist=scroll_dist):
-        log("[SUCCESS] กดเลือก 'จดหมายในประเทศซอง' เรียบร้อย")
+    # [ปรับปรุง] ใช้ smart_click_with_scroll แบบละเอียดขึ้น
+    # ลองหาหลายๆ คำเผื่อไว้
+    target_ems = ["บริการอีเอ็มเอส", "อีเอ็มเอส", "EMS"]
+    
+    found = False
+    for keyword in target_ems:
+        # ลองหาแบบปกติก่อน (เผื่ออยู่หน้าแรก)
+        if smart_click(main_window, keyword, timeout=2, optional=True):
+            found = True
+            break
+        
+        # ถ้าไม่เจอ ลองเลื่อนหา (Scroll)
+        if smart_click_with_scroll(main_window, keyword, max_scrolls=3, scroll_dist=scroll_dist):
+            found = True
+            break
+            
+    if found:
+        log("[SUCCESS] กดเลือก 'บริการ EMS' เรียบร้อย")
     else:
-        # Fallback กรณีหาชื่อเต็มไม่เจอ
-        log("[!] ไม่เจอ 'จดหมายในประเทศซอง' ลองหาคำว่า 'จดหมายในประเทศซอง' แทน")
-        if not smart_click(main_window, "จดหมายในประเทศซอง", timeout=2):
-            log("[Error] หาปุ่ม จดหมายในประเทศซอง ไม่เจอทั้ง 2 ชื่อ")
+        log("[Error] หาปุ่ม EMS ไม่เจอ (ลองตรวจสอบ Log รายการ Text ด้านบน)")
 
-    log("\n[SUCCESS] จบการทำงาน (รวมขั้นตอน จดหมายในประเทศซอง แล้ว)")
+    log("\n[SUCCESS] จบการทำงาน")
     print(">>> กด Enter เพื่อปิดโปรแกรม... <<<")
     input()
 
