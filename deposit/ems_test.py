@@ -7,7 +7,7 @@ from pywinauto import mouse
 
 # ================= 1. ส่วนจัดการ Config & Log =================
 def load_config(filename='config.ini'):
-    """โหลดค่าจากไฟล์ config.ini (รองรับการรันจาก Path อื่น)"""
+    """โหลดค่าจากไฟล์ config.ini"""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(script_dir, filename)
 
@@ -19,7 +19,6 @@ def load_config(filename='config.ini'):
     return config
 
 def log(message):
-    """แสดงผลการทำงานพร้อมเวลา"""
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
 def debug_dump_ui(window):
@@ -39,7 +38,6 @@ def force_scroll_down(window, scroll_dist=-5):
     try:
         window.set_focus()
         rect = window.rectangle()
-        # เลื่อนเมาส์ไปจุดที่ปลอดภัย (ขวา 72%, กลางจอ) แล้ว Scroll
         scrollbar_x = rect.left + int(rect.width() * 0.72)
         scrollbar_y = rect.top + int(rect.height() * 0.5)
         mouse.click(coords=(scrollbar_x, scrollbar_y))
@@ -134,6 +132,17 @@ def wait_until_id_appears(window, exact_id, timeout=10):
         time.sleep(1)
     return False
 
+def wait_for_text(window, text, timeout=5):
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            for child in window.descendants():
+                if text in child.window_text() and child.is_visible():
+                    return True
+        except: pass
+        time.sleep(0.5)
+    return False
+
 # ================= 3. ฟังก์ชัน Input =================
 def smart_input_weight(window, value):
     try:
@@ -147,10 +156,17 @@ def smart_input_weight(window, value):
     return True
 
 def smart_next(window):
-    if not smart_click(window, "ถัดไป", timeout=2):
+    """กดปุ่มถัดไป (Footer) หรือ Enter"""
+    submits = [c for c in window.descendants() if c.element_info.automation_id == "LocalCommand_Submit" and c.is_visible()]
+    if submits:
+        submits.sort(key=lambda x: x.rectangle().top)
+        submits[-1].click_input() # ตัวล่างสุด
+        log("   [/] กดปุ่ม 'ถัดไป' (Footer)")
+    else:
+        log("   [!] หาปุ่มถัดไปไม่เจอ -> กด Enter")
         window.type_keys("{ENTER}")
 
-def process_sender_info(window, phone, postal):
+def process_sender_info_popup(window, phone, postal):
     if smart_click(window, "อ่านบัตรประชาชน", timeout=3): 
         time.sleep(1.5) 
         try:
@@ -175,7 +191,9 @@ def process_sender_info(window, phone, postal):
             except: pass
             if found_phone: break
             force_scroll_down(window, -5)
-        smart_next(window)
+        
+        if not smart_click(window, "ถัดไป", timeout=2):
+            window.type_keys("{ENTER}")
 
 def handle_prohibited_items(window):
     for _ in range(5):
@@ -187,23 +205,79 @@ def handle_prohibited_items(window):
         except: pass
         time.sleep(0.5)
 
+# --- ฟังก์ชันสำหรับหน้าใหม่ ---
+def process_special_services(window, services_str):
+    log("--- เข้าสู่หน้า: บริการพิเศษ ---")
+    if wait_for_text(window, "บริการพิเศษ", timeout=5):
+        if services_str.strip():
+            services = [s.strip() for s in services_str.split(',')]
+            for s in services:
+                if s:
+                    log(f"...เลือกบริการ: {s}")
+                    if not smart_click(window, s):
+                        log(f"   [X] หาบริการ {s} ไม่เจอ")
+        else:
+            log("...ไม่มีบริการพิเศษที่ต้องเลือก")
+    else:
+        log("[WARN] ไม่พบหน้าบริการพิเศษ (อาจข้ามไปแล้ว)")
+    smart_next(window)
+
+def process_sender_info_page(window):
+    log("--- เข้าสู่หน้า: ข้อมูลผู้ส่ง ---")
+    wait_for_text(window, "ข้อมูลผู้ส่ง", timeout=5)
+    log("...กดถัดไป (ข้าม)...")
+    smart_next(window)
+
+def process_receiver_info_page(window, address):
+    log("--- เข้าสู่หน้า: ข้อมูลผู้รับ ---")
+    if wait_for_text(window, "ข้อมูลผู้รับ", timeout=5):
+        time.sleep(1)
+        try:
+            edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
+            filled = False
+            for edit in edits:
+                # หาช่องที่อยู่ (มักจะว่างอยู่)
+                if "ที่อยู่" in edit.element_info.name or not edit.get_value():
+                    log(f"...กรอกที่อยู่: {address[:20]}...")
+                    edit.click_input()
+                    edit.type_keys(str(address), with_spaces=True)
+                    filled = True
+                    break
+            
+            if not filled and len(edits) > 1:
+                log("...กรอกช่องสำรอง...")
+                edits[1].click_input()
+                edits[1].type_keys(str(address), with_spaces=True)
+        except Exception as e:
+            log(f"[!] Error กรอกที่อยู่: {e}")
+    smart_next(window)
+
+def handle_final_warning(window):
+    log("...รอ Popup แจ้งเตือนสุดท้าย...")
+    if wait_for_text(window, "แจ้งเตือน", timeout=5) or wait_for_text(window, "ไม่มีผลลัพธ์", timeout=2):
+        log("[Popup] พบแจ้งเตือน -> กด 'ตกลง/OK'")
+        if not smart_click(window, ["ตกลง", "OK"]):
+            window.type_keys("{ENTER}")
+    else:
+        log("...ไม่พบ Popup แจ้งเตือน")
+
 # ================= 4. Workflow หลัก =================
 def run_smart_scenario(main_window, config):
     try:
-        # อ่านค่าจาก Config ตามที่ user ให้มา
+        # อ่านค่าจาก Config
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '25')
         postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10220')
         phone = config['TEST_DATA'].get('PhoneNumber', '0899998888')
         special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
         
-        # อ่านค่าประกัน และ flag ว่าจะกดหรือไม่
         add_insurance_flag = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
         insurance_amt = config['DEPOSIT_ENVELOPE'].get('Insurance', '1000')
         
-        # อ่าน Setting
+        special_services = config['SPECIAL_SERVICES'].get('Services', '')
+        receiver_address = config['RECEIVER'].get('Address', 'Bangkok')
+        
         step_delay = float(config['SETTINGS'].get('StepDelay', 3))
         scroll_dist = int(config['SETTINGS'].get('ScrollDistance', -20))
-        # ใช้ ElementWaitTimeout เป็นค่า default สำหรับการรอ (ถ้าจำเป็นต้องใช้)
         wait_timeout = int(config['SETTINGS'].get('ElementWaitTimeout', 15))
         
     except Exception as e: 
@@ -217,21 +291,19 @@ def run_smart_scenario(main_window, config):
     if not smart_click(main_window, "รับฝากสิ่งของ"): return
     time.sleep(step_delay)
 
-    # 2. ข้อมูลผู้ส่ง
-    process_sender_info(main_window, phone, postal) 
+    # 2. ข้อมูลผู้ส่ง (หน้าแรก)
+    process_sender_info_popup(main_window, phone, postal) 
     time.sleep(step_delay)
 
     # 3. เลือกซองจดหมาย
     if not smart_click_with_scroll(main_window, "ซองจดหมาย", scroll_dist=scroll_dist): return
     time.sleep(step_delay)
     
-    # 4. เลือกออปชั่นพิเศษ (LQ, FR, LI)
+    # 4. เลือกออปชั่นพิเศษ (LQ, FR)
     if special_options_str.strip():
         options = [opt.strip() for opt in special_options_str.split(',')]
         for opt in options:
-            if opt: 
-                log(f"...เลือก Option เสริม: {opt}")
-                smart_click(main_window, opt, timeout=2)
+            if opt: smart_click(main_window, opt, timeout=2)
     
     main_window.type_keys("{ENTER}")
     time.sleep(step_delay)
@@ -248,13 +320,11 @@ def run_smart_scenario(main_window, config):
     smart_next(main_window)
     time.sleep(step_delay)
 
-    # 7. ตรวจสอบ Popup ทับซ้อน (ถ้ามี)
+    # 7. ตรวจสอบ Popup ทับซ้อน
     for _ in range(3):
         found = False
         for child in main_window.descendants():
-            txt = child.window_text()
-            if "ทับซ้อน" in txt or "พื้นที่" in txt:
-                log("[Popup] พบแจ้งเตือนทับซ้อน -> กด 'ดำเนินการ'")
+            if "ทับซ้อน" in child.window_text() or "พื้นที่" in child.window_text():
                 smart_click(main_window, "ดำเนินการ")
                 found = True; break
         if found: break
@@ -265,7 +335,7 @@ def run_smart_scenario(main_window, config):
     if not wait_until_id_appears(main_window, "ShippingService_EMSServices", timeout=wait_timeout):
         log("[!] ไม่เจอปุ่ม EMS (แต่จะพยายามต่อ)")
 
-    # 8. กดเลือก EMS (จากเมนูหลัก)
+    # 8. กดเลือก EMS
     if click_element_by_id(main_window, "ShippingService_EMSServices"):
         log("[SUCCESS] เลือก EMS (Main) สำเร็จ")
     elif click_element_by_fuzzy_id(main_window, "EMSS"):
@@ -274,70 +344,64 @@ def run_smart_scenario(main_window, config):
         log("[ERROR] หาปุ่ม EMS ไม่เจอ")
         return
 
-    # [สำคัญ] 9. กดเลือก 'EMS ในประเทศ' ซ้ำอีกครั้งเพื่อให้ Active (กรอบส้ม)
+    # 9. กดเลือก 'EMS ในประเทศ' ซ้ำเพื่อให้ Active
     time.sleep(step_delay) 
     log("...กดเลือก 'EMS ในประเทศ' เพื่อ Activate...")
-    
-    # ใช้ ID ของการ์ดใบแรกในหน้านี้ (ShippingService_2572)
     inner_ems_id = "ShippingService_2572" 
-    
     if click_element_by_id(main_window, inner_ems_id):
         log("[SUCCESS] Activate 'EMS ในประเทศ' เรียบร้อย")
     else:
-        log(f"[WARN] ไม่เจอ ID '{inner_ems_id}' -> ลองกด Fuzzy 'ShippingService'")
+        log(f"[WARN] ไม่เจอ ID '{inner_ems_id}' -> ลองกด Fuzzy")
         click_element_by_fuzzy_id(main_window, "ShippingService")
 
     time.sleep(1)
 
-    # 10. กดปุ่มบวก (+) เพื่อใส่ประกัน (ตรวจสอบจาก Flag ใน Config)
+    # 10. ใส่ประกัน (ตาม Config)
     if add_insurance_flag.lower() == 'true':
-        log(f"...ต้องการประกัน (AddInsurance=True) -> กดปุ่มบวก ใส่ยอด {insurance_amt}...")
-        
+        log(f"...ต้องการประกัน -> กดปุ่มบวก ใส่ยอด {insurance_amt}...")
         if click_element_by_id(main_window, "CoverageButton"):
-            # รอช่องกรอกเงิน
             if wait_until_id_appears(main_window, "CoverageAmount", timeout=5):
-                log("[Popup] เจอช่องกรอกเงิน -> กำลังพิมพ์...")
-                
-                # หาช่อง CoverageAmount แล้วพิมพ์
                 for child in main_window.descendants():
                     if child.element_info.automation_id == "CoverageAmount":
                         child.click_input()
                         child.type_keys(str(insurance_amt), with_spaces=True)
                         break
-                
                 time.sleep(0.5)
-                
-                # กดถัดไปใน Popup (LocalCommand_Submit ตัวบน)
-                log("...กด 'ถัดไป' เพื่อปิด Popup...")
+                # ปิด Popup
                 submits = [c for c in main_window.descendants() if c.element_info.automation_id == "LocalCommand_Submit"]
-                # เรียงจากบนลงล่าง (Y น้อย -> มาก)
                 submits.sort(key=lambda x: x.rectangle().top)
-                
-                if submits:
-                    submits[0].click_input() # กดตัวบน (Popup)
-                    log("[SUCCESS] ปิด Popup วงเงินเรียบร้อย")
-                else:
-                    main_window.type_keys("{ENTER}")
+                if submits: submits[0].click_input()
+                else: main_window.type_keys("{ENTER}")
             else:
-                log("[ERROR] ไม่เจอช่องกรอกเงิน CoverageAmount")
+                log("[ERROR] ไม่เจอช่องกรอกเงิน")
         else:
-            log("[WARN] หาปุ่ม (+) CoverageButton ไม่เจอ (ข้ามการใส่ประกัน)")
+            log("[WARN] หาปุ่ม (+) ไม่เจอ")
     else:
-        log("[INFO] AddInsurance = False -> ข้ามการกดปุ่ม (+)")
+        log("[INFO] AddInsurance = False -> ข้าม")
 
-    # 11. กดถัดไป (Footer) เพื่อจบขั้นตอน
+    # 11. กดถัดไป (Footer)
     time.sleep(step_delay)
-    log("...กด 'ถัดไป' (Footer)...")
-    submits = [c for c in main_window.descendants() if c.element_info.automation_id == "LocalCommand_Submit"]
-    submits.sort(key=lambda x: x.rectangle().top)
-    
-    if submits:
-        submits[-1].click_input() # กดตัวล่างสุด
-        log("[SUCCESS] กดถัดไป (Footer) เรียบร้อย")
-    else:
-        main_window.type_keys("{ENTER}")
+    smart_next(main_window)
+    time.sleep(step_delay)
 
-    log("\n[SUCCESS] จบการทำงาน")
+    # --- ส่วนที่เพิ่มใหม่ ---
+
+    # 12. หน้าบริการพิเศษ
+    process_special_services(main_window, special_services)
+    time.sleep(step_delay)
+
+    # 13. หน้าข้อมูลผู้ส่ง (ข้าม)
+    process_sender_info_page(main_window)
+    time.sleep(step_delay)
+
+    # 14. หน้าข้อมูลผู้รับ (กรอกที่อยู่)
+    process_receiver_info_page(main_window, receiver_address)
+    time.sleep(step_delay)
+
+    # 15. Popup แจ้งเตือนสุดท้าย
+    handle_final_warning(main_window)
+
+    log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
 # ================= 5. เริ่มต้นโปรแกรม =================
 if __name__ == "__main__":
@@ -351,18 +415,13 @@ if __name__ == "__main__":
             log(f"Connecting to Title: {app_title} (Wait: {wait}s)")
             app = Application(backend="uia").connect(title_re=app_title, timeout=wait)
             
-            # [FIX] ดึงหน้าต่างมาเก็บไว้ในตัวแปร และสั่ง Focus/Restore
             main_window = app.top_window()
-            
             if main_window.exists():
-                # ถ้าถูกพับ (Minimize) ให้กู้คืนขึ้นมา
                 if main_window.get_show_state() == 2:
                     main_window.restore()
-                # บังคับให้เด้งมาหน้าสุด (Focus)
                 main_window.set_focus()
             
             run_smart_scenario(main_window, conf)
-            
         except Exception as e:
             log(f"Error: {e}")
             print("คำแนะนำ: ตรวจสอบว่าเปิดโปรแกรม POS ไว้หรือยัง และชื่อ Title ตรงกับใน Config หรือไม่")
