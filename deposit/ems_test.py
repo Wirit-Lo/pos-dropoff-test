@@ -16,14 +16,19 @@ def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
 def debug_dump_ui(window):
-    log("!!! หาไม่เจอ -> กำลังลิสต์ข้อความ (Debug) !!!")
+    log("!!! หาไม่เจอ -> กำลังลิสต์ ID ที่โปรแกรมมองเห็น (Debug) !!!")
     try:
-        visible_texts = []
+        visible_items = []
         for child in window.descendants():
             if child.is_visible():
+                aid = child.element_info.automation_id
                 txt = child.window_text().strip()
-                if txt: visible_texts.append(txt)
-        log(f"Text ที่เจอ: {list(set(visible_texts))}")
+                if aid: visible_items.append(f"ID: {aid}")
+                elif txt: visible_items.append(f"Text: {txt}")
+        
+        # ตัดรายการซ้ำและปริ้นท์
+        unique_items = list(set(visible_items))
+        log(f"Items ที่เจอ: {unique_items[:20]} ... (แสดงบางส่วน)")
     except: pass
 
 # ================= 2. Helper Functions =================
@@ -85,35 +90,55 @@ def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
     log(f"[X] หมดความพยายามหา '{criteria}'")
     return False
 
-# [NEW] ฟังก์ชันกดปุ่มด้วย ID (แม่นยำที่สุด)
-def click_element_by_id(window, auto_id, timeout=5):
-    log(f"...พยายามกดปุ่มด้วย ID: '{auto_id}'...")
+# [UPDATED] ฟังก์ชันกดปุ่มด้วย ID แบบยืดหยุ่น (Fuzzy Match)
+def click_element_by_fuzzy_id(window, keyword_in_id, timeout=5):
+    log(f"...ค้นหาปุ่มที่มี ID มีคำว่า: '{keyword_in_id}'...")
     start = time.time()
     while time.time() - start < timeout:
         try:
-            # ค้นหา Element ที่มี AutomationId ตรงเป๊ะๆ
+            # วนหา Element ทั้งหมด
             for child in window.descendants():
-                if child.element_info.automation_id == auto_id and child.is_visible():
+                aid = child.element_info.automation_id
+                if child.is_visible() and aid and keyword_in_id in aid:
+                    log(f"[/] เจอ ID: '{aid}' -> กำลังกด...")
                     child.click_input()
-                    log(f"[/] กดปุ่ม ID '{auto_id}' สำเร็จ!")
                     return True
         except: pass
         time.sleep(0.5)
     
-    log(f"[X] หาปุ่ม ID '{auto_id}' ไม่เจอ")
+    log(f"[X] หาปุ่มที่มี ID '{keyword_in_id}' ไม่เจอ")
     return False
 
-def wait_until_id_appears(window, auto_id, timeout=10):
-    log(f"...รอโหลดหน้าจอ (รอ ID: {auto_id})...")
+# [NEW] ฟังก์ชันกดที่พิกัด (ไม้ตายสุดท้าย)
+def click_by_coordinate(window, x, y):
+    log(f"...[ไม้ตาย] สั่งกดที่พิกัด ({x}, {y})...")
+    try:
+        window.set_focus()
+        # คำนวณตำแหน่งสัมพัทธ์หรือกด Absolute เลยก็ได้
+        # ในที่นี้ใช้ Absolute coordinate จากที่ Debug มา
+        mouse.click(coords=(x, y))
+        log("[/] กดพิกัดเรียบร้อย")
+        return True
+    except Exception as e:
+        log(f"[!] กดพิกัดล้มเหลว: {e}")
+        return False
+
+def wait_until_service_page_ready(window, timeout=10):
+    log("...รอหน้าบริการหลักโหลด (เช็คจากปุ่ม ShippingService)...")
     start = time.time()
     while time.time() - start < timeout:
         try:
+            # เช็คว่ามีปุ่มใดๆ ที่ขึ้นต้นด้วย ShippingService โผล่มาไหม
             for child in window.descendants():
-                if child.element_info.automation_id == auto_id and child.is_visible():
-                    log(f"[/] หน้าจอพร้อมแล้ว (เจอ {auto_id})")
+                aid = child.element_info.automation_id
+                if aid and "ShippingService" in aid and child.is_visible():
+                    log(f"[/] หน้าจอพร้อมแล้ว (เจอ {aid})")
                     return True
         except: pass
         time.sleep(1)
+    
+    log("[!] หมดเวลารอ (ไม่เจอปุ่มบริการใดๆ)")
+    debug_dump_ui(window) # ปริ้นท์ Debug ให้ดูว่าเห็นอะไรบ้าง
     return False
 
 # ================= 3. Input Helpers =================
@@ -145,7 +170,7 @@ def process_sender_info(window, phone_number, default_postal):
                     break 
         except: pass
         
-        # กรอกเบอร์โทร (แบบ Scroll หา)
+        # กรอกเบอร์โทร
         found_phone = False
         for i in range(3):
             try:
@@ -163,7 +188,6 @@ def process_sender_info(window, phone_number, default_postal):
         smart_next(window)
 
 def handle_prohibited_items(window):
-    # ใช้ wait loop สั้นๆ เช็คหน้าสิ่งของต้องห้าม
     for _ in range(5):
         try:
             for child in window.descendants():
@@ -232,16 +256,21 @@ def run_smart_scenario(main_window, config):
     # --- เข้าสู่ขั้นตอนเลือก EMS ---
     log("...กำลังไปที่หน้าบริการหลัก...")
     
-    # 1. รอให้ปุ่ม EMS โผล่มา (เช็คจาก ID)
-    wait_until_id_appears(main_window, "ShippingService_EMSS", timeout=10)
-
-    # 2. กดปุ่ม EMS ด้วย ID (ชัวร์ที่สุด)
-    if click_element_by_id(main_window, "ShippingService_EMSS"):
-        log("[SUCCESS] เลือกบริการ EMS เรียบร้อย")
+    # 1. รอให้หน้าจอโหลดเสร็จ (เช็คว่ามีปุ่ม Service โผล่มาหรือยัง)
+    if not wait_until_service_page_ready(main_window, timeout=10):
+        log("[!] หาปุ่มบริการไม่เจอ อาจจะยังอยู่หน้าเดิม หรือหน้าจอโหลดไม่เสร็จ")
+    
+    # 2. ลองกดด้วย Fuzzy ID (หาปุ่มที่มีคำว่า "EMSS" หรือ "EMS" ใน ID)
+    if click_element_by_fuzzy_id(main_window, "EMSS"):
+        log("[SUCCESS] เลือกบริการ EMS เรียบร้อย (เจอจาก ID)")
+        
+    elif click_element_by_fuzzy_id(main_window, "EMS"): # ลองหาแค่ EMS
+        log("[SUCCESS] เลือกบริการ EMS เรียบร้อย (เจอจาก ID แบบสั้น)")
+        
     else:
-        # Fallback: ถ้า ID เปลี่ยน หรือหาไม่เจอ ลองหาคำว่า "บริการ" แทน
-        log("[!] ไม่เจอ ID ลองหาคำว่า 'อีเอ็มเอส' แทน")
-        smart_click_with_scroll(main_window, "อีเอ็มเอส")
+        # 3. [ไม้ตาย] ถ้าหา ID ไม่เจอเลย ให้กดที่พิกัดเดิมที่เราเคยเห็น
+        log("[!] ไม่เจอ ID -> ใช้ไม้ตาย กดที่พิกัด (216, 278)")
+        click_by_coordinate(main_window, 216, 278)
 
     log("\n[SUCCESS] จบการทำงาน")
     print(">>> กด Enter เพื่อปิดโปรแกรม... <<<")
