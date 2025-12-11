@@ -1,103 +1,335 @@
+import configparser
+import os
 import time
-from pywinauto import Desktop
+import datetime
+from pywinauto.application import Application
+from pywinauto import mouse
 
-def main():
-    print("="*80)
-    print("   UI ELEMENT SCANNER - สแกนหา ID ของปุ่มและช่องกรอกข้อมูล   ")
-    print("="*80)
+# ================= 1. ส่วนจัดการ Config & Log =================
+def load_config(filename='config.ini'):
+    """โหลดค่าจากไฟล์ config.ini"""
+    config = configparser.ConfigParser()
+    if not os.path.exists(filename): 
+        print(f"[Error] ไม่พบไฟล์ {filename} กรุณาสร้างไฟล์ก่อน")
+        return None
+    config.read(filename, encoding='utf-8')
+    return config
 
-    # 1. ค้นหาหน้าต่าง POS อัตโนมัติ
-    print("\n[Step 1] กำลังค้นหาหน้าต่างโปรแกรม...")
-    desktop = Desktop(backend="uia")
-    windows = desktop.windows()
-    
-    target_window = None
-    for w in windows:
-        if w.is_visible():
-            txt = w.window_text()
-            # กรองหาชื่อที่น่าจะเป็น POS (แก้ตรงนี้ได้ถ้าชื่อไม่ตรง)
-            if "Escher" in txt or "Retail" in txt or "POS" in txt:
-                target_window = w
-                print(f" -> เจอเป้าหมาย: '{txt}'")
-                break
-    
-    if not target_window:
-        print("\n[!] ไม่พบหน้าต่าง POS (กรุณาเปิดโปรแกรมทิ้งไว้ก่อนรัน)")
-        print("    รายชื่อหน้าต่างที่เจอในเครื่อง:")
-        for w in windows:
-            if w.is_visible() and w.window_text().strip():
-                print(f"    - {w.window_text()}")
+def log(message):
+    """แสดงผลการทำงานพร้อมเวลา"""
+    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
+
+def debug_dump_ui(window):
+    """(Debug) ลิสต์รายการ ID บนหน้าจอเมื่อหาปุ่มไม่เจอ"""
+    log("!!! หาไม่เจอ -> กำลังลิสต์ ID ที่โปรแกรมมองเห็น (Debug) !!!")
+    try:
+        visible_items = []
+        for child in window.descendants():
+            if child.is_visible():
+                aid = child.element_info.automation_id
+                if aid: visible_items.append(f"ID: {aid}")
+        log(f"Items ที่เจอ: {list(set(visible_items))[:20]}...")
+    except: pass
+
+# ================= 2. ฟังก์ชันช่วยเหลือ (Scroll, Click) =================
+def force_scroll_down(window, scroll_dist=-5):
+    try:
+        window.set_focus()
+        rect = window.rectangle()
+        # เลื่อนเมาส์ไปจุดที่ปลอดภัย (ขวา 72%, กลางจอ) แล้ว Scroll
+        scrollbar_x = rect.left + int(rect.width() * 0.72)
+        scrollbar_y = rect.top + int(rect.height() * 0.5)
+        mouse.click(coords=(scrollbar_x, scrollbar_y))
+        time.sleep(0.2)
+        mouse.scroll(coords=(scrollbar_x, scrollbar_y), wheel_dist=scroll_dist)
+        time.sleep(0.8)
+    except: pass
+
+def smart_click(window, criteria_list, timeout=5):
+    """ค้นหาและกดปุ่มจากชื่อ (Text)"""
+    if isinstance(criteria_list, str): criteria_list = [criteria_list]
+    start = time.time()
+    while time.time() - start < timeout:
+        for criteria in criteria_list:
+            try:
+                for child in window.descendants():
+                    if child.is_visible() and criteria in child.window_text().strip():
+                        child.click_input()
+                        log(f"[/] กดปุ่ม '{criteria}' สำเร็จ")
+                        return True
+            except: pass
+        time.sleep(0.3)
+    return False
+
+def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
+    """ค้นหาปุ่มจากชื่อแบบมีการเลื่อนหน้าจอ (Scroll)"""
+    log(f"...ค้นหา '{criteria}' (Scroll Mode)...")
+    for i in range(max_scrolls + 1):
+        found = None
+        try:
+            for child in window.descendants():
+                if child.is_visible() and criteria in child.window_text():
+                    found = child
+                    break
+        except: pass
+
+        if found:
+            try:
+                elem_rect = found.rectangle()
+                win_rect = window.rectangle()
+                if elem_rect.bottom >= win_rect.bottom - 70:
+                    force_scroll_down(window, -3)
+                    time.sleep(0.5)
+                    continue 
+                found.click_input()
+                log(f"   [/] เจอและกด '{criteria}' สำเร็จ")
+                return True
+            except: pass
+        
+        if i < max_scrolls:
+            force_scroll_down(window, scroll_dist)
+    return False
+
+def click_element_by_id(window, exact_id, timeout=5, index=0):
+    """กดปุ่มด้วย AutomationID แบบระบุชื่อเป๊ะๆ (แม่นยำที่สุด)"""
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            found_elements = []
+            for child in window.descendants():
+                if child.element_info.automation_id == exact_id and child.is_visible():
+                    found_elements.append(child)
+            
+            if len(found_elements) > index:
+                found_elements[index].click_input()
+                log(f"[/] กดปุ่ม ID '{exact_id}' สำเร็จ!")
+                return True
+        except: pass
+        time.sleep(0.5)
+    return False
+
+def click_element_by_fuzzy_id(window, keyword, timeout=5):
+    """กดปุ่มด้วย AutomationID แบบค้นหาบางส่วน (Fuzzy)"""
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            for child in window.descendants():
+                aid = child.element_info.automation_id
+                if child.is_visible() and aid and keyword in aid:
+                    child.click_input()
+                    log(f"[/] เจอ Fuzzy ID: '{aid}' -> กดสำเร็จ")
+                    return True
+        except: pass
+        time.sleep(0.5)
+    return False
+
+def wait_until_id_appears(window, exact_id, timeout=10):
+    """รอจนกว่า ID ที่ระบุจะปรากฏบนหน้าจอ"""
+    log(f"...รอโหลด ID: {exact_id}...")
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            for child in window.descendants():
+                if child.element_info.automation_id == exact_id and child.is_visible():
+                    return True
+        except: pass
+        time.sleep(1)
+    return False
+
+# ================= 3. ฟังก์ชัน Input =================
+def smart_input_weight(window, value):
+    try:
+        edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
+        if edits:
+            edits[0].click_input()
+            edits[0].type_keys(str(value), with_spaces=True)
+            return True
+    except: pass
+    window.type_keys(str(value), with_spaces=True)
+    return True
+
+def smart_next(window):
+    if not smart_click(window, "ถัดไป", timeout=2):
+        window.type_keys("{ENTER}")
+
+def process_sender_info(window, phone, postal):
+    if smart_click(window, "อ่านบัตรประชาชน", timeout=3): 
+        time.sleep(1.5) 
+        try:
+            edits = window.descendants(control_type="Edit")
+            for edit in edits:
+                if "รหัสไปรษณีย์" in edit.element_info.name:
+                    if not edit.get_value():
+                        edit.click_input()
+                        edit.type_keys(str(postal), with_spaces=True)
+                    break 
+        except: pass
+        
+        found_phone = False
+        for _ in range(3):
+            try:
+                for edit in window.descendants(control_type="Edit"):
+                    if "หมายเลขโทรศัพท์" in edit.element_info.name:
+                        edit.click_input()
+                        edit.type_keys(str(phone), with_spaces=True)
+                        found_phone = True
+                        break
+            except: pass
+            if found_phone: break
+            force_scroll_down(window, -5)
+        smart_next(window)
+
+def handle_prohibited_items(window):
+    for _ in range(5):
+        try:
+            for child in window.descendants():
+                if "สิ่งของต้องห้าม" in child.window_text():
+                    window.type_keys("{RIGHT}{RIGHT}{ENTER}")
+                    return
+        except: pass
+        time.sleep(0.5)
+
+# ================= 4. Workflow หลัก =================
+def run_smart_scenario(main_window, config):
+    try:
+        # อ่านค่า Config
+        weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
+        postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
+        phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
+        insurance_amt = config['DEPOSIT_ENVELOPE'].get('Insurance', '1000')
+        step_delay = float(config['SETTINGS'].get('StepDelay', 0.8))
+        scroll_dist = int(config['SETTINGS'].get('ScrollDistance', -5))
+    except: 
+        log("[Error] อ่าน Config ไม่สำเร็จ")
         return
 
-    # 2. สแกนหาปุ่มและลิสต์ไอเท็ม
-    print(f"\n[Step 2] กำลังดึงข้อมูลปุ่มและช่องกรอกทั้งหมดใน '{target_window.window_text()}'...")
-    print("(อาจใช้เวลาสักครู่...)\n")
+    log(f"--- เริ่มต้นการทำงาน ---")
+    time.sleep(0.5)
 
-    try:
-        # ดึง Element ที่น่าสนใจ
-        # เราเน้น Button (ปุ่ม), Edit (ช่องกรอก), Image (รูปภาพ/ไอคอน), Text (ข้อความ)
-        buttons = target_window.descendants(control_type="Button")
-        edits = target_window.descendants(control_type="Edit")
-        images = target_window.descendants(control_type="Image")
+    # 1. กดรับฝาก
+    if not smart_click(main_window, "รับฝากสิ่งของ"): return
+    time.sleep(step_delay)
+
+    # 2. ข้อมูลผู้ส่ง
+    process_sender_info(main_window, phone, postal) 
+    time.sleep(step_delay)
+
+    # 3. เลือกซองจดหมาย
+    if not smart_click_with_scroll(main_window, "ซองจดหมาย", scroll_dist=scroll_dist): return
+    time.sleep(step_delay)
+    
+    main_window.type_keys("{ENTER}")
+    time.sleep(step_delay)
+
+    # 4. สิ่งของต้องห้าม & น้ำหนัก
+    handle_prohibited_items(main_window)
+    smart_input_weight(main_window, weight)
+    smart_next(main_window)
+    
+    # 5. รหัส ปณ. ปลายทาง
+    time.sleep(1)
+    try: main_window.type_keys(str(postal), with_spaces=True)
+    except: pass
+    smart_next(main_window)
+    time.sleep(step_delay)
+
+    # 6. ตรวจสอบ Popup ทับซ้อน (ถ้ามี)
+    for _ in range(3):
+        found = False
+        for child in main_window.descendants():
+            txt = child.window_text()
+            if "ทับซ้อน" in txt or "พื้นที่" in txt:
+                log("[Popup] พบแจ้งเตือนทับซ้อน -> กด 'ดำเนินการ'")
+                smart_click(main_window, "ดำเนินการ")
+                found = True; break
+        if found: break
+        time.sleep(0.5)
+
+    # --- เลือก EMS และ ใส่ประกัน ---
+    log("...รอหน้าบริการหลัก...")
+    if not wait_until_id_appears(main_window, "ShippingService_EMSServices", timeout=10):
+        log("[!] ไม่เจอปุ่ม EMS (แต่จะพยายามต่อ)")
+
+    # 7. กดเลือก EMS (จากเมนูหลัก)
+    if click_element_by_id(main_window, "ShippingService_EMSServices"):
+        log("[SUCCESS] เลือก EMS (Main) สำเร็จ")
+    elif click_element_by_fuzzy_id(main_window, "EMSS"):
+        log("[SUCCESS] เลือก EMS (Fuzzy) สำเร็จ")
+    else:
+        log("[ERROR] หาปุ่ม EMS ไม่เจอ")
+        return
+
+    # [สำคัญ] 8. กดเลือก 'EMS ในประเทศ' ซ้ำอีกครั้งเพื่อให้ Active (กรอบส้ม)
+    time.sleep(2) 
+    log("...กดเลือก 'EMS ในประเทศ' เพื่อ Activate...")
+    
+    # ใช้ ID ของการ์ดใบแรกในหน้านี้ (ShippingService_2572)
+    inner_ems_id = "ShippingService_2572" 
+    
+    if click_element_by_id(main_window, inner_ems_id):
+        log("[SUCCESS] Activate 'EMS ในประเทศ' เรียบร้อย")
+    else:
+        log(f"[WARN] ไม่เจอ ID '{inner_ems_id}' -> ลองกด Fuzzy 'ShippingService'")
+        click_element_by_fuzzy_id(main_window, "ShippingService")
+
+    time.sleep(1)
+
+    # 9. กดปุ่มบวก (+) เพื่อใส่ประกัน
+    log(f"...กดปุ่มบวก (+) ใส่วงเงินประกัน {insurance_amt}...")
+    if click_element_by_id(main_window, "CoverageButton"):
         
-        all_elements = []
-        for b in buttons: all_elements.append(("Button", b))
-        for e in edits: all_elements.append(("Edit", e))
-        for i in images: all_elements.append(("Image", i))
+        # 10. รอช่องกรอกเงิน
+        if wait_until_id_appears(main_window, "CoverageAmount", timeout=5):
+            log("[Popup] เจอช่องกรอกเงิน -> กำลังพิมพ์...")
+            
+            # หาช่อง CoverageAmount แล้วพิมพ์
+            for child in main_window.descendants():
+                if child.element_info.automation_id == "CoverageAmount":
+                    child.click_input()
+                    child.type_keys(str(insurance_amt), with_spaces=True)
+                    break
+            
+            time.sleep(0.5)
+            
+            # 11. กดถัดไปใน Popup (LocalCommand_Submit ตัวบน)
+            log("...กด 'ถัดไป' เพื่อปิด Popup...")
+            submits = [c for c in main_window.descendants() if c.element_info.automation_id == "LocalCommand_Submit"]
+            # เรียงจากบนลงล่าง (Y น้อย -> มาก)
+            submits.sort(key=lambda x: x.rectangle().top)
+            
+            if submits:
+                submits[0].click_input() # กดตัวบน (Popup)
+                log("[SUCCESS] ปิด Popup วงเงินเรียบร้อย")
+            else:
+                main_window.type_keys("{ENTER}")
+        else:
+            log("[ERROR] ไม่เจอช่องกรอกเงิน CoverageAmount")
+    else:
+        log("[WARN] หาปุ่ม (+) CoverageButton ไม่เจอ (ข้ามการใส่ประกัน)")
 
-        # กรองเฉพาะที่มองเห็น (Visible)
-        visible_elements = [x for x in all_elements if x[1].is_visible()]
+    # 12. กดถัดไป (Footer) เพื่อจบขั้นตอน
+    time.sleep(1)
+    log("...กด 'ถัดไป' (Footer)...")
+    submits = [c for c in main_window.descendants() if c.element_info.automation_id == "LocalCommand_Submit"]
+    submits.sort(key=lambda x: x.rectangle().top)
+    
+    if submits:
+        submits[-1].click_input() # กดตัวล่างสุด
+        log("[SUCCESS] กดถัดไป (Footer) เรียบร้อย")
+    else:
+        main_window.type_keys("{ENTER}")
 
-        # หัวตาราง
-        header = f"{'IDX':<4} | {'TYPE':<8} | {'TEXT (ชื่อ/ค่า)':<20} | {'AUTOMATION_ID':<30} | {'POS (x,y)'}"
-        print("-" * len(header))
-        print(header)
-        print("-" * len(header))
+    log("\n[SUCCESS] จบการทำงาน")
+    input(">>> กด Enter เพื่อปิด... <<<")
 
-        found_count = 0
-        for idx, (etype, elem) in enumerate(visible_elements):
-            try:
-                # ดึงค่าต่างๆ
-                text = elem.window_text().strip()
-                auto_id = elem.element_info.automation_id
-                rect = elem.rectangle()
-                pos_str = f"({rect.left}, {rect.top})"
-                
-                # ถ้าไม่มีชื่อ ลองดูชื่อของลูก (Child) เผื่อเป็นไอคอนที่มี text ซ่อน
-                if not text and etype == "Button":
-                    children = elem.children()
-                    for child in children:
-                        child_txt = child.window_text().strip()
-                        if child_txt:
-                            text = f"[{child_txt}]"
-                            break
-                
-                # ตัดข้อความยาวๆ
-                display_text = (text[:18] + '..') if len(text) > 18 else text
-                display_id = (auto_id[:28] + '..') if len(auto_id) > 28 else auto_id
-
-                # เน้นรายการที่น่าสนใจ (เช่น ช่องกรอกเงิน หรือ ปุ่มบวก)
-                highlight = ""
-                if etype == "Edit": highlight = " <--- ช่องกรอก?"
-                if text == "+" or "Plus" in auto_id or "Add" in auto_id: highlight = " <--- ปุ่มบวก?"
-                
-                print(f"{idx:<4} | {etype:<8} | {display_text:<20} | {display_id:<30} | {pos_str} {highlight}")
-                found_count += 1
-                
-            except Exception as e:
-                pass
-
-        print("-" * len(header))
-        print(f"\nสรุป: เจอทั้งหมด {found_count} รายการ")
-        print("วิธีดู:")
-        print("1. มองหา Type 'Edit' สำหรับช่องกรอกเงิน")
-        print("2. มองหา Text '+' หรือ ID ที่มีคำว่า 'Add' สำหรับปุ่มบวก")
-        print("3. จด AutomationId ไปใส่ในโค้ด")
-        
-    except Exception as e:
-        print(f"Error scanning window: {e}")
-
-    input("\nกด Enter เพื่อปิดโปรแกรม...")
-
+# ================= 5. เริ่มต้นโปรแกรม =================
 if __name__ == "__main__":
-    main()
+    conf = load_config()
+    if conf:
+        log("Connecting...")
+        try:
+            wait = int(conf['SETTINGS'].get('ConnectTimeout', 10))
+            app = Application(backend="uia").connect(title_re=conf['APP']['WindowTitle'], timeout=wait)
+            run_smart_scenario(app.top_window(), conf)
+        except Exception as e:
+            log(f"Error: {e}")
