@@ -198,6 +198,34 @@ def handle_prohibited_items(window):
 
 # --- ฟังก์ชันใหม่ (New Steps) ---
 
+def check_error_popup(window):
+    """[NEW] เช็คว่ามี Popup แจ้งเตือน/Error เด้งขึ้นมาไหม"""
+    time.sleep(0.5) # รอ Animation นิดนึง
+    try:
+        # หา Window ที่เป็น Modal (Popup)
+        for child in window.descendants(control_type="Window"):
+            if "แจ้งเตือน" in child.window_text() or "Warning" in child.window_text():
+                log(f"[WARN] พบแจ้งเตือน: {child.window_text()}")
+                # ลองกดปุ่ม ตกลง หรือ ปิด
+                if smart_click(window, ["ตกลง", "OK", "ปิด", "Close"], timeout=2):
+                    log("   [/] ปิดแจ้งเตือนแล้ว")
+                    return True
+                else:
+                    window.type_keys("{ENTER}") # ลองกด Enter
+                    return True
+        
+        # เช็ค Text ในหน้าจอปัจจุบันเผื่อไม่ใช่ Window แยก
+        if wait_for_text(window, "ไม่มีผลลัพธ์", timeout=1):
+             log("[WARN] พบข้อความ 'ไม่มีผลลัพธ์'")
+             # ถ้าไม่มีผลลัพธ์ อาจจะต้องกด 'กลับ' หรือ 'ตกลง'
+             if smart_click(window, ["ตกลง", "OK", "กลับ"], timeout=2):
+                 return True
+             window.type_keys("{ESC}") # ลองกด ESC
+             return True
+
+    except: pass
+    return False
+
 def process_special_services(window, services_str):
     log("--- หน้า: บริการพิเศษ ---")
     if wait_for_text(window, "บริการพิเศษ", timeout=5):
@@ -212,7 +240,7 @@ def process_sender_info_page(window):
     smart_next(window)
 
 def process_receiver_address_selection(window, address_keyword):
-    """กรอกคำค้นหา และเลือกที่อยู่รายการแรก"""
+    """กรอกคำค้นหา และเลือกที่อยู่ (เช็ค Error ก่อนกด)"""
     log(f"--- หน้า: ค้นหาที่อยู่ ({address_keyword}) ---")
     if wait_for_text(window, "ข้อมูลผู้รับ", timeout=5):
         time.sleep(1)
@@ -231,9 +259,17 @@ def process_receiver_address_selection(window, address_keyword):
                 edits[1].type_keys(str(address_keyword), with_spaces=True)
         except: pass
         
-        # 2. รอรายการเด้งขึ้นมา แล้วเลือกอันแรก
+        # [NEW] รอเช็ค Error Popup ก่อน (เช่น 'ไม่มีผลลัพธ์')
+        log("...รอตรวจสอบผลลัพธ์/แจ้งเตือน...")
+        time.sleep(2) 
+        if check_error_popup(window):
+            log("[!] มี Error Popup -> ข้ามการเลือกรายการ (จะไปกรอกเองหน้าถัดไป)")
+            # ถ้ามี Error พอกดปิดแล้วมันอาจจะยังอยู่หน้าเดิม ต้องกดถัดไปเพื่อไปกรอกเอง
+            smart_next(window)
+            return
+
+        # 2. ถ้าไม่มี Error รอรายการเด้งขึ้นมา แล้วเลือกอันแรก
         log("...รอกล่องรายการที่อยู่...")
-        time.sleep(2) # รอโหลดรายการ
         try:
             # หา ListItem ตัวแรกที่มองเห็น
             list_items = [i for i in window.descendants(control_type="ListItem") if i.is_visible()]
@@ -244,48 +280,36 @@ def process_receiver_address_selection(window, address_keyword):
                 log("[!] ไม่เจอรายการที่อยู่ -> ข้ามการเลือก")
         except: pass
         
-        # 3. หลังจากเลือกแล้ว มันมักจะเด้งไปหน้าถัดไปเอง หรือต้องกดถัดไป
-        # แต่ใน Flow ปกติ ถ้าเลือกจาก List มันจะไปหน้า Detail เลย
         time.sleep(1)
 
 def process_receiver_details_form(window, fname, lname, phone):
-    """หน้า: กรอกรายละเอียดผู้รับ (ชื่อ, นามสกุล, เบอร์)"""
+    """หน้า: กรอกรายละเอียดผู้รับ"""
     log("--- หน้า: รายละเอียดผู้รับ ---")
     # รอให้แน่ใจว่าอยู่หน้านี้
     if not wait_for_text(window, "คำนำหน้า", timeout=5):
         log("[WARN] อาจจะยังไม่เข้าหน้ากรอกรายละเอียด")
 
     time.sleep(1)
+    # [NEW] เช็ค Error อีกที เผื่อหลุดมาจากหน้าก่อน
+    check_error_popup(window)
+
     try:
-        # กรอกชื่อ (FirstName)
         edits = window.descendants(control_type="Edit")
-        # เดาว่าช่องแรกๆ คือ ชื่อ/นามสกุล
-        # ปกติ: [0]=คำนำหน้า(ถ้ามี), [1]=ชื่อ, [2]=กลาง, [3]=นามสกุล
-        # ลองหาจาก AutomationID หรือ Label ถ้าทำได้ แต่ถ้าไม่มีใช้ Index
+        empty_edits = [e for e in edits if e.is_visible()]
         
-        # กลยุทธ์: หา Edit ที่ว่างอยู่
-        empty_edits = [e for e in edits if e.is_visible()] # เอาทั้งหมดก่อน
-        
-        # พยายามใส่ชื่อ (ช่องที่ 2 หรือหาที่มีคำว่า Name)
-        # สมมติช่องแรกเป็นคำนำหน้า ข้ามไป
         if len(empty_edits) >= 2:
             log(f"...กรอกชื่อ: {fname}")
-            empty_edits[0].click_input() # ลองช่องแรกก่อน (บางทีไม่มีคำนำหน้าแบบ Textbox)
+            empty_edits[0].click_input()
             empty_edits[0].type_keys(fname, with_spaces=True)
             
             log(f"...กรอกนามสกุล: {lname}")
-            # ช่องถัดไป หรือช่องที่ 3
-            # ถ้ามีช่องกลาง (Middle Name) อาจจะเป็น index 2
-            # ลองกด Tab ไปเรื่อยๆ หรือใช้ Index
-            empty_edits[0].type_keys("{TAB}") # ไปช่องกลาง
-            empty_edits[0].type_keys("{TAB}") # ไปช่องนามสกุล
+            empty_edits[0].type_keys("{TAB}")
+            empty_edits[0].type_keys("{TAB}")
             window.type_keys(lname, with_spaces=True)
         
-        # เลื่อนลงหาเบอร์โทร
         log("...เลื่อนหาเบอร์โทร...")
         force_scroll_down(window, -10)
         
-        # หาช่องที่มีคำว่า 'โทร' หรือช่องท้ายๆ
         found_phone = False
         for _ in range(3):
             edits = window.descendants(control_type="Edit")
@@ -300,7 +324,7 @@ def process_receiver_details_form(window, fname, lname, phone):
             force_scroll_down(window, -5)
             
         if not found_phone:
-            log("[!] หาช่องเบอร์ไม่เจอ -> ลองกด Tab ไปเรื่อยๆ แล้วพิมพ์")
+            log("[!] หาช่องเบอร์ไม่เจอ -> ลองกด Tab...")
             window.type_keys("{TAB}"*3)
             window.type_keys(phone, with_spaces=True)
 
@@ -310,7 +334,6 @@ def process_receiver_details_form(window, fname, lname, phone):
     smart_next(window)
 
 def process_receipt_info(window):
-    """หน้า: คำแนะนำใบเสร็จ (กด Enter 2 ครั้ง)"""
     log("--- หน้า: คำแนะนำใบเสร็จ ---")
     wait_for_text(window, "ใบเสร็จ", timeout=5)
     log("...กด Enter x2...")
@@ -320,16 +343,12 @@ def process_receipt_info(window):
     time.sleep(1)
 
 def process_repeat_transaction(window, should_repeat):
-    """หน้า: ทำรายการซ้ำ (ใช่/ไม่)"""
     log("--- หน้า: ทำรายการซ้ำ ---")
     if wait_for_text(window, "ทำรายการซ้ำ", timeout=5) or wait_for_text(window, "ซ้ำ", timeout=2):
         target = "ใช่" if should_repeat.lower() in ['true', 'yes', 'on'] else "ไม่"
         log(f"...เลือก: {target}...")
         
-        # ลองหาปุ่มที่มีคำว่า ใช่/ไม่
         if not smart_click(window, target):
-            # Fallback: ใช้ลูกศรซ้ายขวาเลือก (ปกติ "ใช่" คือ Default หรืออยู่ขวา?)
-            # ถ้าเลือก "ไม่" ลองกด ESC หรือลูกศร
             if target == "ไม่":
                 window.type_keys("{LEFT}{ENTER}")
             else:
@@ -340,18 +359,16 @@ def process_repeat_transaction(window, should_repeat):
 # ================= 4. Workflow หลัก =================
 def run_smart_scenario(main_window, config):
     try:
-        # Config เดิม
+        # Load Config
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
         postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
-        insurance_amt = config['DEPOSIT_ENVELOPE'].get('Insurance', '1000')
+        special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
+        
         add_insurance_flag = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
-        step_delay = float(config['SETTINGS'].get('StepDelay', 0.8))
-        scroll_dist = int(config['SETTINGS'].get('ScrollDistance', -5))
+        insurance_amt = config['DEPOSIT_ENVELOPE'].get('Insurance', '1000')
         
-        # Config ใหม่
         special_services = config['SPECIAL_SERVICES'].get('Services', '')
-        
         addr_keyword = config['RECEIVER'].get('AddressKeyword', '99/99')
         
         rcv_fname = config['RECEIVER_DETAILS'].get('FirstName', 'A')
@@ -360,6 +377,10 @@ def run_smart_scenario(main_window, config):
         
         repeat_flag = config['REPEAT_TRANSACTION'].get('Repeat', 'False')
         
+        step_delay = float(config['SETTINGS'].get('StepDelay', 0.8))
+        scroll_dist = int(config['SETTINGS'].get('ScrollDistance', -5))
+        wait_timeout = int(config['SETTINGS'].get('ElementWaitTimeout', 15))
+        
     except: 
         log("[Error] อ่าน Config ไม่สำเร็จ")
         return
@@ -367,13 +388,16 @@ def run_smart_scenario(main_window, config):
     log(f"--- เริ่มต้นการทำงาน ---")
     time.sleep(0.5)
 
-    # 1-7 ขั้นตอนเดิม (รับฝาก -> ผู้ส่ง -> ซอง -> ของต้องห้าม -> น้ำหนัก -> ปลายทาง -> Popup)
+    # 1-7 ขั้นตอนเดิม
     if not smart_click(main_window, "รับฝากสิ่งของ"): return
     time.sleep(step_delay)
     process_sender_info_popup(main_window, phone, postal) 
     time.sleep(step_delay)
     if not smart_click_with_scroll(main_window, "ซองจดหมาย", scroll_dist=scroll_dist): return
     time.sleep(step_delay)
+    if special_options_str.strip():
+        for opt in special_options_str.split(','):
+            if opt: smart_click(main_window, opt.strip(), timeout=2)
     main_window.type_keys("{ENTER}")
     time.sleep(step_delay)
     handle_prohibited_items(main_window)
@@ -395,7 +419,7 @@ def run_smart_scenario(main_window, config):
 
     # 8-10 เลือก EMS & ประกัน
     log("...รอหน้าบริการหลัก...")
-    wait_until_id_appears(main_window, "ShippingService_EMSServices", timeout=10)
+    wait_until_id_appears(main_window, "ShippingService_EMSServices", timeout=wait_timeout)
     if not click_element_by_id(main_window, "ShippingService_EMSServices"):
         if not click_element_by_fuzzy_id(main_window, "EMSS"): return
 
