@@ -7,6 +7,7 @@ from pywinauto import mouse
 
 # ================= 1. ส่วนจัดการ Config & Log =================
 def load_config(filename='config.ini'):
+    """โหลดค่าจากไฟล์ config.ini"""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(script_dir, filename)
     config = configparser.ConfigParser()
@@ -32,14 +33,12 @@ def debug_dump_ui(window):
 
 # ================= 2. ฟังก์ชันช่วยเหลือ =================
 def force_scroll_down(window, scroll_dist=-5):
-    """เลื่อนหน้าจอ (แก้ไขพิกัดคลิกให้ปลอดภัยขึ้น)"""
+    """เลื่อนหน้าจอ (คลิกกลางจอเพื่อความชัวร์)"""
     try:
         window.set_focus()
         rect = window.rectangle()
-        # เปลี่ยนจุดคลิกมาที่ "กลางจอ" เพื่อเลี่ยงการกดโดน Header ด้านบน
         center_x = rect.left + int(rect.width() * 0.5)
         center_y = rect.top + int(rect.height() * 0.5)
-        
         mouse.click(coords=(center_x, center_y))
         time.sleep(0.2)
         mouse.scroll(coords=(center_x, center_y), wheel_dist=scroll_dist)
@@ -202,9 +201,10 @@ def handle_prohibited_items(window):
         except: pass
         time.sleep(0.5)
 
-# --- ฟังก์ชันใหม่ (New Steps) ---
+# --- ฟังก์ชันใหม่ ---
 
 def check_error_popup(window):
+    """เช็ค Popup แจ้งเตือน"""
     time.sleep(0.5) 
     try:
         for child in window.descendants(control_type="Window"):
@@ -239,9 +239,11 @@ def process_sender_info_page(window):
     smart_next(window)
 
 def process_receiver_address_selection(window, address_keyword):
+    """กรอกคำค้นหา และเลือกที่อยู่"""
     log(f"--- หน้า: ค้นหาที่อยู่ ({address_keyword}) ---")
     if wait_for_text(window, "ข้อมูลผู้รับ", timeout=5):
         time.sleep(1)
+        # 1. กรอกคำค้นหา
         try:
             edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
             filled = False
@@ -263,18 +265,20 @@ def process_receiver_address_selection(window, address_keyword):
             smart_next(window)
             return
 
+        # 2. รอรายการเด้งขึ้นมา แล้วเลือกอันแรก
         log("...รอกล่องรายการที่อยู่...")
         found_item = False
         for _ in range(5):
             try:
-                # กรอง ListItem ที่อยู่ด้านบนออก
                 all_list_items = [i for i in window.descendants(control_type="ListItem") if i.is_visible()]
-                valid_items = [i for i in all_list_items if i.rectangle().top > 100]
+                # [FIXED] ลดระดับตัวกรองลงจาก 100 เหลือ 60 (เผื่อรายการอยู่สูง)
+                valid_items = [i for i in all_list_items if i.rectangle().top > 60]
 
                 if valid_items:
+                    # เรียงจากบนลงล่าง เพื่อให้ได้ตัวแรกสุด
                     valid_items.sort(key=lambda x: x.rectangle().top)
                     target_item = valid_items[0]
-                    log(f"[/] เจอรายการ {len(valid_items)} รายการ -> เลือกอันแรก")
+                    log(f"[/] เจอรายการ {len(valid_items)} รายการ -> เลือกอันแรก (Y={target_item.rectangle().top})")
                     target_item.click_input()
                     found_item = True
                     break
@@ -289,9 +293,10 @@ def process_receiver_address_selection(window, address_keyword):
         smart_next(window)
 
 def process_receiver_details_form(window, fname, lname, phone):
+    """หน้า: กรอกรายละเอียดผู้รับ"""
     log("--- หน้า: รายละเอียดผู้รับ ---")
     
-    # [UPDATED] รอคำว่า "ชื่อ" หรือ "นามสกุล" แทน "คำนำหน้า" เพื่อความชัวร์
+    # รอหน้าจอให้ชัวร์
     if not wait_for_text(window, ["ชื่อ", "นามสกุล", "คำนำหน้า"], timeout=8):
         log("[WARN] อาจจะยังไม่เข้าหน้ากรอกรายละเอียด (หา Label ไม่เจอ)")
 
@@ -299,35 +304,53 @@ def process_receiver_details_form(window, fname, lname, phone):
     check_error_popup(window)
 
     try:
-        # [UPDATED] ใช้ visible edits ทั้งหมด ไม่ต้องเช็คว่าว่างไหม
+        # ดึงช่องกรอกข้อมูลทั้งหมดที่มองเห็น
+        # เรียงลำดับจาก ซ้าย->ขวา, บน->ล่าง
         edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
+        # Sort by Y then X
+        edits.sort(key=lambda x: (x.rectangle().top, x.rectangle().left))
         
-        if len(edits) >= 2:
-            log(f"...กรอกชื่อ: {fname}")
-            # สมมติช่องแรกเป็นชื่อ หรือ คำนำหน้า (ลองกดช่องแรกแล้วพิมพ์เลย)
+        log(f"   -> เจอช่องกรอกข้อมูล {len(edits)} ช่อง")
+
+        # [FIXED] ปกติช่องเรียงกันคือ: [0]คำนำหน้า, [1]ชื่อ, [2]ชื่อกลาง, [3]นามสกุล
+        if len(edits) >= 4:
+            log(f"...กรอกชื่อ (ช่อง 2): {fname}")
+            edits[1].click_input()
+            edits[1].type_keys(fname, with_spaces=True)
+            
+            log(f"...กรอกนามสกุล (ช่อง 4): {lname}")
+            edits[3].click_input()
+            edits[3].type_keys(lname, with_spaces=True)
+        elif len(edits) >= 2:
+            # Fallback ถ้าเจอช่องน้อย (อาจจะไม่มีคำนำหน้า)
+            log(f"...(Fallback) กรอกชื่อ (ช่อง 1): {fname}")
             edits[0].click_input()
             edits[0].type_keys(fname, with_spaces=True)
-            
-            log(f"...กรอกนามสกุล: {lname}")
-            # กด Tab เพื่อข้ามไปช่องถัดไป (ชื่อกลาง -> นามสกุล)
-            edits[0].type_keys("{TAB}")
-            edits[0].type_keys("{TAB}")
+            log(f"...(Fallback) กรอกนามสกุล (ช่อง 2): {lname}")
+            edits[1].type_keys("{TAB}{TAB}") # ลองกด TAB ไปหา
             window.type_keys(lname, with_spaces=True)
         else:
-            log("[!] ไม่เจอช่องกรอกชื่อ (Edits น้อยกว่า 2)")
+            log("[!] ไม่เจอช่องกรอกชื่อที่ชัดเจน")
         
+        # เลื่อนลงหาเบอร์โทร
         log("...เลื่อนลงหาเบอร์โทร...")
         force_scroll_down(window, -10)
         
+        # [FIXED] เช็คเบอร์โทร ถ้ามีแล้วไม่ต้องใส่
         found_phone = False
         for _ in range(3):
+            # ดึง edits ใหม่อีกรอบหลัง scroll
             visible_edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
             for edit in visible_edits:
-                # หาช่องที่มีคำว่า โทร หรือ Phone
                 if "โทร" in edit.element_info.name or "Phone" in edit.element_info.automation_id:
-                    log(f"...กรอกเบอร์: {phone}")
-                    edit.click_input()
-                    edit.type_keys(phone, with_spaces=True)
+                    current_val = edit.get_value()
+                    if current_val and len(str(current_val).strip()) > 5:
+                        log(f"...มีเบอร์โทรอยู่แล้ว ({current_val}) -> ข้ามการกรอก")
+                    else:
+                        log(f"...กรอกเบอร์: {phone}")
+                        edit.click_input()
+                        edit.type_keys(phone, with_spaces=True)
+                    
                     found_phone = True
                     break
             if found_phone: break
@@ -341,19 +364,15 @@ def process_receiver_details_form(window, fname, lname, phone):
     except Exception as e:
         log(f"[!] Error กรอกรายละเอียด: {e}")
 
-    # กดถัดไป เพื่อไปหน้าใบเสร็จ
     log("...กด 'ถัดไป' (Enter) เพื่อไปหน้าใบเสร็จ...")
     smart_next(window)
 
 def process_receipt_info(window):
     log("--- หน้า: คำแนะนำใบเสร็จ ---")
-    # รอหน้านี้โหลด (คำแนะนำ..., ใบเสร็จ)
     wait_for_text(window, ["ใบเสร็จ", "คำแนะนำ"], timeout=5)
-    
     log("...กด Enter ครั้งที่ 1...")
     window.type_keys("{ENTER}")
     time.sleep(1)
-    
     log("...กด Enter ครั้งที่ 2...")
     window.type_keys("{ENTER}")
     time.sleep(1)
@@ -363,12 +382,9 @@ def process_repeat_transaction(window, should_repeat):
     if wait_for_text(window, ["ทำรายการซ้ำ", "ซ้ำ"], timeout=5):
         target = "ใช่" if should_repeat.lower() in ['true', 'yes', 'on'] else "ไม่"
         log(f"...เลือก: {target}...")
-        
         if not smart_click(window, target):
-            if target == "ไม่":
-                window.type_keys("{LEFT}{ENTER}")
-            else:
-                window.type_keys("{ENTER}")
+            if target == "ไม่": window.type_keys("{LEFT}{ENTER}")
+            else: window.type_keys("{ENTER}")
     else:
         log("[WARN] ไม่พบหน้าทำรายการซ้ำ")
 
@@ -379,17 +395,13 @@ def run_smart_scenario(main_window, config):
         postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
         special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
-        
         add_insurance_flag = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
         insurance_amt = config['DEPOSIT_ENVELOPE'].get('Insurance', '1000')
-        
         special_services = config['SPECIAL_SERVICES'].get('Services', '')
         addr_keyword = config['RECEIVER'].get('AddressKeyword', '99/99')
-        
         rcv_fname = config['RECEIVER_DETAILS'].get('FirstName', 'A')
         rcv_lname = config['RECEIVER_DETAILS'].get('LastName', 'B')
         rcv_phone = config['RECEIVER_DETAILS'].get('PhoneNumber', '081')
-        
         repeat_flag = config['REPEAT_TRANSACTION'].get('Repeat', 'False')
         
         step_delay = float(config['SETTINGS'].get('StepDelay', 0.8))
@@ -491,7 +503,10 @@ if __name__ == "__main__":
         log("Connecting...")
         try:
             wait = int(conf['SETTINGS'].get('ConnectTimeout', 10))
-            app = Application(backend="uia").connect(title_re=conf['APP']['WindowTitle'], timeout=wait)
+            app_title = conf['APP']['WindowTitle']
+            
+            log(f"Connecting to Title: {app_title} (Wait: {wait}s)")
+            app = Application(backend="uia").connect(title_re=app_title, timeout=wait)
             
             main_window = app.top_window()
             if main_window.exists():
