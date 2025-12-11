@@ -1,83 +1,96 @@
-import configparser
-import os
 import time
-import datetime
-from pywinauto.application import Application
+from pywinauto import Desktop
 
-# ================= 1. Config & Setup =================
-# ใช้ Config เดียวกับไฟล์หลัก หรือกำหนดเองตรงนี้
-APP_TITLE_REGEX = ".*Escher Retail.*"  # หรือชื่อที่ตรงกับ Title Bar ของคุณ
+def main():
+    print("="*70)
+    print("   UI TREE DUMPER - ดึงข้อมูลปุ่มทั้งหมดในหน้าจอ   ")
+    print("="*70)
 
-def log(message):
-    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
-
-def inspect_ui_elements(window):
-    log("--- เริ่มตรวจสอบ Element บนหน้าจอ (Debug Mode) ---")
+    # 1. ค้นหาหน้าต่าง POS อัตโนมัติ
+    print("\n[Step 1] กำลังค้นหาหน้าต่างโปรแกรม...")
+    desktop = Desktop(backend="uia")
+    windows = desktop.windows()
     
-    # 1. ค้นหา ListItem (การ์ดบริการมักจะเป็นประเภทนี้)
-    log("\n[Group A] ค้นหาประเภท 'ListItem' (รายการเมนู/การ์ด):")
-    list_items = window.descendants(control_type="ListItem")
+    target_window = None
+    for w in windows:
+        if w.is_visible():
+            txt = w.window_text()
+            # กรองหาชื่อที่น่าจะเป็น POS (แก้ตรงนี้ได้ถ้าชื่อไม่ตรง)
+            if "Escher" in txt or "Retail" in txt or "POS" in txt:
+                target_window = w
+                print(f" -> เจอเป้าหมาย: '{txt}'")
+                break
     
-    if not list_items:
-        log("   [!] ไม่พบ ListItem เลย")
-    else:
-        for i, item in enumerate(list_items):
-            try:
-                # ดึงข้อมูลสำคัญ
-                text = item.window_text()
-                rect = item.rectangle()
-                auto_id = item.element_info.automation_id
-                class_name = item.element_info.class_name
-                
-                # เช็คว่ามองเห็นไหม
-                visible_status = "Visible" if item.is_visible() else "Hidden"
-                
-                if item.is_visible():
-                    print(f"   Index [{i}] : Text='{text}' | ID='{auto_id}' | Class='{class_name}' | Pos=({rect.left}, {rect.top})")
-                else:
-                    # ถ้าซ่อนอยู่ ไม่ต้องโชว์ให้รก หรือโชว์แบบย่อ
-                    pass 
-            except:
-                print(f"   Index [{i}] : <Error reading info>")
+    if not target_window:
+        print("\n[!] ไม่พบหน้าต่าง POS (กรุณาเปิดโปรแกรมทิ้งไว้ก่อนรัน)")
+        print("    รายชื่อหน้าต่างที่เจอในเครื่อง:")
+        for w in windows:
+            if w.is_visible() and w.window_text().strip():
+                print(f"    - {w.window_text()}")
+        return
 
-    # 2. ค้นหา Button (เผื่อเป็นปุ่มธรรมดา)
-    log("\n[Group B] ค้นหาประเภท 'Button' (ปุ่มกด):")
-    buttons = window.descendants(control_type="Button")
-    
-    visible_buttons = [b for b in buttons if b.is_visible()]
-    for i, btn in enumerate(visible_buttons):
-        try:
-            text = btn.window_text()
-            rect = btn.rectangle()
-            auto_id = btn.element_info.automation_id
-            print(f"   Button [{i}] : Text='{text}' | ID='{auto_id}' | Pos=({rect.left}, {rect.top})")
-        except: pass
+    # 2. สแกนหาปุ่มและลิสต์ไอเท็ม
+    print(f"\n[Step 2] กำลังสแกนองค์ประกอบภายใน '{target_window.window_text()}'...")
+    print("(อาจใช้เวลาสักครู่...)\n")
 
-    log("\n------------------------------------------------")
-    log("คำแนะนำ: มองหา Index หรือ ID ของปุ่มที่มีพิกัด (Pos) อยู่ตรงกลางหน้าจอ")
-    log("Index 0 มักจะเป็นเมนูด้านซ้าย (Home/Lock) ให้ลอง Index ถัดๆ ไป")
-
-# ================= 2. Main Execution =================
-if __name__ == "__main__":
-    log("Connecting to application...")
     try:
-        # เชื่อมต่อกับหน้าต่างที่เปิดอยู่แล้ว
-        app = Application(backend="uia").connect(title_re=APP_TITLE_REGEX, timeout=10)
-        win = app.top_window()
-        win.set_focus()
-        
-        # สั่งตรวจสอบทันที
-        inspect_ui_elements(win)
-        
-        # (Optional) ถ้าอยากลองเทสกด Index ไหน ให้แก้เลขตรงนี้แล้ว Uncomment
-        # test_index = 4  # <--- ลองเปลี่ยนเลขนี้ตามที่เห็นใน Log
-        # log(f"\n...Test Click ListItem Index {test_index}...")
-        # items = win.descendants(control_type="ListItem")
-        # visible_items = [x for x in items if x.is_visible()]
-        # if len(visible_items) > test_index:
-        #     visible_items[test_index].click_input()
-        #     log("Click Done.")
+        # ดึงปุ่ม (Button)
+        buttons = target_window.descendants(control_type="Button")
+        # ดึงรายการ (ListItem) - เมนูบริการมักจะเป็นอันนี้
+        list_items = target_window.descendants(control_type="ListItem")
+        # ดึงรูปภาพ (Image) - เผื่อปุ่มเป็นรูปภาพ
+        images = target_window.descendants(control_type="Image")
+
+        all_elements = []
+        # รวมกลุ่มและแปะป้ายประเภท
+        for b in buttons: all_elements.append(("Button", b))
+        for l in list_items: all_elements.append(("ListItem", l))
+        for i in images: all_elements.append(("Image", i))
+
+        # กรองเฉพาะที่มองเห็น (Visible)
+        visible_elements = [x for x in all_elements if x[1].is_visible()]
+
+        print("-" * 100)
+        print(f"{'INDEX':<6} | {'TYPE':<10} | {'TEXT (ชื่อที่เห็น)':<25} | {'AUTOMATION_ID':<20} | {'POSITION (x,y)'}")
+        print("-" * 100)
+
+        found_count = 0
+        for idx, (etype, elem) in enumerate(visible_elements):
+            try:
+                # ดึงค่าต่างๆ
+                text = elem.window_text().strip()
+                auto_id = elem.element_info.automation_id
+                rect = elem.rectangle()
+                pos_str = f"({rect.left}, {rect.top})"
+                
+                # ถ้าไม่มีชื่อ ให้ลองดูชื่อของลูก (Child) เผื่อมี Text ซ่อนอยู่ข้างใน
+                if not text:
+                    children = elem.children()
+                    for child in children:
+                        child_txt = child.window_text().strip()
+                        if child_txt:
+                            text = f"[{child_txt}]" # ใส่ [] เพื่อบอกว่าเป็นชื่อลูก
+                            break
+                
+                # แสดงผลเฉพาะที่มีข้อมูลน่าสนใจ (ตัดพวกปุ่มว่างๆ ไร้สาระออกได้ ถ้าต้องการ)
+                # แต่รอบนี้จะโชว์หมดเพื่อให้เห็นครบ
+                print(f"{idx:<6} | {etype:<10} | {text[:25]:<25} | {auto_id[:20]:<20} | {pos_str}")
+                found_count += 1
+                
+            except Exception as e:
+                print(f"{idx:<6} | {etype:<10} | <Error reading> | ...")
+
+        print("-" * 100)
+        print(f"\nสรุป: เจอทั้งหมด {found_count} รายการ")
+        print("คำแนะนำ:")
+        print("1. มองหาบรรทัดที่มีคำว่า 'EMS' หรือ 'บริการ'")
+        print("2. ถ้าเจอ 'AutomationId' ให้ก๊อปไปใช้เลย (แม่นยำที่สุด)")
+        print("3. ถ้าไม่มี ID ให้ดู 'Index' แล้วใช้คำสั่งกดตามลำดับแทน")
         
     except Exception as e:
-        log(f"Error: {e}")
-        log("หาหน้าต่างโปรแกรมไม่เจอ หรือชื่อ Title ไม่ตรง")
+        print(f"Error scanning window: {e}")
+
+    input("\nกด Enter เพื่อปิดโปรแกรม...")
+
+if __name__ == "__main__":
+    main()
