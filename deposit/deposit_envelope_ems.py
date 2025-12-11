@@ -217,6 +217,28 @@ def wait_for_text(window, text, timeout=5):
         time.sleep(0.3)
     return False
 
+# [NEW] ฟังก์ชันรอจนกว่าข้อความจะโผล่ (สำหรับเช็คว่าหน้าโหลดเสร็จหรือยัง)
+def wait_until_text_appears(window, text_list, timeout=10):
+    if isinstance(text_list, str): text_list = [text_list]
+    log(f"...รอโหลดหน้าจอ (รอคำว่า: {text_list})...")
+    
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            # ดึง Text ทั้งหมดในหน้าจอมาเช็ค
+            visible_texts = [child.window_text() for child in window.descendants() if child.is_visible()]
+            full_text_blob = " ".join(visible_texts)
+            
+            for keyword in text_list:
+                if keyword in full_text_blob:
+                    log(f"[/] หน้าจอโหลดเสร็จแล้ว (เจอคำว่า '{keyword}')")
+                    return True
+        except: pass
+        time.sleep(1) # เช็คทุกๆ 1 วินาที
+    
+    log(f"[!] หมดเวลารอโหลดหน้าจอ (ไม่เจอ {text_list})")
+    return False
+
 def handle_prohibited_items_warning(window):
     log("...เช็คสิ่งของต้องห้าม...")
     if wait_for_text(window, "สิ่งของต้องห้าม", timeout=3):
@@ -286,16 +308,19 @@ def run_smart_scenario(main_window, config):
 
     # --- ส่วนใหม่: ไปกด EMS ต่อ ---
     log("...กำลังไปที่หน้าบริการหลัก เพื่อเลือก EMS...")
-    time.sleep(step_delay + 1.0) # รอหน้าจอเปลี่ยนนิดหน่อย
+    # ไม่ต้อง sleep แบบเดาเวลาแล้ว ใช้ wait_until_text_appears แทน
+    
+    # [FIX] รอให้หน้าจอโหลดปุ่มบริการขึ้นมาก่อน (สูงสุด 10 วินาที)
+    # รอคำว่า "EMS" หรือ "บริการ" หรือ "จดหมาย" เพื่อให้มั่นใจว่าหน้าโหลดเสร็จ
+    wait_until_text_appears(main_window, ["บริการอีเอ็มเอส", "อีเอ็มเอส", "EMS", "จดหมายในประเทศ"], timeout=10)
 
     # [ปรับปรุง] ใช้ smart_click_with_scroll แบบละเอียดขึ้น
-    # ลองหาหลายๆ คำเผื่อไว้
     target_ems = ["บริการอีเอ็มเอส", "อีเอ็มเอส", "EMS"]
     
     found = False
     for keyword in target_ems:
         # ลองหาแบบปกติก่อน (เผื่ออยู่หน้าแรก)
-        if smart_click(main_window, keyword, timeout=2, optional=True):
+        if smart_click(main_window, keyword, timeout=3, optional=True):
             found = True
             break
         
