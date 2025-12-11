@@ -271,14 +271,21 @@ def process_receiver_address_selection(window, address_keyword):
         for _ in range(5):
             try:
                 all_list_items = [i for i in window.descendants(control_type="ListItem") if i.is_visible()]
-                # [FIXED] ลดระดับตัวกรองลงจาก 100 เหลือ 60 (เผื่อรายการอยู่สูง)
-                valid_items = [i for i in all_list_items if i.rectangle().top > 60]
+                
+                # [FIXED IMPORTANT] ปรับระดับตัวกรองความสูงเป็น 200 (หลบ Header/Menu Bar ด้านบน)
+                # ค่าเดิม 60 มันน้อยไป ทำให้ไปกดโดน Breadcrumbs ด้านบน
+                valid_items = [i for i in all_list_items if i.rectangle().top > 200]
 
                 if valid_items:
-                    # เรียงจากบนลงล่าง เพื่อให้ได้ตัวแรกสุด
+                    # เรียงจากบนลงล่าง
                     valid_items.sort(key=lambda x: x.rectangle().top)
+                    
+                    # Log ดูว่าเจออะไรบ้าง
+                    # item_texts = [i.window_text() for i in valid_items[:3]]
+                    # log(f"รายการที่เจอ (Candidate): {item_texts}")
+
                     target_item = valid_items[0]
-                    log(f"[/] เจอรายการ {len(valid_items)} รายการ -> เลือกอันแรก (Y={target_item.rectangle().top})")
+                    log(f"[/] เลือกรายการที่อยู่: '{target_item.window_text()[:20]}...' (Y={target_item.rectangle().top})")
                     target_item.click_input()
                     found_item = True
                     break
