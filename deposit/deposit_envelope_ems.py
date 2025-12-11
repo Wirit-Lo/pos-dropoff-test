@@ -17,22 +17,30 @@ def log(message):
 
 # ================= 2. Helper Functions (Scroll & Search) =================
 def force_scroll_down(window, scroll_dist=-5):
-    """ฟังก์ชันช่วยเลื่อนหน้าจอลงโดยใช้ Mouse Wheel"""
-    log(f"...กำลังเลื่อนหน้าจอลง (Mouse Wheel {scroll_dist})...")
+    """
+    [Updated V6] ฟังก์ชันช่วยเลื่อนหน้าจอลง
+    - ปรับลด delay ให้ทำงานไวขึ้นตามคำขอ
+    """
+    # log(f"...สั่งเลื่อนหน้าจอ (Dist: {scroll_dist})...") # ปิด Log รกๆ
     try:
+        window.set_focus()
         rect = window.rectangle()
-        center_x = rect.left + 300
-        center_y = rect.top + 300
-        mouse.click(coords=(center_x, center_y))
-        time.sleep(0.5)
-        mouse.scroll(coords=(center_x, center_y), wheel_dist=scroll_dist)
-        time.sleep(1)
+        # จุดหมุน Mouse อยู่ค่อนไปทางขวา (กันโดนปุ่มกลางจอ)
+        scrollbar_x = rect.left + int(rect.width() * 0.72)
+        scrollbar_y = rect.top + int(rect.height() * 0.5)
+        
+        mouse.click(coords=(scrollbar_x, scrollbar_y))
+        # time.sleep(0.1) # ตัด delay ออกเพื่อความไว
+        
+        mouse.scroll(coords=(scrollbar_x, scrollbar_y), wheel_dist=scroll_dist)
+        time.sleep(0.5) # ลดจาก 1.0 เหลือ 0.5 เพื่อความไว
+        
     except Exception as e:
-        log(f"[!] Mouse scroll failed: {e}")
+        log(f"[!] Scroll Error: {e}")
         window.type_keys("{PGDN}")
 
 def smart_click(window, criteria_list, timeout=5, optional=False):
-    """คลิกปุ่มตามรายการชื่อ (รองรับหลายชื่อ)"""
+    """คลิกปุ่มตามรายการชื่อ (พื้นฐาน)"""
     if isinstance(criteria_list, str): criteria_list = [criteria_list]
     
     start = time.time()
@@ -50,38 +58,84 @@ def smart_click(window, criteria_list, timeout=5, optional=False):
                             log(f"[/] Double Click '{criteria}'")
                             return True
             except: pass
-        time.sleep(0.5)
+        time.sleep(0.3) # ลด delay การวนหา
 
     if not optional:
         log(f"[X] หาปุ่ม {criteria_list} ไม่เจอ!")
     return False
 
-def check_exists(window, text):
-    """เช็คว่ามีข้อความปรากฏบนหน้าจอหรือไม่"""
-    try:
-        for child in window.descendants():
-            if child.is_visible() and text in child.window_text():
+def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
+    """
+    [Updated V6 - Fast & Accurate] 
+    1. ลด Safe Zone เหลือ 70px (เพื่อให้กดปุ่มล่างๆ ได้เลย ไม่ต้องเลื่อน)
+    2. ถ้าต้องเลื่อนขยับ (Nudge) ให้เลื่อนแค่ -4 พอ (กันปุ่มกระเด็นหาย)
+    """
+    log(f"...ค้นหา '{criteria}' (โหมดเลื่อนหาไว)...")
+    
+    for i in range(max_scrolls + 1):
+        found_element = None
+        
+        # 1. กวาดหา Element ในหน้าจอ
+        try:
+            for child in window.descendants():
+                if child.is_visible() and criteria in child.window_text():
+                    found_element = child
+                    break
+        except: pass
+
+        # 2. ถ้าเจอ -> เช็คตำแหน่ง
+        if found_element:
+            try:
+                elem_rect = found_element.rectangle()
+                win_rect = window.rectangle()
+                
+                # [FIX 1] ลดพื้นที่กันชนด้านล่างลง (จาก 150 เหลือ 70) 
+                # ปุ่มอยู่ล่างแค่ไหนก็กดได้ ตราบใดที่ไม่ทับกับ Footer จริงๆ
+                safe_bottom_limit = win_rect.bottom - 70 
+                
+                # เช็คว่าปุ่มอยู่ต่ำกว่าเส้นตายหรือไม่
+                if elem_rect.bottom >= safe_bottom_limit:
+                    log(f"   [!] เจอปุ่ม '{criteria}' แต่อยู่ต่ำมาก (ติดขอบล่าง) -> ขยับนิดเดียว")
+                    
+                    # [FIX 2] บังคับเลื่อนแค่ -4 พอ (Nudge) ไม่ใช้ค่า scroll_dist ที่อาจจะเยอะเกินไป
+                    # เพื่อป้องกันปุ่มเลื่อนเลยขึ้นไปข้างบนจนหาไม่เจอ
+                    force_scroll_down(window, -4)
+                    time.sleep(0.3) # รอแป๊บเดียวแล้วหาใหม่เลย
+                    continue 
+                
+                # ถ้าตำแหน่ง OK -> กดเลย
+                found_element.click_input()
+                log(f"   [/] เจอและกดปุ่ม '{criteria}' สำเร็จ")
                 return True
-    except: pass
+                
+            except Exception as e:
+                log(f"   [!] เจอแต่กดไม่ได้ ({e}) -> ลองเลื่อนต่อ")
+
+        # 3. ถ้าไม่เจอเลย -> เลื่อนหาหน้าถัดไป (ใช้ค่า scroll_dist ตาม Config ได้เลยเพื่อความไว)
+        if i < max_scrolls:
+            if not found_element:
+                log(f"   [Rotate {i+1}] ไม่เจอ '{criteria}' -> เลื่อนหา (Scroll)")
+                force_scroll_down(window, scroll_dist)
+            
+    log(f"[X] หมดความพยายามในการหาปุ่ม '{criteria}'")
     return False
 
 # ================= 3. Smart Input Functions =================
 def smart_input_weight(window, value):
-    log(f"...กำลังกรอกน้ำหนัก: {value}")
+    log(f"...กรอกน้ำหนัก: {value}")
     try:
         edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
         if edits:
             target_box = edits[0]
             target_box.click_input()
             target_box.type_keys(str(value), with_spaces=True)
-            log(f"[/] เจอ Edit Box และกรอก '{value}' สำเร็จ")
             return True
     except: pass
     window.type_keys(str(value), with_spaces=True)
     return True
 
-def smart_input_with_scroll(window, label_text, value, scroll_times=2):
-    log(f"...กำลังพยายามกรอก '{label_text}': {value}")
+def smart_input_with_scroll(window, label_text, value, scroll_times=2, scroll_dist=-5):
+    log(f"...กรอก '{label_text}': {value}")
     for i in range(scroll_times + 1):
         try:
             edits = window.descendants(control_type="Edit")
@@ -90,61 +144,70 @@ def smart_input_with_scroll(window, label_text, value, scroll_times=2):
                     edit.set_focus()
                     edit.click_input()
                     edit.type_keys(str(value), with_spaces=True)
-                    log(f"[/] กรอก {label_text} สำเร็จ")
+                    log(f"[/] กรอกสำเร็จ")
                     return True
             
             labels = [c for c in window.descendants(control_type="Text") if label_text in c.window_text() and c.is_visible()]
             if labels:
                 labels[0].click_input()
                 window.type_keys("{TAB}")
-                time.sleep(0.2)
+                time.sleep(0.1)
                 window.type_keys(str(value), with_spaces=True)
                 return True
-        except Exception as e:
-            log(f"[!] Error finding input: {e}")
+        except: pass
 
         if i < scroll_times:
-            log(f"[Rotate {i+1}] หาช่องไม่เจอ... เลื่อนจอลง...")
-            force_scroll_down(window, scroll_dist=-5)
-            time.sleep(1)
+            force_scroll_down(window, scroll_dist)
+            time.sleep(0.5)
+
     return False
 
 def smart_next(window):
     if not smart_click(window, "ถัดไป", timeout=2, optional=True):
         window.type_keys("{ENTER}")
 
-def process_sender_info(window, phone_number):
+def process_sender_info(window, phone_number, default_postal):
     log("...เช็คหน้า Popup ผู้ฝากส่ง...")
-    if smart_click(window, "อ่านบัตรประชาชน", timeout=5, optional=True):
-        log("[Popup] เจอหน้าผู้ฝากส่ง -> กดอ่านบัตรเรียบร้อย")
-        time.sleep(1)
+    if smart_click(window, "อ่านบัตรประชาชน", timeout=3, optional=True): # ลด timeout
+        log("[Popup] กดอ่านบัตรเรียบร้อย")
+        time.sleep(2) # ลดเวลาอ่านบัตร
+
+        try:
+            found_postal_box = False
+            edits = window.descendants(control_type="Edit")
+            for edit in edits:
+                if "รหัสไปรษณีย์" in edit.element_info.name or "รหัสไปรษณีย์" in edit.window_text():
+                    current_val = edit.get_value() 
+                    if current_val is None or str(current_val).strip() == "":
+                        edit.click_input()
+                        edit.type_keys(str(default_postal), with_spaces=True)
+                    found_postal_box = True
+                    break 
+        except: pass
+
         smart_input_with_scroll(window, "หมายเลขโทรศัพท์", phone_number)
-        log("...ข้อมูลครบถ้วน กดถัดไป...")
         smart_next(window)
-    else:
-        log("[Popup] ไม่เจอหน้าผู้ฝากส่ง -> ข้ามไปขั้นตอนต่อไป")
 
-def handle_postal_overlap(window):
-    """จัดการ Popup รหัสไปรษณีย์ทับซ้อน"""
-    log("...ตรวจสอบ Popup รหัสไปรษณีย์ทับซ้อน...")
-    time.sleep(1) # รอ Popup เด้ง
-    
-    # เช็คว่ามีข้อความ "พื้นที่รหัสไปรษณีย์ทับซ้อน" หรือปุ่ม "ดำเนินการ" หรือไม่
-    if check_exists(window, "พื้นที่รหัสไปรษณีย์ทับซ้อน") or check_exists(window, "ดำเนินการ"):
-        log("[Popup] เจอแจ้งเตือนรหัสไปรษณีย์ทับซ้อน -> กด Enter/ดำเนินการ")
-        # กดปุ่มดำเนินการ หรือ Enter
-        if not smart_click(window, "ดำเนินการ", timeout=2, optional=True):
-            window.type_keys("{ENTER}")
-        time.sleep(1)
-    else:
-        log("[Info] ไม่เจอ Popup ทับซ้อน (หรือผ่านไปแล้ว)")
-
-def wait_for_text(window, text, timeout=10):
+def wait_for_text(window, text, timeout=5): # ลด timeout default
     start = time.time()
     while time.time() - start < timeout:
-        if check_exists(window, text): return True
-        time.sleep(0.5)
+        try:
+            for child in window.descendants():
+                if text in child.window_text() and child.is_visible():
+                    return True
+        except: pass
+        time.sleep(0.3)
     return False
+
+def handle_prohibited_items_warning(window):
+    log("...เช็คสิ่งของต้องห้าม...")
+    if wait_for_text(window, "สิ่งของต้องห้าม", timeout=3):
+        window.type_keys("{RIGHT}{RIGHT}")
+        time.sleep(0.2)
+        window.type_keys("{ENTER}")
+        time.sleep(0.5) 
+    else:
+        log("[Skip] ไม่เจอหน้าสิ่งของต้องห้าม")
 
 # ================= 4. Main Scenario =================
 def run_smart_scenario(main_window, config):
@@ -152,137 +215,55 @@ def run_smart_scenario(main_window, config):
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
         postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
         special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
-        add_insurance = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
-        insurance_amt = config['DEPOSIT_ENVELOPE'].get('InsuranceAmount', '0')
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
-        step_delay = int(config['SETTINGS'].get('StepDelay', 1))
-    except Exception as e: 
-        log(f"[Error] Config ผิดพลาด: {e}")
-        return
+        step_delay = float(config['SETTINGS'].get('StepDelay', 0.5)) # บังคับ float
+        scroll_dist = int(config['SETTINGS'].get('ScrollDistance', -5))
+    except: return
 
-    log(f"\n--- เริ่มต้น Scenario (Postal: {postal}) ---")
-    time.sleep(1)
+    log(f"--- เริ่มต้น (Scroll: {scroll_dist}) ---")
+    time.sleep(0.5)
 
-    # 1. รับฝากสิ่งของ
     if not smart_click(main_window, "รับฝากสิ่งของ"): return
     time.sleep(step_delay)
 
-    # ผู้ฝากส่ง
-    process_sender_info(main_window, phone)
+    process_sender_info(main_window, phone, postal) 
     time.sleep(step_delay)
 
-    # 2. ซองจดหมาย
-    if not smart_click(main_window, "ซองจดหมาย"): return
+    # [จุดที่แก้ไข] เลือกกล่องด้วย logic ใหม่
+    if not smart_click_with_scroll(main_window, "ซองจดหมาย", scroll_dist=scroll_dist): 
+        log("[Error] หา 'ซองจดหมาย' ไม่เจอ")
+        return
     time.sleep(step_delay)
 
-    # เลือกหมวดหมู่
     if special_options_str.strip():
         options = [opt.strip() for opt in special_options_str.split(',')]
         for opt in options:
-            if opt:
-                smart_click(main_window, opt, timeout=2, optional=True)
-                time.sleep(0.5)
-
+            if opt: smart_click(main_window, opt, timeout=1, optional=True)
+    
     main_window.type_keys("{ENTER}")
     time.sleep(step_delay)
 
-    # 4. น้ำหนัก
+    handle_prohibited_items_warning(main_window)
+    
     smart_input_weight(main_window, weight)
     smart_next(main_window)
     
+    
     wait_for_text(main_window, "รหัสไปรษณีย์")
-    time.sleep(0.5) 
-
-    # 5. รหัสไปรษณีย์
-    log(f"...กรอกรหัสไปรษณีย์: {postal}")
+    
     try:
-        edits = [e for e in main_window.descendants(control_type="Edit") if e.is_visible()]
-        if edits:
-            edits[0].click_input()
-            edits[0].type_keys(str(postal))
-        else:
-            main_window.type_keys(str(postal), with_spaces=True)
-    except:
         main_window.type_keys(str(postal), with_spaces=True)
+    except: pass
     
-    # กดถัดไป (อาจจะเจอ Popup ทับซ้อนที่นี่)
     smart_next(main_window)
-    
-    # [NEW] จัดการ Popup ทับซ้อน
-    handle_postal_overlap(main_window)
-    
     time.sleep(step_delay)
 
-    # =========================================================
-    # --- STEP 5.5: เลือกบริการ (EMS) ---
-    # =========================================================
-    log("STEP 5.5: เข้าสู่หน้าเลือกบริการหลัก (EMS)")
+    smart_click(main_window, "ดำเนินการ", timeout=2, optional=True)
+    smart_click(main_window, ["เสร็จสิ้น", "Settle", "ยืนยัน"], timeout=2, optional=True)
     
-    # คำที่ใช้ค้นหาปุ่ม EMS
-    ems_keywords = ["บริการอีเอ็มเอส", "EMS", "E", "บริการด่วนพิเศษ"]
-    
-    # 1. พยายามกดปุ่ม EMS
-    if smart_click(main_window, ems_keywords, timeout=5, optional=False):
-        log("[/] กดเลือก EMS แล้ว... กำลังตรวจสอบการเปลี่ยนหน้า")
-        time.sleep(2) 
-
-        # 2. ตรวจสอบว่าหน้าจอเปลี่ยนเป็นหน้าสรุป (เหมือนในรูป) หรือไม่
-        # คีย์เวิร์ดที่ควรเจอเมื่อเปลี่ยนหน้าสำเร็จ: "EMS ในประเทศ", "รับประกัน", หรือ "1-2 วันทำการ" (ที่อยู่ในกล่องสรุป)
-        success_markers = ["EMS ในประเทศ", "รับประกัน", "1-2 วันทำการ", "เพิ่ม:", "Expected"]
-        
-        is_page_updated = False
-        for marker in success_markers:
-            if check_exists(main_window, marker):
-                is_page_updated = True
-                log(f"[/] พบข้อความยืนยัน: '{marker}' -> หน้าจอเปลี่ยนสำเร็จ")
-                break
-        
-        # 3. ถ้ายังไม่เปลี่ยน -> ลองกดปุ่ม "ถัดไป" หรือ "Enter" ย้ำอีกที
-        # เพราะบางทีการกดการ์ดแค่เลือก (Select) แต่ต้องกด Next เพื่อไปต่อ
-        if not is_page_updated:
-            log("[!] หน้าจอยังไม่เปลี่ยนเป็นหน้าสรุป... กำลังกดปุ่ม 'ถัดไป' หรือ 'Enter' เพื่อยืนยัน")
-            smart_next(main_window) # สั่งกด Next หรือ Enter
-            time.sleep(3) # รอโหลด
-            
-            # เช็คอีกรอบ
-            for marker in success_markers:
-                if check_exists(main_window, marker):
-                    is_page_updated = True
-                    log(f"[/] พบข้อความยืนยันหลังกดถัดไป: '{marker}'")
-                    break
-        
-        # 4. ถ้ายังไม่เปลี่ยนจริงๆ ให้หยุดทำงาน
-        if not is_page_updated:
-             log("\n[STOP] หยุดการทำงาน: เลือก EMS แล้วแต่หน้าจอไม่เปลี่ยนไปหน้าสรุป (ไม่พบคำว่า 'EMS ในประเทศ')")
-             raise RuntimeError("Selected EMS but page did not update to Summary state.")
-
-        # --- ส่วนประกัน (ทำงานต่อเมื่อหน้าจอเปลี่ยนสำเร็จแล้ว) ---
-        if add_insurance.lower() == 'true':
-            log(f"...ตรวจสอบประกันภัย (วงเงิน: {insurance_amt})")
-            # เช็คว่ามีปุ่มให้กดเพิ่มประกันไหม (บางทีมันอาจจะอยู่ในกล่องสรุป)
-            if smart_click(main_window, ["+", "AddService", "รับประกัน"], timeout=3, optional=True):
-                time.sleep(1)
-                smart_input_with_scroll(main_window, "วงเงิน", insurance_amt)
-                smart_click(main_window, ["ตกลง", "OK"], timeout=2, optional=True)
-            else:
-                log("[Info] หาปุ่มกดเพิ่มประกันไม่เจอ (อาจจะถูกเพิ่มแล้ว หรือไม่มีปุ่ม)")
-
-    else:
-        # ถ้าหาปุ่ม EMS ไม่เจอตั้งแต่แรก
-        log("[!] หาปุ่มเลือกบริการ EMS ไม่เจอ")
-        raise RuntimeError("Cannot find EMS service button.")
-
-    # 6. จบงาน
-    log("STEP 6: จบงาน")
-    # กดดำเนินการ/เสร็จสิ้น
-    if smart_click(main_window, "ดำเนินการ", timeout=3, optional=True):
-        log("[/] กดปุ่ม 'ดำเนินการ' สำเร็จ")
-    
-    final_buttons = ["เสร็จสิ้น", "Settle", "ยืนยัน", "ตกลง"]
-    smart_click(main_window, final_buttons, timeout=3, optional=True)
-    main_window.type_keys("{ENTER}")
-
     log("\n[SUCCESS] จบการทำงาน")
+    print(">>> กด Enter เพื่อปิดโปรแกรม... <<<")
+    input()
 
 # ================= 5. Execution =================
 if __name__ == "__main__":
@@ -297,5 +278,3 @@ if __name__ == "__main__":
             run_smart_scenario(win, conf)
         except Exception as e:
             log(f"Error: {e}")
-    else:
-        log("[Error] ไม่พบไฟล์ config.ini")
