@@ -39,6 +39,7 @@ def force_scroll_down(window, scroll_dist=-5):
     try:
         window.set_focus()
         rect = window.rectangle()
+        # เลื่อนเมาส์ไปจุดที่ปลอดภัย (ขวา 72%, กลางจอ) แล้ว Scroll
         scrollbar_x = rect.left + int(rect.width() * 0.72)
         scrollbar_y = rect.top + int(rect.height() * 0.5)
         mouse.click(coords=(scrollbar_x, scrollbar_y))
@@ -54,7 +55,6 @@ def smart_click(window, criteria_list, timeout=5):
         for criteria in criteria_list:
             try:
                 for child in window.descendants():
-                    # หาแบบ Text ตรงๆ
                     if child.is_visible() and criteria in child.window_text().strip():
                         child.click_input()
                         log(f"[/] กดปุ่ม '{criteria}' สำเร็จ")
@@ -351,7 +351,18 @@ if __name__ == "__main__":
             log(f"Connecting to Title: {app_title} (Wait: {wait}s)")
             app = Application(backend="uia").connect(title_re=app_title, timeout=wait)
             
-            run_smart_scenario(app.top_window(), conf)
+            # [FIX] ดึงหน้าต่างมาเก็บไว้ในตัวแปร และสั่ง Focus/Restore
+            main_window = app.top_window()
+            
+            if main_window.exists():
+                # ถ้าถูกพับ (Minimize) ให้กู้คืนขึ้นมา
+                if main_window.get_show_state() == 2:
+                    main_window.restore()
+                # บังคับให้เด้งมาหน้าสุด (Focus)
+                main_window.set_focus()
+            
+            run_smart_scenario(main_window, conf)
+            
         except Exception as e:
             log(f"Error: {e}")
             print("คำแนะนำ: ตรวจสอบว่าเปิดโปรแกรม POS ไว้หรือยัง และชื่อ Title ตรงกับใน Config หรือไม่")
