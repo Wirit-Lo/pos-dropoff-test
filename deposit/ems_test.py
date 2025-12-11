@@ -272,20 +272,15 @@ def process_receiver_address_selection(window, address_keyword):
             try:
                 all_list_items = [i for i in window.descendants(control_type="ListItem") if i.is_visible()]
                 
-                # [FIXED IMPORTANT] ปรับระดับตัวกรองความสูงเป็น 200 (หลบ Header/Menu Bar ด้านบน)
-                # ค่าเดิม 60 มันน้อยไป ทำให้ไปกดโดน Breadcrumbs ด้านบน
-                valid_items = [i for i in all_list_items if i.rectangle().top > 200]
+                # [FIXED] ใช้ค่า 150 เพื่อให้แน่ใจว่าพ้น Header แต่ยังเจอรายการแรก
+                valid_items = [i for i in all_list_items if i.rectangle().top > 150]
 
                 if valid_items:
-                    # เรียงจากบนลงล่าง
+                    # เรียงจากบนลงล่าง เพื่อเอาอันแรกสุด (Top-most)
                     valid_items.sort(key=lambda x: x.rectangle().top)
                     
-                    # Log ดูว่าเจออะไรบ้าง
-                    # item_texts = [i.window_text() for i in valid_items[:3]]
-                    # log(f"รายการที่เจอ (Candidate): {item_texts}")
-
                     target_item = valid_items[0]
-                    log(f"[/] เลือกรายการที่อยู่: '{target_item.window_text()[:20]}...' (Y={target_item.rectangle().top})")
+                    log(f"[/] เลือกรายการแรกสุด: '{target_item.window_text()[:20]}...' (Y={target_item.rectangle().top})")
                     target_item.click_input()
                     found_item = True
                     break
@@ -311,15 +306,13 @@ def process_receiver_details_form(window, fname, lname, phone):
     check_error_popup(window)
 
     try:
-        # ดึงช่องกรอกข้อมูลทั้งหมดที่มองเห็น
-        # เรียงลำดับจาก ซ้าย->ขวา, บน->ล่าง
+        # STEP 1: กรอกชื่อและนามสกุลก่อน
         edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
-        # Sort by Y then X
+        # Sort by Y then X: [0]=Title, [1]=Name, [2]=Middle, [3]=LastName
         edits.sort(key=lambda x: (x.rectangle().top, x.rectangle().left))
         
         log(f"   -> เจอช่องกรอกข้อมูล {len(edits)} ช่อง")
 
-        # [FIXED] ปกติช่องเรียงกันคือ: [0]คำนำหน้า, [1]ชื่อ, [2]ชื่อกลาง, [3]นามสกุล
         if len(edits) >= 4:
             log(f"...กรอกชื่อ (ช่อง 2): {fname}")
             edits[1].click_input()
@@ -329,42 +322,44 @@ def process_receiver_details_form(window, fname, lname, phone):
             edits[3].click_input()
             edits[3].type_keys(lname, with_spaces=True)
         elif len(edits) >= 2:
-            # Fallback ถ้าเจอช่องน้อย (อาจจะไม่มีคำนำหน้า)
+            # Fallback
             log(f"...(Fallback) กรอกชื่อ (ช่อง 1): {fname}")
             edits[0].click_input()
             edits[0].type_keys(fname, with_spaces=True)
             log(f"...(Fallback) กรอกนามสกุล (ช่อง 2): {lname}")
-            edits[1].type_keys("{TAB}{TAB}") # ลองกด TAB ไปหา
+            edits[1].type_keys("{TAB}{TAB}") 
             window.type_keys(lname, with_spaces=True)
         else:
             log("[!] ไม่เจอช่องกรอกชื่อที่ชัดเจน")
         
-        # เลื่อนลงหาเบอร์โทร
-        log("...เลื่อนลงหาเบอร์โทร...")
+        # STEP 2: เลื่อนลงหาเบอร์โทร (หลังจากกรอกชื่อเสร็จแล้ว)
+        log("...เลื่อนลงเพื่อหาเบอร์โทร...")
         force_scroll_down(window, -10)
+        time.sleep(0.5)
         
-        # [FIXED] เช็คเบอร์โทร ถ้ามีแล้วไม่ต้องใส่
+        # STEP 3: เช็คและกรอกเบอร์โทร
         found_phone = False
-        for _ in range(3):
-            # ดึง edits ใหม่อีกรอบหลัง scroll
-            visible_edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
-            for edit in visible_edits:
-                if "โทร" in edit.element_info.name or "Phone" in edit.element_info.automation_id:
-                    current_val = edit.get_value()
-                    if current_val and len(str(current_val).strip()) > 5:
-                        log(f"...มีเบอร์โทรอยู่แล้ว ({current_val}) -> ข้ามการกรอก")
-                    else:
-                        log(f"...กรอกเบอร์: {phone}")
-                        edit.click_input()
-                        edit.type_keys(phone, with_spaces=True)
-                    
-                    found_phone = True
-                    break
-            if found_phone: break
-            force_scroll_down(window, -5)
-            
+        # ดึง edits ใหม่อีกรอบหลัง scroll เพื่อความชัวร์
+        visible_edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
+        
+        for edit in visible_edits:
+            # หาช่องที่มีคำว่า โทร หรือ ID เกี่ยวกับ Phone
+            if "โทร" in edit.element_info.name or "Phone" in edit.element_info.automation_id:
+                # เช็คค่าที่มีอยู่ก่อน
+                current_val = edit.get_value()
+                # ถ้ามีค่า และยาวเกิน 5 ตัวอักษร ถือว่ามีเบอร์แล้ว
+                if current_val and len(str(current_val).strip()) > 5:
+                    log(f"...มีเบอร์โทรอยู่แล้ว ({current_val}) -> **ไม่กรอกซ้ำ**")
+                else:
+                    log(f"...ช่องว่าง -> กรอกเบอร์: {phone}")
+                    edit.click_input()
+                    edit.type_keys(phone, with_spaces=True)
+                
+                found_phone = True
+                break
+        
         if not found_phone:
-            log("[!] หาช่องเบอร์ไม่เจอ -> ลองกด Tab หา...")
+            log("[!] หาช่องเบอร์อัตโนมัติไม่เจอ -> ใช้การกด Tab")
             window.type_keys("{TAB}"*3)
             window.type_keys(phone, with_spaces=True)
 
