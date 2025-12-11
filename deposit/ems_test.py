@@ -508,14 +508,20 @@ if __name__ == "__main__":
             log(f"Connecting to Title: {app_title} (Wait: {wait}s)")
             app = Application(backend="uia").connect(title_re=app_title, timeout=wait)
             
+            # [FIX] ดึงหน้าต่างมาเก็บไว้ในตัวแปร และสั่ง Focus/Restore
             main_window = app.top_window()
+            
             if main_window.exists():
-                if main_window.get_show_state() == 2: main_window.restore()
+                # ถ้าถูกพับ (Minimize) ให้กู้คืนขึ้นมา
+                if main_window.get_show_state() == 2:
+                    main_window.restore()
+                # บังคับให้เด้งมาหน้าสุด (Focus)
                 main_window.set_focus()
             
             run_smart_scenario(main_window, conf)
+            
         except Exception as e:
             log(f"Error: {e}")
-            print("คำแนะนำ: ตรวจสอบว่าเปิดโปรแกรม POS หรือยัง")
+            print("คำแนะนำ: ตรวจสอบว่าเปิดโปรแกรม POS ไว้หรือยัง และชื่อ Title ตรงกับใน Config หรือไม่")
     
     input("\n>>> กด Enter เพื่อปิดโปรแกรม... <<<")
