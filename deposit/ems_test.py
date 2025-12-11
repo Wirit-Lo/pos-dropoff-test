@@ -5,17 +5,22 @@ import datetime
 from pywinauto.application import Application
 from pywinauto import mouse
 
-# ================= 1. Config & Log =================
+# ================= 1. ส่วนจัดการ Config & Log =================
 def load_config(filename='config.ini'):
+    """โหลดค่าจากไฟล์ config.ini"""
     config = configparser.ConfigParser()
-    if not os.path.exists(filename): return None
+    if not os.path.exists(filename): 
+        print(f"[Error] ไม่พบไฟล์ {filename}")
+        return None
     config.read(filename, encoding='utf-8')
     return config
 
 def log(message):
+    """แสดงผลการทำงานพร้อมเวลา"""
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
 def debug_dump_ui(window):
+    """(Debug) ลิสต์รายการ ID บนหน้าจอเมื่อหาปุ่มไม่เจอ"""
     log("!!! หาไม่เจอ -> กำลังลิสต์ ID ที่โปรแกรมมองเห็น (Debug) !!!")
     try:
         visible_items = []
@@ -26,25 +31,27 @@ def debug_dump_ui(window):
                 if aid: visible_items.append(f"ID: {aid}")
                 elif txt: visible_items.append(f"Text: {txt}")
         
-        # ตัดรายการซ้ำและปริ้นท์
         unique_items = list(set(visible_items))
-        log(f"Items ที่เจอ: {unique_items[:20]} ... (แสดงบางส่วน)")
+        log(f"Items ที่เจอ: {unique_items[:20]} ... (และอื่นๆ)")
     except: pass
 
-# ================= 2. Helper Functions =================
+# ================= 2. ฟังก์ชันช่วยเหลือ (Scroll, Click, Wait) =================
 def force_scroll_down(window, scroll_dist=-5):
+    """บังคับ Scroll หน้าจอลงด้านล่าง"""
     try:
         window.set_focus()
         rect = window.rectangle()
+        # เลื่อนเมาส์ไปจุดที่ปลอดภัย (ขวา 72%, กลางจอ) แล้ว Scroll
         scrollbar_x = rect.left + int(rect.width() * 0.72)
         scrollbar_y = rect.top + int(rect.height() * 0.5)
         mouse.click(coords=(scrollbar_x, scrollbar_y))
         time.sleep(0.2)
         mouse.scroll(coords=(scrollbar_x, scrollbar_y), wheel_dist=scroll_dist)
-        time.sleep(0.8) 
+        time.sleep(0.8) # รอให้ UI ขยับ
     except: pass
 
 def smart_click(window, criteria_list, timeout=5, optional=False):
+    """ค้นหาและกดปุ่มจากชื่อ (Text)"""
     if isinstance(criteria_list, str): criteria_list = [criteria_list]
     start = time.time()
     while time.time() - start < timeout:
@@ -57,10 +64,11 @@ def smart_click(window, criteria_list, timeout=5, optional=False):
                         return True
             except: pass
         time.sleep(0.3)
-    if not optional: log(f"[X] หาปุ่ม {criteria_list} ไม่เจอ!")
+    if not optional: log(f"[X] หาปุ่มชื่อ {criteria_list} ไม่เจอ!")
     return False
 
 def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
+    """ค้นหาปุ่มจากชื่อแบบมีการเลื่อนหน้าจอ (Scroll)"""
     log(f"...ค้นหา '{criteria}' (Scroll Mode)...")
     for i in range(max_scrolls + 1):
         found = None
@@ -73,10 +81,11 @@ def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
 
         if found:
             try:
+                # เช็คว่าปุ่มอยู่ต่ำเกินไปไหม (ติดขอบล่าง)
                 elem_rect = found.rectangle()
                 win_rect = window.rectangle()
                 if elem_rect.bottom >= win_rect.bottom - 70:
-                    force_scroll_down(window, -3)
+                    force_scroll_down(window, -3) # ขยับนิดเดียว
                     time.sleep(0.5)
                     continue 
                 found.click_input()
@@ -90,13 +99,28 @@ def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
     log(f"[X] หมดความพยายามหา '{criteria}'")
     return False
 
-# [UPDATED] ฟังก์ชันกดปุ่มด้วย ID แบบยืดหยุ่น (Fuzzy Match)
+# --- ฟังก์ชันกดด้วย ID (พระเอกของเรา) ---
+def click_element_by_id(window, exact_id, timeout=5):
+    """กดปุ่มด้วย AutomationID แบบระบุชื่อเป๊ะๆ (แม่นยำที่สุด)"""
+    log(f"...พยายามกดปุ่ม ID: '{exact_id}'...")
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            for child in window.descendants():
+                if child.element_info.automation_id == exact_id and child.is_visible():
+                    child.click_input()
+                    log(f"[/] กดปุ่ม ID '{exact_id}' สำเร็จ!")
+                    return True
+        except: pass
+        time.sleep(0.5)
+    return False
+
 def click_element_by_fuzzy_id(window, keyword_in_id, timeout=5):
+    """กดปุ่มด้วย AutomationID แบบค้นหาบางส่วน (Fuzzy)"""
     log(f"...ค้นหาปุ่มที่มี ID มีคำว่า: '{keyword_in_id}'...")
     start = time.time()
     while time.time() - start < timeout:
         try:
-            # วนหา Element ทั้งหมด
             for child in window.descendants():
                 aid = child.element_info.automation_id
                 if child.is_visible() and aid and keyword_in_id in aid:
@@ -105,43 +129,29 @@ def click_element_by_fuzzy_id(window, keyword_in_id, timeout=5):
                     return True
         except: pass
         time.sleep(0.5)
-    
     log(f"[X] หาปุ่มที่มี ID '{keyword_in_id}' ไม่เจอ")
     return False
 
-# [NEW] ฟังก์ชันกดที่พิกัด (ไม้ตายสุดท้าย)
-def click_by_coordinate(window, x, y):
-    log(f"...[ไม้ตาย] สั่งกดที่พิกัด ({x}, {y})...")
-    try:
-        window.set_focus()
-        # คำนวณตำแหน่งสัมพัทธ์หรือกด Absolute เลยก็ได้
-        # ในที่นี้ใช้ Absolute coordinate จากที่ Debug มา
-        mouse.click(coords=(x, y))
-        log("[/] กดพิกัดเรียบร้อย")
-        return True
-    except Exception as e:
-        log(f"[!] กดพิกัดล้มเหลว: {e}")
-        return False
-
 def wait_until_service_page_ready(window, timeout=10):
-    log("...รอหน้าบริการหลักโหลด (เช็คจากปุ่ม ShippingService)...")
+    """รอให้หน้าบริการโหลดเสร็จ โดยเช็คว่ามีปุ่มตระกูล ShippingService โผล่มาหรือยัง"""
+    log("...รอหน้าบริการหลักโหลด...")
     start = time.time()
     while time.time() - start < timeout:
         try:
-            # เช็คว่ามีปุ่มใดๆ ที่ขึ้นต้นด้วย ShippingService โผล่มาไหม
             for child in window.descendants():
                 aid = child.element_info.automation_id
-                if aid and "ShippingService" in aid and child.is_visible():
+                # เช็คคร่าวๆ ว่ามีปุ่มบริการไหม หรือเช็ค EMS โดยตรงเลย
+                if aid and ("ShippingService" in aid) and child.is_visible():
                     log(f"[/] หน้าจอพร้อมแล้ว (เจอ {aid})")
                     return True
         except: pass
         time.sleep(1)
     
     log("[!] หมดเวลารอ (ไม่เจอปุ่มบริการใดๆ)")
-    debug_dump_ui(window) # ปริ้นท์ Debug ให้ดูว่าเห็นอะไรบ้าง
+    debug_dump_ui(window) 
     return False
 
-# ================= 3. Input Helpers =================
+# ================= 3. ฟังก์ชันกรอกข้อมูล =================
 def smart_input_weight(window, value):
     try:
         edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
@@ -158,9 +168,11 @@ def smart_next(window):
         window.type_keys("{ENTER}")
 
 def process_sender_info(window, phone_number, default_postal):
+    # เช็ค Popup อ่านบัตรประชาชน
     if smart_click(window, "อ่านบัตรประชาชน", timeout=3, optional=True): 
-        time.sleep(2) 
+        time.sleep(1.5) 
         try:
+            # หาช่องรหัสไปรษณีย์ผู้ส่ง ถ้าว่างให้เติม
             edits = window.descendants(control_type="Edit")
             for edit in edits:
                 if "รหัสไปรษณีย์" in edit.element_info.name or "รหัสไปรษณีย์" in edit.window_text():
@@ -170,7 +182,7 @@ def process_sender_info(window, phone_number, default_postal):
                     break 
         except: pass
         
-        # กรอกเบอร์โทร
+        # กรอกเบอร์โทร (เลื่อนหาถ้าจำเป็น)
         found_phone = False
         for i in range(3):
             try:
@@ -188,6 +200,7 @@ def process_sender_info(window, phone_number, default_postal):
         smart_next(window)
 
 def handle_prohibited_items(window):
+    # เช็คหน้าสิ่งของต้องห้าม
     for _ in range(5):
         try:
             for child in window.descendants():
@@ -197,29 +210,36 @@ def handle_prohibited_items(window):
         except: pass
         time.sleep(0.5)
 
-# ================= 4. Main Scenario =================
+# ================= 4. Main Scenario (ขั้นตอนการทำงานหลัก) =================
 def run_smart_scenario(main_window, config):
     try:
+        # อ่านค่าจาก Config
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
         postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
         special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
         step_delay = float(config['SETTINGS'].get('StepDelay', 0.5))
         scroll_dist = int(config['SETTINGS'].get('ScrollDistance', -5))
-    except: return
+    except Exception as e: 
+        log(f"[Error] อ่าน Config ผิดพลาด: {e}")
+        return
 
-    log(f"--- เริ่มต้น ---")
+    log(f"--- เริ่มต้นการทำงาน ---")
     time.sleep(0.5)
 
+    # 1. กดเมนูรับฝาก
     if not smart_click(main_window, "รับฝากสิ่งของ"): return
     time.sleep(step_delay)
 
+    # 2. จัดการ Popup ผู้ส่ง (ถ้ามี)
     process_sender_info(main_window, phone, postal) 
     time.sleep(step_delay)
 
+    # 3. เลือกซองจดหมาย
     if not smart_click_with_scroll(main_window, "ซองจดหมาย", scroll_dist=scroll_dist): return
     time.sleep(step_delay)
 
+    # 4. เลือกออปชั่นพิเศษ (ถ้ามีใน config)
     if special_options_str.strip():
         for opt in special_options_str.split(','):
             if opt: smart_click(main_window, opt.strip(), timeout=1, optional=True)
@@ -227,19 +247,21 @@ def run_smart_scenario(main_window, config):
     main_window.type_keys("{ENTER}")
     time.sleep(step_delay)
 
+    # 5. หน้าสิ่งของต้องห้าม
     handle_prohibited_items(main_window)
     
+    # 6. กรอกน้ำหนัก
     smart_input_weight(main_window, weight)
     smart_next(main_window)
     
-    # รอหน้ากรอก ปณ. ปลายทาง
+    # 7. กรอกรหัส ปณ. ปลายทาง
     time.sleep(1)
     try: main_window.type_keys(str(postal), with_spaces=True)
     except: pass
     smart_next(main_window)
     time.sleep(step_delay)
 
-    # ตรวจสอบ Popup ทับซ้อน
+    # 8. ตรวจสอบ Popup ทับซ้อน (สำคัญ)
     log("...ตรวจสอบ Popup หลังใส่รหัส ปณ...")
     for _ in range(3):
         found_popup = False
@@ -253,39 +275,49 @@ def run_smart_scenario(main_window, config):
         if found_popup: break
         time.sleep(0.5)
 
-    # --- เข้าสู่ขั้นตอนเลือก EMS ---
-    log("...กำลังไปที่หน้าบริการหลัก...")
+    # --- 9. เข้าสู่ขั้นตอนเลือก EMS (ไฮไลท์สำคัญ) ---
+    log("...กำลังไปที่หน้าบริการหลัก เพื่อเลือก EMS...")
     
-    # 1. รอให้หน้าจอโหลดเสร็จ (เช็คว่ามีปุ่ม Service โผล่มาหรือยัง)
+    # รอให้หน้าจอพร้อม
     if not wait_until_service_page_ready(main_window, timeout=10):
-        log("[!] หาปุ่มบริการไม่เจอ อาจจะยังอยู่หน้าเดิม หรือหน้าจอโหลดไม่เสร็จ")
+        log("[!] หน้าจออาจจะยังไม่พร้อม แต่จะพยายามกด...")
+
+    # [Priority 1] กดด้วย ID ที่ถูกต้อง 100% (จากที่เราหาเจอ)
+    target_id = "ShippingService_EMSServices"
     
-    # 2. ลองกดด้วย Fuzzy ID (หาปุ่มที่มีคำว่า "EMSS" หรือ "EMS" ใน ID)
-    if click_element_by_fuzzy_id(main_window, "EMSS"):
-        log("[SUCCESS] เลือกบริการ EMS เรียบร้อย (เจอจาก ID)")
+    if click_element_by_id(main_window, target_id):
+        log(f"[SUCCESS] เลือกบริการ EMS เรียบร้อย (กดจาก ID: {target_id})")
         
-    elif click_element_by_fuzzy_id(main_window, "EMS"): # ลองหาแค่ EMS
-        log("[SUCCESS] เลือกบริการ EMS เรียบร้อย (เจอจาก ID แบบสั้น)")
+    # [Priority 2] ถ้า ID เปลี่ยนนิดหน่อย ลองหาแบบ Fuzzy (EMSS)
+    elif click_element_by_fuzzy_id(main_window, "EMSS"): 
+        log("[SUCCESS] เลือกบริการ EMS เรียบร้อย (กดจาก Fuzzy ID)")
         
     else:
-        # 3. [ไม้ตาย] ถ้าหา ID ไม่เจอเลย ให้กดที่พิกัดเดิมที่เราเคยเห็น
-        log("[!] ไม่เจอ ID -> ใช้ไม้ตาย กดที่พิกัด (216, 278)")
-        click_by_coordinate(main_window, 216, 278)
+        # [Fail] ถ้าหาไม่เจอจริงๆ แจ้ง Error (ไม่กดพิกัดมั่ว)
+        log(f"[ERROR] หาปุ่ม EMS ไม่เจอ! (ลองทั้ง ID '{target_id}' และ Fuzzy 'EMSS')")
+        debug_dump_ui(main_window) # แสดง Debug Info เพื่อดูว่ามี ID อะไรบ้าง
 
     log("\n[SUCCESS] จบการทำงาน")
     print(">>> กด Enter เพื่อปิดโปรแกรม... <<<")
     input()
 
-# ================= 5. Execution =================
+# ================= 5. เริ่มต้นโปรแกรม =================
 if __name__ == "__main__":
     conf = load_config()
     if conf:
-        log("Connecting...")
+        log("Connecting to Application...")
         try:
             connect_wait = int(conf['SETTINGS'].get('ConnectTimeout', 10))
+            # เชื่อมต่อกับโปรแกรมตามชื่อ Title ใน Config
             app = Application(backend="uia").connect(title_re=conf['APP']['WindowTitle'], timeout=connect_wait)
             win = app.top_window()
             win.set_focus()
+            
+            # เริ่มรัน Scenario
             run_smart_scenario(win, conf)
+            
         except Exception as e:
             log(f"Error: {e}")
+            log("คำแนะนำ: ตรวจสอบชื่อ WindowTitle ใน config.ini ว่าตรงกับโปรแกรมหรือไม่")
+    else:
+        print("กรุณาสร้างไฟล์ config.ini ก่อนเริ่มใช้งาน")
