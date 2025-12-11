@@ -278,3 +278,4 @@ if __name__ == "__main__":
             run_smart_scenario(win, conf)
         except Exception as e:
             log(f"Error: {e}")
+            
