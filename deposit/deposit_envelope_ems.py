@@ -249,6 +249,29 @@ def handle_prohibited_items_warning(window):
     else:
         log("[Skip] ไม่เจอหน้าสิ่งของต้องห้าม")
 
+# [NEW] ฟังก์ชันกดปุ่ม List Item แบบระบุลำดับ (ใช้แก้ปัญหาปุ่มไม่มีชื่อ)
+def click_list_item_by_index(window, index=0, control_type="ListItem"):
+    log(f"...กำลังค้นหาปุ่มแบบไม่มีชื่อ (Type: {control_type}, Index: {index})...")
+    try:
+        # ค้นหา Element ทั้งหมดที่เป็น List Item (การ์ดบริการต่างๆ มักจะเป็น List Item)
+        items = window.descendants(control_type=control_type)
+        # กรองเฉพาะอันที่มองเห็นได้
+        visible_items = [item for item in items if item.is_visible()]
+        
+        log(f"   -> เจอทั้งหมด {len(visible_items)} รายการ")
+        
+        if len(visible_items) > index:
+            target_item = visible_items[index]
+            log(f"   -> กดรายการที่ {index+1}")
+            target_item.click_input()
+            return True
+        else:
+            log(f"[X] ไม่เจอรายการลำดับที่ {index}")
+            return False
+    except Exception as e:
+        log(f"[!] Error click index: {e}")
+        return False
+
 # ================= 4. Main Scenario =================
 def run_smart_scenario(main_window, config):
     try:
@@ -297,7 +320,6 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
 
     # [NEW] ตรวจสอบ Popup แจ้งเตือน (เช่น พื้นที่รหัสไปรษณีย์ทับซ้อน)
-    # ถ้ามี Popup ขึ้นมา ต้องกด "ดำเนินการ" บน Popup นั้นก่อน
     log("...ตรวจสอบ Popup หลังใส่รหัส ปณ...")
     if wait_for_text(main_window, "ทับซ้อน", timeout=2) or wait_for_text(main_window, "พื้นที่", timeout=1):
         log("[Popup] พบแจ้งเตือน (อาจเป็นพื้นที่ทับซ้อน) -> กด 'ดำเนินการ'")
@@ -308,31 +330,31 @@ def run_smart_scenario(main_window, config):
 
     # --- ส่วนใหม่: ไปกด EMS ต่อ ---
     log("...กำลังไปที่หน้าบริการหลัก เพื่อเลือก EMS...")
-    # ไม่ต้อง sleep แบบเดาเวลาแล้ว ใช้ wait_until_text_appears แทน
     
-    # [FIX] รอให้หน้าจอโหลดปุ่มบริการขึ้นมาก่อน (สูงสุด 10 วินาที)
-    # รอคำว่า "EMS" หรือ "บริการ" หรือ "จดหมาย" เพื่อให้มั่นใจว่าหน้าโหลดเสร็จ
-    wait_until_text_appears(main_window, ["บริการอีเอ็มเอส", "อีเอ็มเอส", "EMS", "จดหมายในประเทศ"], timeout=10)
+    # [FIX] รอให้หน้าจอโหลดเสร็จก่อน (เช็คจากคำว่า "บริการหลัก" หรือ "EMS" ถ้ามี)
+    wait_until_text_appears(main_window, ["บริการหลัก", "EMS", "บริการ"], timeout=10)
 
-    # [ปรับปรุง] ใช้ smart_click_with_scroll แบบละเอียดขึ้น
+    # 1. ลองหาด้วยชื่อก่อน (เพื่อความชัวร์)
     target_ems = ["บริการอีเอ็มเอส", "อีเอ็มเอส", "EMS"]
-    
     found = False
     for keyword in target_ems:
-        # ลองหาแบบปกติก่อน (เผื่ออยู่หน้าแรก)
         if smart_click(main_window, keyword, timeout=3, optional=True):
             found = True
             break
-        
-        # ถ้าไม่เจอ ลองเลื่อนหา (Scroll)
-        if smart_click_with_scroll(main_window, keyword, max_scrolls=3, scroll_dist=scroll_dist):
+        if smart_click_with_scroll(main_window, keyword, max_scrolls=2, scroll_dist=scroll_dist):
             found = True
             break
             
-    if found:
-        log("[SUCCESS] กดเลือก 'บริการ EMS' เรียบร้อย")
+    # 2. [Fallback] ถ้าหาชื่อไม่เจอจริงๆ ให้ใช้วิธีกด "List Item ใบแรก" (Index 0)
+    if not found:
+        log("[!] หาชื่อไม่เจอ -> ลองกดปุ่ม Card ใบแรก (Fallback: Index 0)")
+        # ลองหา ListItemWrapper หรือ ListItem ทั่วไป
+        if click_list_item_by_index(main_window, index=0):
+             log("[SUCCESS] กดปุ่มใบแรกสำเร็จ (EMS)")
+        else:
+             log("[Error] กดปุ่มใบแรกไม่สำเร็จ")
     else:
-        log("[Error] หาปุ่ม EMS ไม่เจอ (ลองตรวจสอบ Log รายการ Text ด้านบน)")
+        log("[SUCCESS] กดเลือก 'บริการ EMS' เรียบร้อย")
 
     log("\n[SUCCESS] จบการทำงาน")
     print(">>> กด Enter เพื่อปิดโปรแกรม... <<<")
