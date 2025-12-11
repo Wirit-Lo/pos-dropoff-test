@@ -19,9 +19,7 @@ def log(message):
 def force_scroll_down(window, scroll_dist=-5):
     """
     [Updated V6] ฟังก์ชันช่วยเลื่อนหน้าจอลง
-    - ปรับลด delay ให้ทำงานไวขึ้นตามคำขอ
     """
-    # log(f"...สั่งเลื่อนหน้าจอ (Dist: {scroll_dist})...") # ปิด Log รกๆ
     try:
         window.set_focus()
         rect = window.rectangle()
@@ -30,10 +28,9 @@ def force_scroll_down(window, scroll_dist=-5):
         scrollbar_y = rect.top + int(rect.height() * 0.5)
         
         mouse.click(coords=(scrollbar_x, scrollbar_y))
-        # time.sleep(0.1) # ตัด delay ออกเพื่อความไว
         
         mouse.scroll(coords=(scrollbar_x, scrollbar_y), wheel_dist=scroll_dist)
-        time.sleep(0.5) # ลดจาก 1.0 เหลือ 0.5 เพื่อความไว
+        time.sleep(0.5)
         
     except Exception as e:
         log(f"[!] Scroll Error: {e}")
@@ -58,7 +55,7 @@ def smart_click(window, criteria_list, timeout=5, optional=False):
                             log(f"[/] Double Click '{criteria}'")
                             return True
             except: pass
-        time.sleep(0.3) # ลด delay การวนหา
+        time.sleep(0.3)
 
     if not optional:
         log(f"[X] หาปุ่ม {criteria_list} ไม่เจอ!")
@@ -67,8 +64,6 @@ def smart_click(window, criteria_list, timeout=5, optional=False):
 def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
     """
     [Updated V6 - Fast & Accurate] 
-    1. ลด Safe Zone เหลือ 70px (เพื่อให้กดปุ่มล่างๆ ได้เลย ไม่ต้องเลื่อน)
-    2. ถ้าต้องเลื่อนขยับ (Nudge) ให้เลื่อนแค่ -4 พอ (กันปุ่มกระเด็นหาย)
     """
     log(f"...ค้นหา '{criteria}' (โหมดเลื่อนหาไว)...")
     
@@ -89,18 +84,14 @@ def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
                 elem_rect = found_element.rectangle()
                 win_rect = window.rectangle()
                 
-                # [FIX 1] ลดพื้นที่กันชนด้านล่างลง (จาก 150 เหลือ 70) 
-                # ปุ่มอยู่ล่างแค่ไหนก็กดได้ ตราบใดที่ไม่ทับกับ Footer จริงๆ
+                # เช็ค Safe Zone (70px จากด้านล่าง)
                 safe_bottom_limit = win_rect.bottom - 70 
                 
                 # เช็คว่าปุ่มอยู่ต่ำกว่าเส้นตายหรือไม่
                 if elem_rect.bottom >= safe_bottom_limit:
-                    log(f"   [!] เจอปุ่ม '{criteria}' แต่อยู่ต่ำมาก (ติดขอบล่าง) -> ขยับนิดเดียว")
-                    
-                    # [FIX 2] บังคับเลื่อนแค่ -4 พอ (Nudge) ไม่ใช้ค่า scroll_dist ที่อาจจะเยอะเกินไป
-                    # เพื่อป้องกันปุ่มเลื่อนเลยขึ้นไปข้างบนจนหาไม่เจอ
+                    log(f"   [!] เจอปุ่ม '{criteria}' แต่อยู่ต่ำมาก -> ขยับนิดเดียว")
                     force_scroll_down(window, -4)
-                    time.sleep(0.3) # รอแป๊บเดียวแล้วหาใหม่เลย
+                    time.sleep(0.3)
                     continue 
                 
                 # ถ้าตำแหน่ง OK -> กดเลย
@@ -111,7 +102,7 @@ def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
             except Exception as e:
                 log(f"   [!] เจอแต่กดไม่ได้ ({e}) -> ลองเลื่อนต่อ")
 
-        # 3. ถ้าไม่เจอเลย -> เลื่อนหาหน้าถัดไป (ใช้ค่า scroll_dist ตาม Config ได้เลยเพื่อความไว)
+        # 3. ถ้าไม่เจอเลย -> เลื่อนหาหน้าถัดไป
         if i < max_scrolls:
             if not found_element:
                 log(f"   [Rotate {i+1}] ไม่เจอ '{criteria}' -> เลื่อนหา (Scroll)")
@@ -168,9 +159,9 @@ def smart_next(window):
 
 def process_sender_info(window, phone_number, default_postal):
     log("...เช็คหน้า Popup ผู้ฝากส่ง...")
-    if smart_click(window, "อ่านบัตรประชาชน", timeout=3, optional=True): # ลด timeout
+    if smart_click(window, "อ่านบัตรประชาชน", timeout=3, optional=True): 
         log("[Popup] กดอ่านบัตรเรียบร้อย")
-        time.sleep(2) # ลดเวลาอ่านบัตร
+        time.sleep(2) 
 
         try:
             found_postal_box = False
@@ -188,7 +179,7 @@ def process_sender_info(window, phone_number, default_postal):
         smart_input_with_scroll(window, "หมายเลขโทรศัพท์", phone_number)
         smart_next(window)
 
-def wait_for_text(window, text, timeout=5): # ลด timeout default
+def wait_for_text(window, text, timeout=5): 
     start = time.time()
     while time.time() - start < timeout:
         try:
@@ -216,7 +207,7 @@ def run_smart_scenario(main_window, config):
         postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
         special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
-        step_delay = float(config['SETTINGS'].get('StepDelay', 0.5)) # บังคับ float
+        step_delay = float(config['SETTINGS'].get('StepDelay', 0.5))
         scroll_dist = int(config['SETTINGS'].get('ScrollDistance', -5))
     except: return
 
@@ -229,7 +220,6 @@ def run_smart_scenario(main_window, config):
     process_sender_info(main_window, phone, postal) 
     time.sleep(step_delay)
 
-    # [จุดที่แก้ไข] เลือกกล่องด้วย logic ใหม่
     if not smart_click_with_scroll(main_window, "ซองจดหมาย", scroll_dist=scroll_dist): 
         log("[Error] หา 'ซองจดหมาย' ไม่เจอ")
         return
@@ -248,7 +238,6 @@ def run_smart_scenario(main_window, config):
     smart_input_weight(main_window, weight)
     smart_next(main_window)
     
-    
     wait_for_text(main_window, "รหัสไปรษณีย์")
     
     try:
@@ -258,10 +247,24 @@ def run_smart_scenario(main_window, config):
     smart_next(main_window)
     time.sleep(step_delay)
 
+    # --- ส่วนเดิม: กดดำเนินการ/เสร็จสิ้น ---
     smart_click(main_window, "ดำเนินการ", timeout=2, optional=True)
     smart_click(main_window, ["เสร็จสิ้น", "Settle", "ยืนยัน"], timeout=2, optional=True)
-    
-    log("\n[SUCCESS] จบการทำงาน")
+
+    # --- ส่วนใหม่: ไปกด EMS ต่อ ---
+    log("...กำลังไปที่หน้าบริการหลัก เพื่อเลือก EMS...")
+    time.sleep(step_delay + 1.0) # รอหน้าจอเปลี่ยนนิดหน่อย
+
+    # ใช้ smart_click_with_scroll เพื่อความชัวร์ เผื่อปุ่มไม่ได้อยู่บนสุด
+    if smart_click_with_scroll(main_window, "บริการอีเอ็มเอส", scroll_dist=scroll_dist):
+        log("[SUCCESS] กดเลือก 'บริการอีเอ็มเอส' เรียบร้อย")
+    else:
+        # Fallback กรณีหาชื่อเต็มไม่เจอ
+        log("[!] ไม่เจอ 'บริการอีเอ็มเอส' ลองหาคำว่า 'EMS' แทน")
+        if not smart_click(main_window, "EMS", timeout=2):
+            log("[Error] หาปุ่ม EMS ไม่เจอทั้ง 2 ชื่อ")
+
+    log("\n[SUCCESS] จบการทำงาน (รวมขั้นตอน EMS แล้ว)")
     print(">>> กด Enter เพื่อปิดโปรแกรม... <<<")
     input()
 
