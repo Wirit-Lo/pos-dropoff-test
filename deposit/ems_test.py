@@ -7,12 +7,17 @@ from pywinauto import mouse
 
 # ================= 1. ส่วนจัดการ Config & Log =================
 def load_config(filename='config.ini'):
-    """โหลดค่าจากไฟล์ config.ini"""
+    """โหลดค่าจากไฟล์ config.ini (รองรับการรันจาก Path อื่น)"""
+    # หา path ของไฟล์ script ปัจจุบัน
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(script_dir, filename)
+
     config = configparser.ConfigParser()
-    if not os.path.exists(filename): 
-        print(f"[Error] ไม่พบไฟล์ {filename} กรุณาสร้างไฟล์ก่อน")
+    if not os.path.exists(file_path): 
+        print(f"[Error] ไม่พบไฟล์ Config ที่: {file_path}")
+        print("กรุณาตรวจสอบว่าไฟล์ config.ini อยู่ที่เดียวกับไฟล์ .py หรือไม่")
         return None
-    config.read(filename, encoding='utf-8')
+    config.read(file_path, encoding='utf-8')
     return config
 
 def log(message):
@@ -320,7 +325,6 @@ def run_smart_scenario(main_window, config):
         main_window.type_keys("{ENTER}")
 
     log("\n[SUCCESS] จบการทำงาน")
-    input(">>> กด Enter เพื่อปิด... <<<")
 
 # ================= 5. เริ่มต้นโปรแกรม =================
 if __name__ == "__main__":
@@ -333,3 +337,7 @@ if __name__ == "__main__":
             run_smart_scenario(app.top_window(), conf)
         except Exception as e:
             log(f"Error: {e}")
+            print("คำแนะนำ: ตรวจสอบว่าเปิดโปรแกรม POS ไว้หรือยัง และชื่อ Title ตรงกับใน Config หรือไม่")
+    
+    # [FIX] ใส่ input ดักไว้ท้ายสุดเสมอ เพื่อไม่ให้จอ Console ปิดเอง
+    input("\n>>> กด Enter เพื่อปิดโปรแกรม... <<<")
