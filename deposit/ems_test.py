@@ -390,11 +390,7 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
 
     # 3. ลบการเลือกซองจดหมายออก (ข้ามไปกด Enter เลย)
-    log("...ข้ามการเลือกซองจดหมาย (ใช้ค่าเริ่มต้น)...")
-    if special_options_str.strip():
-        for opt in special_options_str.split(','):
-            if opt: smart_click(main_window, opt.strip(), timeout=2)
-    main_window.type_keys("{ENTER}")
+    if not smart_click_with_scroll(main_window, "ซองจดหมาย", scroll_dist=scroll_dist): return
     time.sleep(step_delay)
 
     # 4. สิ่งของต้องห้าม & น้ำหนัก
