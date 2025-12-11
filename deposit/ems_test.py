@@ -257,6 +257,7 @@ def process_receiver_address_selection(window, address_keyword):
         time.sleep(2) 
         if check_error_popup(window):
             log("[!] มี Error Popup -> ข้ามการเลือกรายการ")
+            # ถ้ามี Error ให้ไปต่อเลย
             smart_next(window)
             return
 
@@ -271,11 +272,16 @@ def process_receiver_address_selection(window, address_keyword):
         except: pass
         
         time.sleep(1)
+        
+        # [FIX] เพิ่มการกดถัดไป (Enter) หลังจากเลือกที่อยู่เสร็จ ตามที่แจ้งปัญหามา
+        log("...กด 'ถัดไป' (Enter) เพื่อยืนยันที่อยู่และไปหน้ากรอกรายละเอียด...")
+        smart_next(window)
 
 def process_receiver_details_form(window, fname, lname, phone):
     log("--- หน้า: รายละเอียดผู้รับ ---")
+    # รอให้แน่ใจว่าอยู่หน้านี้จริงๆ (ถ้ายังอยู่หน้าเดิม Code จะไม่ทำงานมั่ว)
     if not wait_for_text(window, "คำนำหน้า", timeout=5):
-        log("[WARN] อาจจะยังไม่เข้าหน้ากรอกรายละเอียด")
+        log("[WARN] อาจจะยังไม่เข้าหน้ากรอกรายละเอียด (หรือข้ามมาแล้ว)")
 
     time.sleep(1)
     check_error_popup(window)
@@ -381,12 +387,8 @@ def run_smart_scenario(main_window, config):
     process_sender_info_popup(main_window, phone, postal) 
     time.sleep(step_delay)
 
-    # [FIXED] 3. ลบการเลือกซองจดหมายออก (ข้ามไปกด Enter เลย)
-    # เพราะหน้าจอมักจะเลือกให้อยู่แล้ว การพยายามหาซองจดหมายแล้วเลื่อนจอทำให้กดผิด
+    # 3. ลบการเลือกซองจดหมายออก (ข้ามไปกด Enter เลย)
     log("...ข้ามการเลือกซองจดหมาย (ใช้ค่าเริ่มต้น)...")
-    # if not smart_click_with_scroll(main_window, "ซองจดหมาย", scroll_dist=scroll_dist): return
-    # time.sleep(step_delay)
-    
     if special_options_str.strip():
         for opt in special_options_str.split(','):
             if opt: smart_click(main_window, opt.strip(), timeout=2)
