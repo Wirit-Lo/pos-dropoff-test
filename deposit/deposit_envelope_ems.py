@@ -256,15 +256,15 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay + 1.0) # รอหน้าจอเปลี่ยนนิดหน่อย
 
     # ใช้ smart_click_with_scroll เพื่อความชัวร์ เผื่อปุ่มไม่ได้อยู่บนสุด
-    if smart_click_with_scroll(main_window, "บริการอีเอ็มเอส", scroll_dist=scroll_dist):
-        log("[SUCCESS] กดเลือก 'บริการอีเอ็มเอส' เรียบร้อย")
+    if smart_click_with_scroll(main_window, "จดหมายซองในประเทศซอง", scroll_dist=scroll_dist):
+        log("[SUCCESS] กดเลือก 'จดหมายซองในประเทศซอง' เรียบร้อย")
     else:
         # Fallback กรณีหาชื่อเต็มไม่เจอ
-        log("[!] ไม่เจอ 'บริการอีเอ็มเอส' ลองหาคำว่า 'EMS' แทน")
-        if not smart_click(main_window, "EMS", timeout=2):
-            log("[Error] หาปุ่ม EMS ไม่เจอทั้ง 2 ชื่อ")
+        log("[!] ไม่เจอ 'จดหมายซองในประเทศซอง' ลองหาคำว่า 'จดหมายซองในประเทศซอง' แทน")
+        if not smart_click(main_window, "จดหมายซองในประเทศซอง", timeout=2):
+            log("[Error] หาปุ่ม จดหมายซองในประเทศซอง ไม่เจอทั้ง 2 ชื่อ")
 
-    log("\n[SUCCESS] จบการทำงาน (รวมขั้นตอน EMS แล้ว)")
+    log("\n[SUCCESS] จบการทำงาน (รวมขั้นตอน จดหมายซองในประเทศซอง แล้ว)")
     print(">>> กด Enter เพื่อปิดโปรแกรม... <<<")
     input()
 
