@@ -262,32 +262,42 @@ def process_receiver_address_selection(window, address_keyword):
                 edits[1].type_keys(str(address_keyword), with_spaces=True)
         except: pass
         
-        # [NEW] รอเช็ค Error Popup ก่อน
+        # รอเช็ค Error Popup ก่อน
         log("...รอตรวจสอบผลลัพธ์/แจ้งเตือน...")
-        time.sleep(2) 
+        time.sleep(1.5) 
         if check_error_popup(window):
-            log("[!] มี Error Popup -> ข้ามการเลือกรายการ (จะไปกรอกเองหน้าถัดไป)")
+            log("[!] มี Error Popup -> ข้ามการเลือกรายการ")
             smart_next(window)
             return
 
-        # 2. ถ้าไม่มี Error รอรายการเด้งขึ้นมา แล้วเลือกอันแรก
+        # 2. รอรายการเด้งขึ้นมา แล้วเลือกอันแรก
         log("...รอกล่องรายการที่อยู่...")
-        try:
-            # [FIX] กรอง ListItem ที่อยู่ด้านบน (Header/Breadcrumb) ออก
-            # รายการที่ถูกต้องควรอยู่ด้านล่าง (Y > 150)
-            all_list_items = [i for i in window.descendants(control_type="ListItem") if i.is_visible()]
-            valid_items = [i for i in all_list_items if i.rectangle().top > 150]
+        found_item = False
+        # [UPDATED] วนลูปหา 5 รอบ (เผื่อรายการขึ้นช้า)
+        for _ in range(5):
+            try:
+                # กรอง ListItem ที่อยู่ด้านบน (Header/Breadcrumb) ออก (ปรับจาก 150 เป็น 100)
+                all_list_items = [i for i in window.descendants(control_type="ListItem") if i.is_visible()]
+                valid_items = [i for i in all_list_items if i.rectangle().top > 100]
 
-            if valid_items:
-                log(f"[/] เจอรายการ {len(valid_items)} รายการ -> เลือกอันแรก")
-                valid_items[0].click_input()
-            else:
-                log("[!] ไม่เจอรายการที่อยู่ (หรือกรอกเอง) -> ข้ามการเลือก")
-        except: pass
+                if valid_items:
+                    # [UPDATED] เรียงลำดับจากบนลงล่าง (Y น้อยไปมาก) เพื่อให้ได้ตัวแรกสุดชัวร์ๆ
+                    valid_items.sort(key=lambda x: x.rectangle().top)
+                    
+                    target_item = valid_items[0]
+                    log(f"[/] เจอรายการ {len(valid_items)} รายการ -> เลือกอันแรก (Y={target_item.rectangle().top})")
+                    target_item.click_input()
+                    found_item = True
+                    break
+            except: pass
+            time.sleep(0.5)
+            
+        if not found_item:
+            log("[!] ไม่เจอรายการที่อยู่ (หรือกรอกเอง) -> ข้ามการเลือก")
         
         time.sleep(1)
         
-        # [FIX] กดถัดไปเสมอหลังจากเลือกที่อยู่เสร็จ เพื่อไปหน้ากรอกชื่อ
+        # กดถัดไปเสมอหลังจากเลือกที่อยู่เสร็จ
         log("...กด 'ถัดไป' (Enter) เพื่อยืนยันที่อยู่...")
         smart_next(window)
 
