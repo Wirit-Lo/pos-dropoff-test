@@ -257,31 +257,33 @@ def process_receiver_address_selection(window, address_keyword):
         time.sleep(2) 
         if check_error_popup(window):
             log("[!] มี Error Popup -> ข้ามการเลือกรายการ")
-            # ถ้ามี Error ให้ไปต่อเลย
             smart_next(window)
             return
 
         log("...รอกล่องรายการที่อยู่...")
         try:
-            list_items = [i for i in window.descendants(control_type="ListItem") if i.is_visible()]
-            if list_items:
-                log(f"[/] เจอรายการ {len(list_items)} รายการ -> เลือกอันแรก")
-                list_items[0].click_input()
+            # [FIX] กรอง ListItem ที่อยู่ด้านบน (Header/Breadcrumb) ออก
+            # รายการที่ถูกต้องควรอยู่ด้านล่าง (Y > 150)
+            all_list_items = [i for i in window.descendants(control_type="ListItem") if i.is_visible()]
+            valid_items = [i for i in all_list_items if i.rectangle().top > 150]
+
+            if valid_items:
+                log(f"[/] เจอรายการ {len(valid_items)} รายการ -> เลือกอันแรก")
+                valid_items[0].click_input()
             else:
-                log("[!] ไม่เจอรายการที่อยู่ -> ข้ามการเลือก")
+                log("[!] ไม่เจอรายการที่อยู่ (หรือกรอกเอง) -> ข้ามการเลือก")
         except: pass
         
         time.sleep(1)
         
-        # [FIX] เพิ่มการกดถัดไป (Enter) หลังจากเลือกที่อยู่เสร็จ ตามที่แจ้งปัญหามา
-        log("...กด 'ถัดไป' (Enter) เพื่อยืนยันที่อยู่และไปหน้ากรอกรายละเอียด...")
+        # [FIX] กดถัดไปเสมอ แม้จะเลือกรายการหรือไม่ก็ตาม
+        log("...กด 'ถัดไป' (Enter) เพื่อยืนยันที่อยู่...")
         smart_next(window)
 
 def process_receiver_details_form(window, fname, lname, phone):
     log("--- หน้า: รายละเอียดผู้รับ ---")
-    # รอให้แน่ใจว่าอยู่หน้านี้จริงๆ (ถ้ายังอยู่หน้าเดิม Code จะไม่ทำงานมั่ว)
     if not wait_for_text(window, "คำนำหน้า", timeout=5):
-        log("[WARN] อาจจะยังไม่เข้าหน้ากรอกรายละเอียด (หรือข้ามมาแล้ว)")
+        log("[WARN] อาจจะยังไม่เข้าหน้ากรอกรายละเอียด")
 
     time.sleep(1)
     check_error_popup(window)
