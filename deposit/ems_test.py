@@ -212,8 +212,8 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
             
         elif found_list:
             # [CRITICAL FIX] เจอ List แล้ว อย่าเพิ่งกดทันที! รอให้มันนิ่งก่อน
-            log("...เจอรายการแล้ว! รอ UI นิ่ง (1.0s)...")
-            time.sleep(1.0) 
+            log("...เจอรายการแล้ว! รอ UI นิ่ง (3.0s)...")
+            time.sleep(3.0) 
             
             try:
                 # ดึงรายการใหม่อีกครั้ง (Re-fetch) เพราะตำแหน่งอาจเปลี่ยนหลัง Animation
