@@ -95,7 +95,6 @@ def check_error_popup(window):
 
 def process_special_services(window, services_str):
     log("--- หน้า: บริการพิเศษ ---")
-    # รอหน้านี้สูงสุด 5 วินาที ถ้าไม่เจอจะถือว่าผ่านไปแล้วหรืออยู่หน้าอื่น
     if wait_for_text(window, "บริการพิเศษ", timeout=5):
         if services_str.strip():
             for s in services_str.split(','):
@@ -138,12 +137,16 @@ def process_receiver_address_selection(window, address_keyword):
         for _ in range(5):
             try:
                 all_list_items = [i for i in window.descendants(control_type="ListItem") if i.is_visible()]
-                # กรองเอาเฉพาะรายการที่ต่ำกว่า Header (Y > 80)
-                valid_items = [i for i in all_list_items if i.rectangle().top > 80]
+                
+                # [FIXED CRITICAL] ปรับ Y > 200 (หลบ Header แน่นอน) และ Height > 50 (เอาเฉพาะกล่องใหญ่)
+                valid_items = [
+                    i for i in all_list_items 
+                    if i.rectangle().top > 200 and i.rectangle().height() > 50
+                ]
 
                 if valid_items:
                     valid_items.sort(key=lambda x: x.rectangle().top)
-                    target_item = valid_items[0] # เลือกอันแรกสุด
+                    target_item = valid_items[0] 
                     log(f"[/] เลือกรายการแรกสุด: (Y={target_item.rectangle().top})")
                     target_item.click_input()
                     found_item = True
@@ -175,7 +178,12 @@ def process_receiver_details_form(window, fname, lname, phone):
     try:
         log("...พยายามหาช่องกรอกข้อมูล (Edit Controls)...")
         edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
-        top_edits = [e for e in edits if e.rectangle().top < 500]
+        # กรองเฉพาะช่องที่อยู่ด้านบน (ชื่อที่อยู่) หลบเบอร์โทรด้านล่าง
+        # เพิ่มเงื่อนไข top > 150 เพื่อไม่ให้ไปจับ Edit Box ผีที่อาจซ่อนอยู่บน Header
+        top_edits = [
+            e for e in edits 
+            if e.rectangle().top < 500 and e.rectangle().top > 150
+        ]
         
         name_filled = False
 
@@ -204,20 +212,21 @@ def process_receiver_details_form(window, fname, lname, phone):
                 try:
                     for child in window.descendants():
                         if child.is_visible() and label_text == child.window_text().strip():
-                            child.click_input()
-                            window.type_keys("{TAB}")
-                            time.sleep(0.2)
-                            window.type_keys(fname, with_spaces=True)
-                            window.type_keys("{TAB}")
-                            time.sleep(0.2)
-                            window.type_keys(lname, with_spaces=True)
-                            name_filled = True
-                            found_label = True
-                            break
+                            # เช็คว่า Label ต้องไม่อยู่สูงเกินไป (ป้องกันกด Header)
+                            if child.rectangle().top > 150:
+                                child.click_input()
+                                window.type_keys("{TAB}")
+                                time.sleep(0.2)
+                                window.type_keys(fname, with_spaces=True)
+                                window.type_keys("{TAB}")
+                                time.sleep(0.2)
+                                window.type_keys(lname, with_spaces=True)
+                                name_filled = True
+                                found_label = True
+                                break
                 except: pass
                 if found_label: break
 
-        # Critical Check
         if not name_filled:
             log("[FATAL ERROR] ไม่พบช่องกรอกชื่อ/นามสกุล -> หยุดการทำงาน!")
             raise Exception("Critical: Receiver Name/Lastname inputs not found.")
@@ -320,7 +329,6 @@ if __name__ == "__main__":
                 if main_window.get_show_state() == 2: main_window.restore()
                 main_window.set_focus()
             
-            # เรียกใช้ฟังก์ชันทดสอบแบบย่อ
             run_partial_test(main_window, conf)
             
         except Exception as e:
