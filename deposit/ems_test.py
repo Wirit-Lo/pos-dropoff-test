@@ -155,12 +155,24 @@ def fill_manual_address(window, manual_data):
 def process_receiver_address_selection(window, address_keyword, manual_data):
     log(f"--- หน้า: ค้นหาที่อยู่ ({address_keyword}) ---")
     
-    # รอจนกว่าจะเจอหน้าข้อมูลผู้รับ
+    # 1. รอจนกว่าจะเจอหน้าข้อมูลผู้รับจริงๆ (ตรวจสอบ Header และ ช่องค้นหา)
+    log("...ตรวจสอบความพร้อมหน้าจอ...")
     if wait_for_text(window, "ข้อมูลผู้รับ", timeout=5):
-        time.sleep(0.5) 
         
-        # 1. กรอกคำค้นหา
+        # 2. หาช่องค้นหาและกรอกข้อมูล
         try:
+            # รอให้ช่อง Edit โหลดขึ้นมาจริงๆ
+            search_ready = False
+            for _ in range(10): # รอสูงสุด 5 วินาที
+                edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
+                if edits:
+                    search_ready = True
+                    break
+                time.sleep(0.5)
+            
+            if not search_ready:
+                log("[WARN] หาช่องค้นหาไม่เจอ อาจจะยังโหลดไม่เสร็จ")
+            
             edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
             filled = False
             for edit in edits:
@@ -174,13 +186,12 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
                 edits[1].type_keys(str(address_keyword), with_spaces=True)
         except: pass
         
-        # 2. [UPDATED] รอ Popup หรือ รายการที่อยู่ (Fast Polling Loop)
+        # 3. [UPDATED] รอ Popup หรือ รายการที่อยู่ (Fast Polling Loop)
         log("...รอผลลัพธ์ (Popup หรือ รายการ) [Fast Check]...")
         found_popup = False
         found_list = False
         
-        # วนลูปเช็ค
-        for _ in range(20):
+        for _ in range(25): # เพิ่มรอบการรอเป็น 25 รอบ (ประมาณ 6 วินาที)
             if check_error_popup(window, delay=0.0):
                 log("[WARN] ตรวจพบ Popup คำเตือน -> เข้าสู่โหมด Manual")
                 found_popup = True
@@ -194,14 +205,18 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
             
             time.sleep(0.25)
 
-        # 3. ตัดสินใจทำงานต่อ
+        # 4. ตัดสินใจทำงานต่อ
         if found_popup:
             fill_manual_address(window, manual_data)
             smart_next(window) # กดถัดไปหลังกรอกมือ
             
         elif found_list:
-            # เจอ List แล้วกดทันที
+            # [CRITICAL FIX] เจอ List แล้ว อย่าเพิ่งกดทันที! รอให้มันนิ่งก่อน
+            log("...เจอรายการแล้ว! รอ UI นิ่ง (1.0s)...")
+            time.sleep(1.0) 
+            
             try:
+                # ดึงรายการใหม่อีกครั้ง (Re-fetch) เพราะตำแหน่งอาจเปลี่ยนหลัง Animation
                 all_list_items = [i for i in window.descendants(control_type="ListItem") 
                                   if i.is_visible()]
                 valid_items = [i for i in all_list_items 
@@ -212,14 +227,16 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
                     target_item = valid_items[0]
                     log(f"[/] เลือกรายการแรกสุด: (Y={target_item.rectangle().top})")
                     
-                    # [UPDATED] เพิ่มเวลาหน่วงก่อนและหลังกด เพื่อความชัวร์
-                    time.sleep(0.3) 
+                    # ลอง Focus ก่อนกด (เผื่อช่วยเรื่อง Click Miss)
+                    try: target_item.set_focus()
+                    except: pass
+                    
                     target_item.click_input()
                     
-                    log("...รอข้อมูลลงฟอร์ม (1.5s)...")
-                    time.sleep(1.5) # ให้เวลาหน้าจอโหลดข้อมูลจากการเลือก
+                    log("...รอข้อมูลลงฟอร์ม (2.0s)...") # เพิ่มเวลารอหลังกด
+                    time.sleep(2.0) 
                 else:
-                    log("[!] เจอ List แต่กรองไม่ผ่าน")
+                    log("[!] รายการหายไปหลังรอ? (กรองไม่ผ่าน)")
             except: pass
             
             smart_next(window) # กดถัดไปเพื่อยืนยัน
