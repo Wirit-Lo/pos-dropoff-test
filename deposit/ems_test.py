@@ -71,9 +71,11 @@ def smart_next(window):
         log("   [!] หาปุ่มถัดไปไม่เจอ -> กด Enter")
         window.type_keys("{ENTER}")
 
-def check_error_popup(window):
-    """เช็ค Popup และกดปิด ถ้าเจอจะ return True"""
-    time.sleep(0.5) 
+def check_error_popup(window, delay=0.5):
+    """เช็ค Popup และกดปิด (เพิ่ม delay parameter เพื่อปรับความไว)"""
+    if delay > 0:
+        time.sleep(delay)
+    
     try:
         # เช็คหน้าต่าง Popup ทั่วไป
         for child in window.descendants(control_type="Window"):
@@ -88,11 +90,11 @@ def check_error_popup(window):
                     return True
         
         # เช็ค Text แจ้งเตือน
-        if wait_for_text(window, ["ไม่มีผลลัพธ์", "ไม่สามารถเชื่อมต่อ"], timeout=1):
+        if wait_for_text(window, ["ไม่มีผลลัพธ์", "ไม่สามารถเชื่อมต่อ"], timeout=0.1): # ลด timeout ตรงนี้ด้วย
              log("[WARN] พบข้อความ Error")
              if smart_click(window, ["ตกลง", "OK", "กลับ"], timeout=2):
                  return True
-             window.type_keys("{ENTER}") # ลองกด Enter เผื่อเป็น Popup ที่ Focus อยู่
+             window.type_keys("{ENTER}") 
              return True
     except: pass
     return False
@@ -156,59 +158,54 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
     
     # รอจนกว่าจะเจอหน้าข้อมูลผู้รับ
     if wait_for_text(window, "ข้อมูลผู้รับ", timeout=5):
-        time.sleep(1)
+        time.sleep(0.5) # [Fast] ลดเวลาลงจาก 1.0 เหลือ 0.5
         
         # 1. กรอกคำค้นหา
         try:
             edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
             filled = False
             for edit in edits:
-                # หาช่องที่ชื่อมีคำว่า 'ที่อยู่' หรือเป็นช่องว่างๆ ช่องแรก
                 if "ที่อยู่" in edit.element_info.name or not edit.get_value():
                     edit.click_input()
                     edit.type_keys(str(address_keyword), with_spaces=True)
                     filled = True
                     break
-            # ถ้าหาไม่เจอ ให้ลองกดช่องที่ 2 (เผื่อช่องแรกเป็นอย่างอื่น)
             if not filled and len(edits) > 1:
                 edits[1].click_input()
                 edits[1].type_keys(str(address_keyword), with_spaces=True)
         except: pass
         
-        # 2. [UPDATED] รอ Popup หรือ รายการที่อยู่ (Wait Loop)
-        log("...รอผลลัพธ์ (Popup หรือ รายการ)...")
+        # 2. [UPDATED] รอ Popup หรือ รายการที่อยู่ (Fast Polling Loop)
+        log("...รอผลลัพธ์ (Popup หรือ รายการ) [Fast Check]...")
         found_popup = False
         found_list = False
         
-        # วนลูปเช็คสถานะ 10 รอบ (ประมาณ 5 วินาที)
-        for _ in range(10):
-            # 2.1 เช็ค Popup ก่อน
-            if check_error_popup(window):
+        # วนลูปถี่ขึ้น: เช็คทุก 0.25 วิ จำนวน 20 รอบ (รวมประมาณ 5 วินาที)
+        for _ in range(20):
+            # 2.1 เช็ค Popup (แบบเร็ว delay=0)
+            if check_error_popup(window, delay=0.0):
                 log("[WARN] ตรวจพบ Popup คำเตือน -> เข้าสู่โหมด Manual")
                 found_popup = True
                 break
             
-            # 2.2 เช็คว่ามีรายการ List ขึ้นมาหรือยัง (ต้องต่ำกว่า Header Y>200)
+            # 2.2 เช็ครายการ List (Y > 200)
             list_items = [i for i in window.descendants(control_type="ListItem") 
                           if i.is_visible() and i.rectangle().top > 200]
             if list_items:
                 found_list = True
                 break
             
-            time.sleep(0.5)
+            time.sleep(0.25) # [Fast] รอแป๊บเดียวแล้วเช็คใหม่
 
         # 3. ตัดสินใจทำงานต่อ
         if found_popup:
-            # กรณีเจอ Popup: กรอกข้อมูลเอง
             fill_manual_address(window, manual_data)
-            # ไม่ต้องกดเลือกรายการแล้ว ไปต่อที่การกด Enter/Next ด้านล่างเลย
             
         elif found_list:
-            # กรณีเจอ List: เลือกรายการบนสุด
+            # เจอ List แล้วกดทันที
             try:
                 all_list_items = [i for i in window.descendants(control_type="ListItem") 
                                   if i.is_visible()]
-                # กรอง Y > 200 และ สูง > 50
                 valid_items = [i for i in all_list_items 
                                if i.rectangle().top > 200 and i.rectangle().height() > 50]
                 
@@ -221,8 +218,8 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
                     log("[!] เจอ List แต่กรองไม่ผ่าน (อาจจะเล็กไป หรืออยู่สูงไป)")
             except: pass
             
-            time.sleep(1)
-            smart_next(window) # กดถัดไปเพื่อยืนยันที่อยู่
+            time.sleep(0.5) # รอ Animation นิดหน่อย
+            smart_next(window)
             
         else:
             log("[!] ไม่เจอทั้ง Popup และ รายการ -> ลองกดถัดไปเลย")
@@ -292,7 +289,6 @@ def process_receiver_details_form(window, fname, lname, phone):
         if not name_filled:
             log("[FATAL ERROR] ไม่พบช่องกรอกชื่อ/นามสกุล -> หยุดการทำงาน!")
             # raise Exception("Critical: Receiver Name/Lastname inputs not found.") 
-            # Comment raise ออกชั่วคราวเพื่อให้เทสเบอร์โทรต่อได้ (หรือเปิดไว้ถ้าต้องการ Strict)
 
         log("...เลื่อนลงเพื่อหาเบอร์โทร...")
         force_scroll_down(window, -10)
