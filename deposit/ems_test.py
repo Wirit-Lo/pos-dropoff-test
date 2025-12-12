@@ -74,9 +74,9 @@ def smart_next(window):
 
 def check_error_popup(window, delay=0.5):
     """เช็ค Popup และกดปิด"""
-    if delay > 0:
-        time.sleep(delay)
+    if delay > 0: time.sleep(delay)
     try:
+        # 1. เช็คหน้าต่าง Popup (Window Control)
         for child in window.descendants(control_type="Window"):
             txt = child.window_text()
             if "แจ้งเตือน" in txt or "Warning" in txt or "คำเตือน" in txt:
@@ -86,8 +86,9 @@ def check_error_popup(window, delay=0.5):
                 else:
                     window.type_keys("{ENTER}")
                     return True
-        if wait_for_text(window, ["ไม่มีผลลัพธ์", "ไม่สามารถเชื่อมต่อ"], timeout=0.1): 
-             log("[WARN] พบข้อความ Error")
+        # 2. เช็ค Text บนหน้าจอ (กรณีไม่ใช่ Window แยก)
+        if wait_for_text(window, ["ไม่มีผลลัพธ์", "ไม่สามารถเชื่อมต่อ", "Connect failed"], timeout=0.1): 
+             log("[WARN] พบข้อความ Error บนหน้าจอ")
              if smart_click(window, ["ตกลง", "OK", "กลับ"], timeout=2):
                  return True
              window.type_keys("{ENTER}") 
@@ -95,7 +96,7 @@ def check_error_popup(window, delay=0.5):
     except: pass
     return False
 
-# ================= 3. Logic หลัก (Process Functions) =================
+# ================= 3. Logic หลัก =================
 
 def process_special_services(window, services_str):
     log("--- หน้า: บริการพิเศษ ---")
@@ -111,33 +112,53 @@ def process_sender_info_page(window):
     smart_next(window)
 
 def fill_manual_address(window, manual_data):
-    """ฟังก์ชันกรอกที่อยู่เอง (กรณีเกิด Error Popup)"""
+    """ฟังก์ชันกรอกที่อยู่เอง (ทำงานเมื่อมี Popup แจ้งเตือน)"""
     log("...เข้าสู่โหมดกรอกที่อยู่ด้วยตนเอง (Manual Fallback)...")
+    
     province = manual_data.get('Province', '')
     district = manual_data.get('District', '')
     subdistrict = manual_data.get('SubDistrict', '')
     
+    log(f"   -> ข้อมูลจาก Config: {province} > {district} > {subdistrict}")
+
     try:
-        edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
-        address_edits = [e for e in edits if e.rectangle().top < 500]
+        # [IMPORTANT] รอให้ช่องกรอกข้อมูลโหลดขึ้นมาให้ครบก่อน (Zip, Prov, Dist, Subd)
+        log("...รอโหลดช่องกรอกข้อมูล...")
+        address_edits = []
+        for _ in range(10): # รอสูงสุด 5 วินาที
+            edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
+            # กรองเฉพาะช่องด้านบน (ที่อยู่)
+            curr_edits = [e for e in edits if e.rectangle().top < 500]
+            if len(curr_edits) >= 4:
+                address_edits = curr_edits
+                break
+            time.sleep(0.5)
+
+        # เรียงลำดับ: บน->ล่าง, ซ้าย->ขวา
         address_edits.sort(key=lambda x: (x.rectangle().top, x.rectangle().left))
         
+        # ฟังก์ชันช่วยเช็คและกรอก
+        def check_and_fill(edit_elem, value, name):
+            curr_val = edit_elem.get_value()
+            if curr_val and len(str(curr_val).strip()) > 0:
+                log(f"...ช่อง '{name}' มีข้อมูลแล้ว ({curr_val}) -> ข้าม")
+            else:
+                log(f"...ช่อง '{name}' ว่าง -> กรอก: {value}")
+                edit_elem.click_input()
+                edit_elem.type_keys(str(value), with_spaces=True)
+
         if len(address_edits) >= 4:
-            log(f"...กรอกจังหวัด: {province}")
-            address_edits[1].click_input()
-            address_edits[1].type_keys(province, with_spaces=True)
-            log(f"...กรอกเขต/อำเภอ: {district}")
-            address_edits[2].click_input()
-            address_edits[2].type_keys(district, with_spaces=True)
-            log(f"...กรอกแขวง/ตำบล: {subdistrict}")
-            address_edits[3].click_input()
-            address_edits[3].type_keys(subdistrict, with_spaces=True)
+            # คาดการณ์ลำดับ: [0]=รหัสปณ, [1]=จังหวัด, [2]=เขต/อำเภอ, [3]=แขวง/ตำบล
+            check_and_fill(address_edits[1], province, "จังหวัด")
+            check_and_fill(address_edits[2], district, "เขต/อำเภอ")
+            check_and_fill(address_edits[3], subdistrict, "แขวง/ตำบล")
         else:
-            log("[!] พบช่องกรอกไม่ครบ -> ลองกด Tab")
-            window.type_keys("{TAB}")
+            log("[!] หาช่องกรอกไม่ครบ 4 ช่อง -> ลองกด Tab กรอกแบบเดาทาง")
+            window.type_keys("{TAB}") # ข้ามรหัสปณ
             window.type_keys(province, with_spaces=True); window.type_keys("{TAB}")
             window.type_keys(district, with_spaces=True); window.type_keys("{TAB}")
             window.type_keys(subdistrict, with_spaces=True)
+            
     except Exception as e:
         log(f"[!] Error กรอกที่อยู่เอง: {e}")
 
@@ -145,7 +166,7 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
     log(f"--- หน้า: ค้นหาที่อยู่ ({address_keyword}) ---")
     
     if wait_for_text(window, "ข้อมูลผู้รับ", timeout=5):
-        # 1. หาช่องค้นหาและกรอกข้อมูล
+        # 1. หาช่องค้นหาและกรอกคำค้น
         try:
             search_ready = False
             for _ in range(10):
@@ -170,35 +191,45 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
                 edits[1].type_keys(str(address_keyword), with_spaces=True)
         except: pass
 
-        # กด Enter/ถัดไป เพื่อเรียกหน้า List
+        # กด Enter/ถัดไป เพื่อเริ่มค้นหา (เรียกหน้า List หรือ Popup)
         log("...กด Enter/ถัดไป เพื่อค้นหารายการ...")
         smart_next(window)
-        time.sleep(1.0)
+        time.sleep(1.0) 
         
-        # 2. รอ Popup หรือ รายการที่อยู่
-        log("...รอผลลัพธ์ (Popup หรือ รายการ) [Fast Check]...")
+        # 2. [CRITICAL] วนลูปรอผลลัพธ์ (Popup หรือ List)
+        # เพิ่มจำนวนรอบการรอเป็น 40 รอบ (ประมาณ 10 วินาที) เผื่อระบบช้า
+        log("...กำลังตรวจสอบผลลัพธ์ (Popup/List)...")
         found_popup = False
         found_list = False
         
-        for _ in range(25):
+        for _ in range(40):
+            # เช็ค Popup
             if check_error_popup(window, delay=0.0):
-                log("[WARN] ตรวจพบ Popup คำเตือน -> เข้าสู่โหมด Manual")
+                log("[WARN] ตรวจพบ Popup คำเตือน! -> ปิดแล้วเข้าสู่โหมดกรอกเอง")
                 found_popup = True
                 break
+            
+            # เช็ค List (ต้องอยู่ต่ำกว่า Header Y>200)
             list_items = [i for i in window.descendants(control_type="ListItem") 
                           if i.is_visible() and i.rectangle().top > 200]
             if list_items:
                 found_list = True
                 break
+            
             time.sleep(0.25)
 
         # 3. ตัดสินใจทำงานต่อ
         if found_popup:
+            # กรณีเจอ Popup -> กรอกที่อยู่เอง
+            # รอ UI นิ่งสักนิดหลังปิด Popup
+            time.sleep(1.0)
             fill_manual_address(window, manual_data)
-            smart_next(window)
+            smart_next(window) # กดถัดไปเพื่อไปหน้าข้อมูลผู้รับ
+            
         elif found_list:
-            log("...เจอรายการแล้ว! รอ UI นิ่ง (1.0s)...")
-            time.sleep(1.0) 
+            # กรณีเจอ List -> เลือกอันแรก
+            log("...เจอรายการที่อยู่ -> เลือกรายการแรกสุด...")
+            time.sleep(1.0) # รอ List นิ่ง
             try:
                 all_list_items = [i for i in window.descendants(control_type="ListItem") if i.is_visible()]
                 valid_items = [i for i in all_list_items if i.rectangle().top > 200 and i.rectangle().height() > 50]
@@ -206,27 +237,24 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
                 if valid_items:
                     valid_items.sort(key=lambda x: x.rectangle().top)
                     target_item = valid_items[0]
-                    log(f"[/] เลือกรายการแรกสุด: (Y={target_item.rectangle().top})")
+                    log(f"[/] Click รายการที่: (Y={target_item.rectangle().top})")
                     try: target_item.set_focus()
                     except: pass
                     target_item.click_input()
-                    log("...รอข้อมูลลงฟอร์ม (2.0s)...")
+                    log("...รอโหลดข้อมูลลงฟอร์ม (2.0s)...")
                     time.sleep(2.0) 
                 else:
-                    log("[!] รายการหายไปหลังรอ? (กรองไม่ผ่าน)")
+                    log("[!] เจอ List แต่กรองความสูงไม่ผ่าน")
             except: pass
             
-            # เมื่อเลือกรายการเสร็จ ยังไม่ต้องกดถัดไปตรงนี้ 
-            # เพราะผู้ใช้แจ้งว่า "หลังจากกดเลือกรายการแรกสุด จะเข้ามาหน้าข้อมูลผู้รับ ยังไม่ต้องกดถัดไป"
-            # แต่ปกติการเลือกรายการ มันจะยังไม่เปลี่ยนหน้า จนกว่าเราจะกดถัดไป หรือ Enter
-            # ตาม Workflow เดิมคือกดถัดไปเพื่อยืนยันการเลือก
-            smart_next(window) 
+            smart_next(window) # กดถัดไปเพื่อยืนยัน
+            
         else:
-            log("[!] ไม่เจอทั้ง Popup และ รายการ -> ลองกดถัดไปเลย")
+            log("[!] ไม่เจอทั้ง Popup และ รายการ (Timeout) -> ลองกดถัดไปเผื่อฟลุ๊ค")
             smart_next(window)
 
 def process_receiver_details_form(window, fname, lname, phone):
-    log("--- หน้า: รายละเอียดผู้รับ (ตรวจสอบ/แก้ไข) ---")
+    log("--- หน้า: รายละเอียดผู้รับ (ตรวจสอบชื่อ/เบอร์) ---")
     log("...รอหน้าจอโหลด...")
     
     page_ready = False
@@ -243,51 +271,57 @@ def process_receiver_details_form(window, fname, lname, phone):
     try:
         log("...ตรวจสอบช่องกรอกชื่อ/นามสกุล...")
         edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
-        # กรองเฉพาะช่องที่อยู่ด้านบน
-        top_edits = [e for e in edits if 150 < e.rectangle().top < 500]
+        
+        # กรองช่องที่อยู่ในโซนบน (ตัด Contact/Phone ล่างสุดออก)
+        top_edits = [e for e in edits if 150 < e.rectangle().top < 550]
+        top_edits.sort(key=lambda x: (x.rectangle().top, x.rectangle().left))
         
         name_filled = False
-
-        if len(top_edits) >= 2: 
-            top_edits.sort(key=lambda x: (x.rectangle().top, x.rectangle().left))
-            
-            name_edit = None
-            lastname_edit = None
-
-            if len(top_edits) >= 3:
-                name_edit = top_edits[1]
-                lastname_edit = top_edits[-1]
+        
+        def try_fill(edit, val, label):
+            curr = edit.get_value()
+            if curr and len(str(curr).strip()) > 0:
+                return False # มีค่าอยู่แล้ว
             else:
-                name_edit = top_edits[0]
-                lastname_edit = top_edits[1]
+                log(f"...ช่อง '{label}' ว่าง -> กรอก: {val}")
+                edit.click_input()
+                edit.type_keys(val, with_spaces=True)
+                return True
 
-            # ตรวจสอบชื่อ
-            curr_name = name_edit.get_value()
-            if curr_name and len(str(curr_name).strip()) > 0:
-                log(f"...มีชื่ออยู่แล้ว ({curr_name}) -> ข้าม")
-            else:
-                log(f"...ช่องว่าง -> กรอกชื่อ: {fname}")
-                name_edit.click_input()
-                name_edit.type_keys(fname, with_spaces=True)
-
-            # ตรวจสอบนามสกุล
-            curr_lname = lastname_edit.get_value()
-            if curr_lname and len(str(curr_lname).strip()) > 0:
-                log(f"...มีนามสกุลอยู่แล้ว ({curr_lname}) -> ข้าม")
-            else:
-                log(f"...ช่องว่าง -> กรอกนามสกุล: {lname}")
-                lastname_edit.click_input()
-                lastname_edit.type_keys(lname, with_spaces=True)
-            
-            name_filled = True
+        # หาช่องว่างเพื่อกรอกชื่อ (ข้ามช่องที่มีข้อมูล เช่น ที่อยู่จาก Manual Mode)
+        empty_edits = [e for e in top_edits if not e.get_value()]
+        
+        if len(empty_edits) >= 2:
+            # ช่องแรกว่าง -> ชื่อ
+            if try_fill(empty_edits[0], fname, "ชื่อ"):
+                # ช่องสองว่าง -> นามสกุล
+                if len(empty_edits) > 1:
+                    try_fill(empty_edits[1], lname, "นามสกุล")
+                name_filled = True
         else:
+            log("[!] ไม่เจอช่องว่างสำหรับชื่อ (อาจจะเต็มแล้ว) -> ลองใช้ Fallback Label")
             # Fallback Click Label + Tab
-            log("[!] ไม่เจอช่อง Edit -> ใช้ระบบสำรอง (Click Label + Tab)")
-            # (Fallback logic remains similar, assuming typing blindly if label found)
-            # ... (ตัดส่วน Fallback สั้นๆ เพื่อความกระชับ แต่ Logic เดิมยังใช้ได้)
+            found_label = False
+            for label_text in ["ชื่อ", "คำนำหน้า"]:
+                try:
+                    for child in window.descendants():
+                        if child.is_visible() and label_text == child.window_text().strip():
+                            if child.rectangle().top > 150:
+                                child.click_input()
+                                window.type_keys("{TAB}")
+                                time.sleep(0.2)
+                                window.type_keys(fname, with_spaces=True)
+                                window.type_keys("{TAB}")
+                                time.sleep(0.2)
+                                window.type_keys(lname, with_spaces=True)
+                                name_filled = True
+                                found_label = True
+                                break
+                except: pass
+                if found_label: break
             
-        if not name_filled:
-            log("[WARN] ไม่พบช่องกรอกชื่อ/นามสกุล (อาจจะกรอกไปแล้ว หรือหาไม่เจอ)")
+        if not name_filled and len(empty_edits) < 2:
+             log("[INFO] ข้อมูลชื่อ/นามสกุล อาจจะครบถ้วนแล้ว")
 
         # ตรวจสอบเบอร์โทร
         log("...เลื่อนลงเพื่อตรวจสอบเบอร์โทร...")
@@ -315,18 +349,18 @@ def process_receiver_details_form(window, fname, lname, phone):
 
     except Exception as e:
         log(f"[!] Error: {e}")
-        raise e 
 
-    # [NEW REQUIREMENT] กดถัดไป (Enter) 3 ครั้ง เพื่อข้ามหน้าใบเสร็จไปหน้าทำรายการซ้ำ
-    log("...กรอกเสร็จสิ้น -> กด 'ถัดไป' 3 ครั้ง เพื่อไปหน้าทำรายการซ้ำ...")
+    # [ACTION] กดถัดไป (Enter) 3 ครั้ง เพื่อข้ามหน้าใบเสร็จไปหน้าทำรายการซ้ำ
+    log("...ตรวจสอบครบถ้วน -> กด 'ถัดไป' 3 ครั้ง เพื่อไปหน้าทำรายการซ้ำ...")
     for i in range(3):
         log(f"   -> Enter ครั้งที่ {i+1}")
         smart_next(window)
-        time.sleep(1.0) # หน่วงเวลาเล็กน้อยระหว่างการกด
+        time.sleep(1.2) # หน่วงเวลาให้หน้าจอเปลี่ยนทัน
 
 def process_repeat_transaction(window, should_repeat):
     log("--- หน้า: ทำรายการซ้ำ ---")
-    if wait_for_text(window, ["ทำรายการซ้ำ", "ซ้ำ"], timeout=5):
+    # รอหน้านี้นานหน่อยเพราะกดข้ามมาเร็ว
+    if wait_for_text(window, ["ทำรายการซ้ำ", "ซ้ำ"], timeout=8):
         target = "ใช่" if should_repeat.lower() in ['true', 'yes', 'on'] else "ไม่"
         log(f"...เลือก: {target}...")
         smart_click(window, target)
@@ -366,16 +400,15 @@ def run_partial_test(main_window, config):
     process_sender_info_page(main_window)
     time.sleep(step_delay)
 
-    # 13. หน้าข้อมูลผู้รับ (เลือกที่อยู่)
+    # 13. หน้าข้อมูลผู้รับ (เลือกที่อยู่ / Manual)
     process_receiver_address_selection(main_window, addr_keyword, manual_data)
     time.sleep(step_delay)
     
-    # 14. หน้ารายละเอียดผู้รับ (ตรวจสอบ -> กด Next 3 ครั้ง)
+    # 14. หน้ารายละเอียดผู้รับ (ตรวจสอบชื่อ/เบอร์ -> กด Next 3 ครั้ง)
     process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone)
     time.sleep(step_delay)
 
-    # 15. หน้าคำแนะนำใบเสร็จ (ถูกข้ามไปแล้วจากการกด Next 3 ครั้งด้านบน)
-    # process_receipt_info(main_window) 
+    # 15. หน้าคำแนะนำใบเสร็จ (ถูกข้ามไปแล้วจากการกด Next 3 ครั้ง)
     
     # 16. หน้าทำรายการซ้ำ
     process_repeat_transaction(main_window, repeat_flag)
