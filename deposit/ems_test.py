@@ -135,11 +135,10 @@ def fill_manual_address(window, manual_data):
 
         address_edits.sort(key=lambda x: (x.rectangle().top, x.rectangle().left))
         
-        # [CORE] ฟังก์ชันช่วยเช็คและกรอก (ป้องกันการกรอกซ้ำ)
+        # ฟังก์ชันช่วยเช็คและกรอก (ป้องกันการกรอกซ้ำ)
         def check_and_fill(edit_elem, value, name):
             try:
                 curr_val = edit_elem.get_value()
-                # ถ้ามีค่าอยู่แล้ว -> ข้ามเลย
                 if curr_val and len(str(curr_val).strip()) > 0:
                     log(f"...ช่อง '{name}' มีข้อมูลแล้ว ({curr_val}) -> ข้าม")
                 else:
@@ -226,8 +225,8 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
             # กรณีเจอ Popup -> ปิดแล้วกรอกที่อยู่เอง
             time.sleep(1.0)
             fill_manual_address(window, manual_data)
-            # [FIXED] ไม่กด smart_next() เพราะอยู่หน้าเดิม ให้ process_receiver_details_form ทำต่อเลย
-            log("...กรอกที่อยู่แบบ Manual เสร็จสิ้น (รอไปขั้นตอนต่อไป)...")
+            # ไม่กด smart_next() เพราะต้องกรอกรายละเอียดต่อในหน้าเดียวกัน
+            log("...กรอกที่อยู่แบบ Manual เสร็จสิ้น (ไปขั้นตอนตรวจสอบชื่อต่อ)...")
             
         elif found_list:
             # กรณีเจอ List -> เลือกอันแรก
@@ -250,8 +249,8 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
                     log("[!] เจอ List แต่กรองความสูงไม่ผ่าน")
             except: pass
             
-            # [FIXED] ไม่กด smart_next() ซ้ำ เพราะการเลือกรายการจะเปลี่ยนสถานะหน้าจอเอง
-            log("...เลือกรายการเสร็จสิ้น (ไม่กดถัดไปซ้ำ)...")
+            # ไม่กด smart_next() ซ้ำ ตามคำขอ
+            log("...เลือกรายการเสร็จสิ้น...")
             
         else:
             log("[!] ไม่เจอทั้ง Popup และ รายการ (Timeout) -> ลองกดถัดไปเผื่อระบบค้าง")
@@ -270,46 +269,56 @@ def process_receiver_details_form(window, fname, lname, phone):
         time.sleep(0.5)
     
     check_error_popup(window)
-    time.sleep(1)
+    time.sleep(1.0)
 
     try:
         log("...ตรวจสอบช่องกรอกชื่อ/นามสกุล...")
         edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
         
-        # กรองช่องที่อยู่ในโซนบน (ตัด Contact/Phone ล่างสุดออก)
+        # กรองช่องที่อยู่ในโซนบน (150 < Y < 550) เพื่อหาแถวของชื่อ
         top_edits = [e for e in edits if 150 < e.rectangle().top < 550]
+        # เรียงลำดับ Y (แถว) -> X (คอลัมน์)
         top_edits.sort(key=lambda x: (x.rectangle().top, x.rectangle().left))
         
-        name_filled = False
-        
-        def try_fill(edit, val, label):
-            curr = edit.get_value()
-            if curr and len(str(curr).strip()) > 0:
-                return False # มีค่าอยู่แล้ว
-            else:
-                log(f"...ช่อง '{label}' ว่าง -> กรอก: {val}")
-                edit.click_input()
-                edit.type_keys(val, with_spaces=True)
-                return True
+        name_edit = None
+        surname_edit = None
 
-        # หาช่องว่างเพื่อกรอกชื่อ (ข้ามช่องที่มีข้อมูล เช่น ที่อยู่จาก Manual Mode)
-        empty_edits = [e for e in top_edits if not e.get_value()]
-        
-        if len(empty_edits) >= 2:
-            # ช่องแรกว่าง -> ชื่อ
-            if try_fill(empty_edits[0], fname, "ชื่อ"):
-                # ช่องสองว่าง -> นามสกุล
-                if len(empty_edits) > 1:
-                    try_fill(empty_edits[1], lname, "นามสกุล")
-                name_filled = True
-        else:
-            # กรณีหาช่องว่างไม่เจอ อาจจะเพราะมีข้อมูลครบแล้ว หรือ Layout เปลี่ยน
-            # ลองใช้ Fallback (หา Label)
-            log("[!] ไม่เจอช่องว่างสำหรับชื่อ (อาจจะเต็มแล้ว) -> ตรวจสอบด้วย Label")
-            # โค้ดส่วนนี้จะทำงานถ้าไม่เจอช่องว่าง (แปลว่าน่าจะมีข้อมูลอยู่แล้ว)
+        # Logic การหาช่องชื่อและนามสกุลที่แม่นยำขึ้น (ดูจากจำนวนช่องในแถวแรก)
+        if len(top_edits) >= 2:
+            first_y = top_edits[0].rectangle().top
+            # หาเพื่อนร่วมแถว (ค่า Y ใกล้เคียงกัน +/- 10 pixel)
+            first_row = [e for e in top_edits if abs(e.rectangle().top - first_y) < 15]
             
-        if not name_filled and len(empty_edits) < 2:
-             log("[INFO] ข้อมูลชื่อ/นามสกุล ดูเหมือนจะครบถ้วนแล้ว")
+            if len(first_row) >= 3:
+                # กรณี 3-4 ช่อง: [0]คำนำหน้า, [1]ชื่อ, [2]ชื่อกลาง(อาจไม่มี), [Last]นามสกุล
+                # สมมติว่าเป็น [Title, Name, Middle, Surname] หรือ [Title, Name, Surname]
+                name_edit = first_row[1] # ช่องที่ 2 คือชื่อ
+                surname_edit = first_row[-1] # ช่องสุดท้ายคือนามสกุล
+            elif len(first_row) == 2:
+                # กรณี 2 ช่อง: [0]ชื่อ, [1]นามสกุล (อาจไม่มีคำนำหน้า)
+                name_edit = first_row[0]
+                surname_edit = first_row[1]
+            else:
+                # Fallback: ใช้ตามลำดับที่เจอ
+                name_edit = top_edits[0]
+                surname_edit = top_edits[1]
+
+        # ฟังก์ชันกรอก (เช็คก่อน)
+        def fill_if_empty(edit_ui, value, field_name):
+            if edit_ui:
+                val = edit_ui.get_value()
+                if val and len(str(val).strip()) > 0:
+                    log(f"...ช่อง '{field_name}' มีข้อมูลแล้ว ({val}) -> ข้าม")
+                else:
+                    log(f"...ช่อง '{field_name}' ว่าง -> กรอก: {value}")
+                    edit_ui.click_input()
+                    edit_ui.type_keys(value, with_spaces=True)
+
+        if name_edit and surname_edit:
+            fill_if_empty(name_edit, fname, "ชื่อ")
+            fill_if_empty(surname_edit, lname, "นามสกุล")
+        else:
+            log("[WARN] ไม่สามารถระบุตำแหน่งช่องชื่อ/นามสกุลได้ชัดเจน -> ข้ามการกรอกชื่อ")
 
         # ตรวจสอบเบอร์โทร
         log("...เลื่อนลงเพื่อตรวจสอบเบอร์โทร...")
@@ -319,31 +328,26 @@ def process_receiver_details_form(window, fname, lname, phone):
         found_phone = False
         visible_edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
         for edit in visible_edits:
+            # หาจาก Automation ID หรือ Name
             if "โทร" in edit.element_info.name or "Phone" in edit.element_info.automation_id:
-                current_val = edit.get_value()
-                if current_val and len(str(current_val).strip()) > 5:
-                    log(f"...มีเบอร์โทรอยู่แล้ว ({current_val}) -> ข้าม")
-                else:
-                    log(f"...ช่องว่าง -> กรอกเบอร์: {phone}")
-                    edit.click_input()
-                    edit.type_keys(phone, with_spaces=True)
+                fill_if_empty(edit, phone, "เบอร์โทร")
                 found_phone = True
                 break
         
         if not found_phone:
-            log("[!] หาช่องเบอร์ไม่เจอ -> ลองกด Tab")
+            log("[!] หาช่องเบอร์อัตโนมัติไม่เจอ -> ลองกด Tab")
             window.type_keys("{TAB}"*3)
             window.type_keys(phone, with_spaces=True)
 
     except Exception as e:
-        log(f"[!] Error: {e}")
+        log(f"[!] Error process_receiver_details: {e}")
 
-    # [ACTION] กดถัดไป (Enter) 3 ครั้ง เพื่อข้ามหน้าใบเสร็จไปหน้าทำรายการซ้ำ
-    log("...ตรวจสอบครบถ้วน -> กด 'ถัดไป' 3 ครั้ง เพื่อไปหน้าทำรายการซ้ำ...")
+    # [ACTION] กดถัดไป (Enter) 3 ครั้ง
+    log("...จบขั้นตอนข้อมูลผู้รับ -> กด 'ถัดไป' 3 ครั้ง...")
     for i in range(3):
         log(f"   -> Enter ครั้งที่ {i+1}")
         smart_next(window)
-        time.sleep(1.2) # หน่วงเวลาให้หน้าจอเปลี่ยนทัน
+        time.sleep(1.5) # หน่วงเวลาให้หน้าจอโหลดทัน
 
 def process_repeat_transaction(window, should_repeat):
     log("--- หน้า: ทำรายการซ้ำ ---")
@@ -358,7 +362,7 @@ def process_repeat_transaction(window, should_repeat):
 
 # ================= 4. Run Function (Partial) =================
 def run_partial_test(main_window, config):
-    # Load vars
+    # Load vars from Config
     special_services = config['SPECIAL_SERVICES'].get('Services', '')
     addr_keyword = config['RECEIVER'].get('AddressKeyword', '')
     rcv_fname = config['RECEIVER_DETAILS'].get('FirstName', '')
@@ -367,6 +371,7 @@ def run_partial_test(main_window, config):
     repeat_flag = config['REPEAT_TRANSACTION'].get('Repeat', 'False')
     step_delay = float(config['SETTINGS'].get('StepDelay', 0.8))
 
+    # Load Manual Address Data
     if 'MANUAL_ADDRESS_FALLBACK' in config:
         manual_data = {
             'Province': config['MANUAL_ADDRESS_FALLBACK'].get('Province', ''),
@@ -395,7 +400,9 @@ def run_partial_test(main_window, config):
     process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone)
     time.sleep(step_delay)
 
-    # 15. หน้าทำรายการซ้ำ
+    # 15. หน้าคำแนะนำใบเสร็จ (ถูกข้ามไปแล้ว)
+    
+    # 16. หน้าทำรายการซ้ำ
     process_repeat_transaction(main_window, repeat_flag)
 
     log("[SUCCESS] จบการทดสอบแบบย่อ")
