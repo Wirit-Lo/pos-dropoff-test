@@ -62,6 +62,7 @@ def wait_for_text(window, text_list, timeout=5):
     return False
 
 def smart_next(window):
+    """กดปุ่มถัดไป (Footer) หรือ Enter"""
     submits = [c for c in window.descendants() if c.element_info.automation_id == "LocalCommand_Submit" and c.is_visible()]
     if submits:
         submits.sort(key=lambda x: x.rectangle().top)
@@ -90,7 +91,7 @@ def check_error_popup(window, delay=0.5):
                     return True
         
         # เช็ค Text แจ้งเตือน
-        if wait_for_text(window, ["ไม่มีผลลัพธ์", "ไม่สามารถเชื่อมต่อ"], timeout=0.1): # ลด timeout ตรงนี้ด้วย
+        if wait_for_text(window, ["ไม่มีผลลัพธ์", "ไม่สามารถเชื่อมต่อ"], timeout=0.1): 
              log("[WARN] พบข้อความ Error")
              if smart_click(window, ["ตกลง", "OK", "กลับ"], timeout=2):
                  return True
@@ -127,8 +128,6 @@ def fill_manual_address(window, manual_data):
         # กรองเอาเฉพาะส่วนบน (ที่อยู่) ตัดส่วนเบอร์โทรด้านล่างออก
         address_edits = [e for e in edits if e.rectangle().top < 500]
         
-        # เรียงลำดับ: บน->ล่าง, ซ้าย->ขวา
-        # คาดการณ์ลำดับ: [0]รหัสปณ, [1]จังหวัด, [2]เขต/อำเภอ, [3]แขวง/ตำบล
         address_edits.sort(key=lambda x: (x.rectangle().top, x.rectangle().left))
         
         if len(address_edits) >= 4:
@@ -158,7 +157,7 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
     
     # รอจนกว่าจะเจอหน้าข้อมูลผู้รับ
     if wait_for_text(window, "ข้อมูลผู้รับ", timeout=5):
-        time.sleep(0.5) # [Fast] ลดเวลาลงจาก 1.0 เหลือ 0.5
+        time.sleep(0.5) 
         
         # 1. กรอกคำค้นหา
         try:
@@ -180,26 +179,25 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
         found_popup = False
         found_list = False
         
-        # วนลูปถี่ขึ้น: เช็คทุก 0.25 วิ จำนวน 20 รอบ (รวมประมาณ 5 วินาที)
+        # วนลูปเช็ค
         for _ in range(20):
-            # 2.1 เช็ค Popup (แบบเร็ว delay=0)
             if check_error_popup(window, delay=0.0):
                 log("[WARN] ตรวจพบ Popup คำเตือน -> เข้าสู่โหมด Manual")
                 found_popup = True
                 break
             
-            # 2.2 เช็ครายการ List (Y > 200)
             list_items = [i for i in window.descendants(control_type="ListItem") 
                           if i.is_visible() and i.rectangle().top > 200]
             if list_items:
                 found_list = True
                 break
             
-            time.sleep(0.25) # [Fast] รอแป๊บเดียวแล้วเช็คใหม่
+            time.sleep(0.25)
 
         # 3. ตัดสินใจทำงานต่อ
         if found_popup:
             fill_manual_address(window, manual_data)
+            smart_next(window) # กดถัดไปหลังกรอกมือ
             
         elif found_list:
             # เจอ List แล้วกดทันที
@@ -213,13 +211,18 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
                     valid_items.sort(key=lambda x: x.rectangle().top)
                     target_item = valid_items[0]
                     log(f"[/] เลือกรายการแรกสุด: (Y={target_item.rectangle().top})")
+                    
+                    # [UPDATED] เพิ่มเวลาหน่วงก่อนและหลังกด เพื่อความชัวร์
+                    time.sleep(0.3) 
                     target_item.click_input()
+                    
+                    log("...รอข้อมูลลงฟอร์ม (1.5s)...")
+                    time.sleep(1.5) # ให้เวลาหน้าจอโหลดข้อมูลจากการเลือก
                 else:
-                    log("[!] เจอ List แต่กรองไม่ผ่าน (อาจจะเล็กไป หรืออยู่สูงไป)")
+                    log("[!] เจอ List แต่กรองไม่ผ่าน")
             except: pass
             
-            time.sleep(0.5) # รอ Animation นิดหน่อย
-            smart_next(window)
+            smart_next(window) # กดถัดไปเพื่อยืนยัน
             
         else:
             log("[!] ไม่เจอทั้ง Popup และ รายการ -> ลองกดถัดไปเลย")
@@ -229,19 +232,25 @@ def process_receiver_details_form(window, fname, lname, phone):
     log("--- หน้า: รายละเอียดผู้รับ (ชื่อ/เบอร์) ---")
     log("...รอหน้าจอโหลด...")
     
-    # รอ Label
-    for _ in range(15):
+    # [UPDATED] เพิ่ม Log ตอนรอ
+    page_ready = False
+    for i in range(15):
         if wait_for_text(window, ["ชื่อ", "นามสกุล", "คำนำหน้า"], timeout=1):
+            page_ready = True
             break
+        if i == 5: log("...ยังรอหน้าจออยู่ (5s)...")
         time.sleep(0.5)
     
+    if not page_ready:
+        log("[WARN] รอนานเกินไป หน้าจออาจจะยังไม่เปลี่ยนจากหน้าเดิม")
+
     check_error_popup(window)
     time.sleep(1)
 
     try:
         log("...กรอกชื่อ/นามสกุล...")
         edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
-        # กรองเฉพาะช่องที่อยู่ด้านบน (Y < 500) และไม่ทับ Header (Y > 150)
+        # กรองเฉพาะช่องที่อยู่ด้านบน
         top_edits = [e for e in edits if 150 < e.rectangle().top < 500]
         
         name_filled = False
@@ -249,7 +258,6 @@ def process_receiver_details_form(window, fname, lname, phone):
         if len(top_edits) >= 2: 
             top_edits.sort(key=lambda x: (x.rectangle().top, x.rectangle().left))
             if len(top_edits) >= 3: 
-                # [0]คำนำหน้า [1]ชื่อ [2]กลาง [3]นามสกุล
                 log(f"...กรอกชื่อ (ช่อง 2): {fname}")
                 top_edits[1].click_input()
                 top_edits[1].type_keys(fname, with_spaces=True)
@@ -347,7 +355,6 @@ def run_partial_test(main_window, config):
     step_delay = float(config['SETTINGS'].get('StepDelay', 0.8))
 
     # [NEW] โหลดข้อมูลสำหรับกรอกเอง (Manual Fallback)
-    # ถ้าใน Config ไม่มี Section นี้ ให้ใช้ค่า Default นี้แทน
     manual_data = {
         'Province': config['MANUAL_ADDRESS_FALLBACK'].get('Province', 'กรุงเทพมหานคร') if 'MANUAL_ADDRESS_FALLBACK' in config else 'กรุงเทพมหานคร',
         'District': config['MANUAL_ADDRESS_FALLBACK'].get('District', 'บางเขน') if 'MANUAL_ADDRESS_FALLBACK' in config else 'บางเขน',
@@ -366,7 +373,7 @@ def run_partial_test(main_window, config):
     process_sender_info_page(main_window)
     time.sleep(step_delay)
 
-    # 13. หน้าข้อมูลผู้รับ (แก้ไขใหม่ รองรับ Popup -> Manual)
+    # 13. หน้าข้อมูลผู้รับ
     process_receiver_address_selection(main_window, addr_keyword, manual_data)
     time.sleep(step_delay)
     
