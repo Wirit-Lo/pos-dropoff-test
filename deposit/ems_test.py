@@ -116,12 +116,15 @@ def process_sender_info_page(window):
     smart_next(window)
 
 def fill_manual_address(window, manual_data):
-    """ฟังก์ชันกรอกที่อยู่เอง (กรณีเกิด Error Popup)"""
+    """ฟังก์ชันกรอกที่อยู่เอง (กรณีเกิด Error Popup) ดึงค่าจาก Config"""
     log("...เข้าสู่โหมดกรอกที่อยู่ด้วยตนเอง (Manual Fallback)...")
+    
     province = manual_data.get('Province', '')
     district = manual_data.get('District', '')
     subdistrict = manual_data.get('SubDistrict', '')
     
+    log(f"   -> ข้อมูลจาก Config: จ.{province} / อ.{district} / ต.{subdistrict}")
+
     try:
         # หาช่องกรอกข้อมูล (Edit)
         edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
@@ -185,15 +188,20 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
                 edits[1].click_input()
                 edits[1].type_keys(str(address_keyword), with_spaces=True)
         except: pass
+
+        # [STEP สำคัญ] กด Enter/ถัดไป เพื่อเรียกหน้า List รายการที่อยู่ (ตาม Workflow รูป 2)
+        log("...กด Enter/ถัดไป เพื่อค้นหารายการ...")
+        smart_next(window)
+        time.sleep(1.0) # รอหน้า List โหลด
         
-        # 3. [UPDATED] รอ Popup หรือ รายการที่อยู่ (Fast Polling Loop)
+        # 3. รอ Popup หรือ รายการที่อยู่ (Fast Polling Loop)
         log("...รอผลลัพธ์ (Popup หรือ รายการ) [Fast Check]...")
         found_popup = False
         found_list = False
         
         for _ in range(25): # เพิ่มรอบการรอเป็น 25 รอบ (ประมาณ 6 วินาที)
             if check_error_popup(window, delay=0.0):
-                log("[WARN] ตรวจพบ Popup คำเตือน -> เข้าสู่โหมด Manual")
+                log("[WARN] ตรวจพบ Popup คำเตือน -> เข้าสู่โหมด Manual (ใช้ข้อมูลจาก Config)")
                 found_popup = True
                 break
             
@@ -207,16 +215,17 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
 
         # 4. ตัดสินใจทำงานต่อ
         if found_popup:
+            # กรณี Popup -> กรอกเอง (ใช้ manual_data จาก Config)
             fill_manual_address(window, manual_data)
             smart_next(window) # กดถัดไปหลังกรอกมือ
             
         elif found_list:
-            # [CRITICAL FIX] เจอ List แล้ว อย่าเพิ่งกดทันที! รอให้มันนิ่งก่อน
-            log("...เจอรายการแล้ว! รอ UI นิ่ง (3.0s)...")
-            time.sleep(3.0) 
+            # กรณีเจอ List -> รอ UI นิ่งแล้วกดอันแรก
+            log("...เจอรายการแล้ว! รอ UI นิ่ง (1.0s)...")
+            time.sleep(1.0) 
             
             try:
-                # ดึงรายการใหม่อีกครั้ง (Re-fetch) เพราะตำแหน่งอาจเปลี่ยนหลัง Animation
+                # ดึงรายการใหม่อีกครั้ง (Re-fetch)
                 all_list_items = [i for i in window.descendants(control_type="ListItem") 
                                   if i.is_visible()]
                 valid_items = [i for i in all_list_items 
@@ -249,7 +258,7 @@ def process_receiver_details_form(window, fname, lname, phone):
     log("--- หน้า: รายละเอียดผู้รับ (ชื่อ/เบอร์) ---")
     log("...รอหน้าจอโหลด...")
     
-    # [UPDATED] เพิ่ม Log ตอนรอ
+    # รอ Label
     page_ready = False
     for i in range(15):
         if wait_for_text(window, ["ชื่อ", "นามสกุล", "คำนำหน้า"], timeout=1):
@@ -364,22 +373,27 @@ def process_repeat_transaction(window, should_repeat):
 def run_partial_test(main_window, config):
     # Load vars
     special_services = config['SPECIAL_SERVICES'].get('Services', '')
-    addr_keyword = config['RECEIVER'].get('AddressKeyword', '99/99')
-    rcv_fname = config['RECEIVER_DETAILS'].get('FirstName', 'A')
-    rcv_lname = config['RECEIVER_DETAILS'].get('LastName', 'B')
-    rcv_phone = config['RECEIVER_DETAILS'].get('PhoneNumber', '081')
+    addr_keyword = config['RECEIVER'].get('AddressKeyword', '')
+    rcv_fname = config['RECEIVER_DETAILS'].get('FirstName', '')
+    rcv_lname = config['RECEIVER_DETAILS'].get('LastName', '')
+    rcv_phone = config['RECEIVER_DETAILS'].get('PhoneNumber', '')
     repeat_flag = config['REPEAT_TRANSACTION'].get('Repeat', 'False')
     step_delay = float(config['SETTINGS'].get('StepDelay', 0.8))
 
-    # [NEW] โหลดข้อมูลสำหรับกรอกเอง (Manual Fallback)
-    manual_data = {
-        'Province': config['MANUAL_ADDRESS_FALLBACK'].get('Province', 'กรุงเทพมหานคร') if 'MANUAL_ADDRESS_FALLBACK' in config else 'กรุงเทพมหานคร',
-        'District': config['MANUAL_ADDRESS_FALLBACK'].get('District', 'บางเขน') if 'MANUAL_ADDRESS_FALLBACK' in config else 'บางเขน',
-        'SubDistrict': config['MANUAL_ADDRESS_FALLBACK'].get('SubDistrict', 'อนุสาวรีย์') if 'MANUAL_ADDRESS_FALLBACK' in config else 'อนุสาวรีย์'
-    }
+    # [NEW] โหลดข้อมูลสำหรับกรอกเองจาก Config เท่านั้น!
+    # ตรวจสอบว่ามี Section หรือไม่ ถ้าไม่มีให้แจ้งเตือนและใช้ค่าว่าง (เพื่อบังคับให้ผู้ใช้ไปแก้ Config)
+    if 'MANUAL_ADDRESS_FALLBACK' in config:
+        manual_data = {
+            'Province': config['MANUAL_ADDRESS_FALLBACK'].get('Province', ''),
+            'District': config['MANUAL_ADDRESS_FALLBACK'].get('District', ''),
+            'SubDistrict': config['MANUAL_ADDRESS_FALLBACK'].get('SubDistrict', '')
+        }
+    else:
+        log("[WARN] ไม่พบ Section [MANUAL_ADDRESS_FALLBACK] ใน Config.ini อาจเกิดปัญหาหากต้องกรอกที่อยู่เอง")
+        manual_data = {'Province': '', 'District': '', 'SubDistrict': ''}
 
     log("!!! เริ่มการทดสอบแบบย่อ (เริ่มที่หน้าบริการพิเศษ) !!!")
-    log("กรุณาตรวจสอบว่าหน้าจออยู่ที่ขั้นตอน บริการพิเศษ/ข้อมูลผู้รับ แล้ว")
+    log(f"Config: Keyword='{addr_keyword}', ManualFallback={manual_data}")
     time.sleep(2)
 
     # 11. หน้าบริการพิเศษ
