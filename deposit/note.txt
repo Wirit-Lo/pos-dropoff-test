@@ -1,0 +1,94 @@
+[APP]
+; ชื่อ Title ของโปรแกรม (รองรับ Regex)
+WindowTitle = .*Riposte POS Application.*
+
+[SETTINGS]
+; เวลาที่รอในการหาปุ่มแต่ละปุ่ม (วินาที)
+ConnectTimeout = 15
+; เวลาหน่วงระหว่าง Step (วินาที)
+StepDelay = 0.8
+; ระยะการเลื่อน Scroll Mouse (ติดลบคือเลื่อนลง)
+ScrollDistance = -5
+
+[TEST_DATA]
+; เบอร์โทรศัพท์ผู้ฝากส่ง (หน้าแรก)
+PhoneNumber = 0812345678
+
+[DEPOSIT_ENVELOPE]
+; ค่าน้ำหนัก (กรัม)
+Weight = 25
+; รหัสไปรษณีย์ปลายทาง
+PostalCode = 10220
+; ตัวเลือกพิเศษหน้าแรก (เช่น LQ, FR)
+SpecialOptions = 
+; วงเงินรับประกัน (บาท) -> ใส่ 0 ถ้าไม่ต้องการประกัน
+Insurance = 1000
+
+[SPECIAL_SERVICES]
+; บริการพิเศษหน้าถัดไป (ใส่ชื่อปุ่มที่ต้องการกด คั่นด้วยคอมม่า)
+Services = 
+
+[RECEIVER]
+; คำค้นหาที่อยู่ (เพื่อเรียกรายการขึ้นมา)
+AddressKeyword = 99/99
+
+[RECEIVER_DETAILS]
+; ข้อมูลผู้รับ (ที่จะกรอกในหน้าถัดไป)
+FirstName = สมชาย
+LastName = รักชาติ
+PhoneNumber = 0998887777
+
+[REPEAT_TRANSACTION]
+; ต้องการทำรายการซ้ำหรือไม่ (True/Yes = ใช่, False/No = ไม่)
+Repeat = False
+
+
+
+
+
+
+[APP]
+; ชื่อ Title ของโปรแกรม (รองรับ Regex เช่น .*Riposte.*)
+WindowTitle = .*Riposte POS Application.*
+
+[TEST_DATA]
+; เบอร์โทรศัพท์ที่จะใช้ทดสอบ
+PhoneNumber = 0899998888
+
+[SETTINGS]
+; เวลาที่รอในการหาปุ่มแต่ละปุ่ม (วินาที) หากเครื่องช้าให้เพิ่มค่านี้
+ElementWaitTimeout = 15
+
+; เวลาที่รอตอน connect โปรแกรมครั้งแรก (วินาที)
+ConnectTimeout = 10
+
+; ระยะการเลื่อน Scroll Mouse (ติดลบคือเลื่อนลง)
+ScrollDistance = -20
+
+; เวลาหน่วงระหว่าง Step (วินาที) เพื่อให้ดูทัน
+StepDelay = 3
+
+[DEPOSIT_ENVELOPE]
+; ค่าน้ำหนัก (กรัม)
+Weight = 25
+; รหัสไปรษณีย์ปลายทาง
+PostalCode = 10220
+; ตัวเลือกพิเศษหน้าแรก (เช่น LQ, FR, LI)
+SpecialOptions = LQ, FR, LI
+
+; ต้องการเพิ่มราคารับประกันหรือไม่ (กดปุ่ม +)
+; True = กดเพิ่ม, False = ไม่กด
+AddInsurance = True
+
+; จำนวนวงเงินรับประกัน (บาท) จะทำงานเมื่อ AddInsurance = True
+Insurance = 1000
+
+[SPECIAL_SERVICES]
+; บริการพิเศษหน้าถัดไป (ใส่ชื่อปุ่มที่ต้องการกด คั่นด้วยคอมม่า)
+; ตัวอย่าง: ตอบรับ - Track, เก็บเงิน (COD)
+; ถ้าไม่ต้องการเลือกอะไรเลย ให้ปล่อยว่างไว้
+Services = ตอบรับ - Track
+
+[RECEIVER]
+; ข้อมูลผู้รับ (ที่อยู่)
+Address = 99/99 หมู่บ้านทดสอบ ถนนตัวอย่าง แขวงตัวอย่าง เขตตัวอย่าง กทม. 10220
