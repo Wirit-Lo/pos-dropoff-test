@@ -272,15 +272,19 @@ def process_receiver_address_selection(window, address_keyword):
             try:
                 all_list_items = [i for i in window.descendants(control_type="ListItem") if i.is_visible()]
                 
-                # [FIXED] ใช้ค่า 150 เพื่อให้แน่ใจว่าพ้น Header แต่ยังเจอรายการแรก
-                valid_items = [i for i in all_list_items if i.rectangle().top > 150]
+                # [FIXED UPDATE] ปรับค่าเป็น > 140 (เผื่อ Header สั้นกว่าที่คิด)
+                # และเพิ่มเงื่อนไข Height > 50 เพื่อกรองพวกเส้นขีดหรือเมนูเล็กๆ ออก
+                valid_items = [
+                    i for i in all_list_items 
+                    if i.rectangle().top > 140 and i.rectangle().height() > 50
+                ]
 
                 if valid_items:
                     # เรียงจากบนลงล่าง เพื่อเอาอันแรกสุด (Top-most)
                     valid_items.sort(key=lambda x: x.rectangle().top)
                     
                     target_item = valid_items[0]
-                    log(f"[/] เลือกรายการแรกสุด: '{target_item.window_text()[:20]}...' (Y={target_item.rectangle().top})")
+                    log(f"[/] เลือกรายการแรกสุด: (Y={target_item.rectangle().top})")
                     target_item.click_input()
                     found_item = True
                     break
@@ -302,18 +306,29 @@ def process_receiver_details_form(window, fname, lname, phone):
     if not wait_for_text(window, ["ชื่อ", "นามสกุล", "คำนำหน้า"], timeout=8):
         log("[WARN] อาจจะยังไม่เข้าหน้ากรอกรายละเอียด (หา Label ไม่เจอ)")
 
-    time.sleep(1)
     check_error_popup(window)
 
     try:
-        # STEP 1: กรอกชื่อและนามสกุลก่อน
-        edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
-        # Sort by Y then X: [0]=Title, [1]=Name, [2]=Middle, [3]=LastName
-        edits.sort(key=lambda x: (x.rectangle().top, x.rectangle().left))
-        
-        log(f"   -> เจอช่องกรอกข้อมูล {len(edits)} ช่อง")
+        # [FIXED UPDATE] ลูปเพื่อรอให้ Edit Box โผล่มาจริงๆ ก่อน
+        log("...รอโหลดช่องกรอกข้อมูล...")
+        edits = []
+        for _ in range(10): # รอสูงสุด 5 วินาที
+            edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
+            # กรองเอาเฉพาะที่อยู่ส่วนบน (ไม่เกิน Y=500) เพื่อให้แน่ใจว่าเป็นกลุ่มชื่อที่อยู่ ไม่ใช่เบอร์โทรล่างสุด
+            top_edits = [e for e in edits if e.rectangle().top < 500]
+            
+            if len(top_edits) >= 2: # ต้องเจออย่างน้อย 2 ช่อง (ชื่อ, นามสกุล)
+                edits = top_edits
+                break
+            time.sleep(0.5)
 
+        # Sort by Y then X
+        edits.sort(key=lambda x: (x.rectangle().top, x.rectangle().left))
+        log(f"   -> เจอช่องกรอกส่วนบน {len(edits)} ช่อง")
+
+        # STEP 1: กรอกชื่อและนามสกุล
         if len(edits) >= 4:
+            # คาดว่าเป็น [0]คำนำหน้า, [1]ชื่อ, [2]กลาง, [3]นามสกุล
             log(f"...กรอกชื่อ (ช่อง 2): {fname}")
             edits[1].click_input()
             edits[1].type_keys(fname, with_spaces=True)
@@ -330,24 +345,21 @@ def process_receiver_details_form(window, fname, lname, phone):
             edits[1].type_keys("{TAB}{TAB}") 
             window.type_keys(lname, with_spaces=True)
         else:
-            log("[!] ไม่เจอช่องกรอกชื่อที่ชัดเจน")
+            log("[!] ไม่เจอช่องกรอกชื่อที่ชัดเจน หรือโหลดยังไม่เสร็จ")
         
-        # STEP 2: เลื่อนลงหาเบอร์โทร (หลังจากกรอกชื่อเสร็จแล้ว)
+        # STEP 2: เลื่อนลงหาเบอร์โทร (หลังจากพยายามกรอกชื่อแล้วเท่านั้น)
         log("...เลื่อนลงเพื่อหาเบอร์โทร...")
         force_scroll_down(window, -10)
-        time.sleep(0.5)
+        time.sleep(1)
         
         # STEP 3: เช็คและกรอกเบอร์โทร
         found_phone = False
-        # ดึง edits ใหม่อีกรอบหลัง scroll เพื่อความชัวร์
         visible_edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
         
         for edit in visible_edits:
             # หาช่องที่มีคำว่า โทร หรือ ID เกี่ยวกับ Phone
             if "โทร" in edit.element_info.name or "Phone" in edit.element_info.automation_id:
-                # เช็คค่าที่มีอยู่ก่อน
                 current_val = edit.get_value()
-                # ถ้ามีค่า และยาวเกิน 5 ตัวอักษร ถือว่ามีเบอร์แล้ว
                 if current_val and len(str(current_val).strip()) > 5:
                     log(f"...มีเบอร์โทรอยู่แล้ว ({current_val}) -> **ไม่กรอกซ้ำ**")
                 else:
