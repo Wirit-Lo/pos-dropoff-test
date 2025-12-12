@@ -272,17 +272,21 @@ def process_receiver_address_selection(window, address_keyword):
             try:
                 all_list_items = [i for i in window.descendants(control_type="ListItem") if i.is_visible()]
                 
-                # [FIXED UPDATE] ปรับค่าเป็น > 140 (เผื่อ Header สั้นกว่าที่คิด)
-                # และเพิ่มเงื่อนไข Height > 50 เพื่อกรองพวกเส้นขีดหรือเมนูเล็กๆ ออก
+                # [FIXED UPDATE] ปรับค่าเป็น > 80 (ลดจาก 140) เพื่อให้แน่ใจว่าเจอกล่องแรก
+                # เอาเงื่อนไข height ออก เพื่อไม่ให้กรองผิด
                 valid_items = [
                     i for i in all_list_items 
-                    if i.rectangle().top > 140 and i.rectangle().height() > 50
+                    if i.rectangle().top > 80
                 ]
 
                 if valid_items:
                     # เรียงจากบนลงล่าง เพื่อเอาอันแรกสุด (Top-most)
                     valid_items.sort(key=lambda x: x.rectangle().top)
                     
+                    # Log ดู Candidate 3 อันดับแรก
+                    for idx, vi in enumerate(valid_items[:3]):
+                         log(f"   - Candidate {idx+1}: Y={vi.rectangle().top}")
+
                     target_item = valid_items[0]
                     log(f"[/] เลือกรายการแรกสุด: (Y={target_item.rectangle().top})")
                     target_item.click_input()
@@ -303,50 +307,81 @@ def process_receiver_details_form(window, fname, lname, phone):
     log("--- หน้า: รายละเอียดผู้รับ ---")
     
     # รอหน้าจอให้ชัวร์
-    if not wait_for_text(window, ["ชื่อ", "นามสกุล", "คำนำหน้า"], timeout=8):
+    log("...รอหน้าจอโหลด (หา Label 'ชื่อ' หรือ 'นามสกุล')...")
+    # [FIX] เพิ่ม Timeout เป็น 15s และ Retry
+    page_ready = False
+    for _ in range(15):
+        if wait_for_text(window, ["ชื่อ", "นามสกุล", "คำนำหน้า"], timeout=1):
+            page_ready = True
+            break
+        time.sleep(0.5)
+    
+    if not page_ready:
         log("[WARN] อาจจะยังไม่เข้าหน้ากรอกรายละเอียด (หา Label ไม่เจอ)")
 
     check_error_popup(window)
+    time.sleep(1)
 
     try:
-        # [FIXED UPDATE] ลูปเพื่อรอให้ Edit Box โผล่มาจริงๆ ก่อน
-        log("...รอโหลดช่องกรอกข้อมูล...")
-        edits = []
-        for _ in range(10): # รอสูงสุด 5 วินาที
-            edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
-            # กรองเอาเฉพาะที่อยู่ส่วนบน (ไม่เกิน Y=500) เพื่อให้แน่ใจว่าเป็นกลุ่มชื่อที่อยู่ ไม่ใช่เบอร์โทรล่างสุด
-            top_edits = [e for e in edits if e.rectangle().top < 500]
-            
-            if len(top_edits) >= 2: # ต้องเจออย่างน้อย 2 ช่อง (ชื่อ, นามสกุล)
-                edits = top_edits
-                break
-            time.sleep(0.5)
-
-        # Sort by Y then X
-        edits.sort(key=lambda x: (x.rectangle().top, x.rectangle().left))
-        log(f"   -> เจอช่องกรอกส่วนบน {len(edits)} ช่อง")
-
-        # STEP 1: กรอกชื่อและนามสกุล
-        if len(edits) >= 4:
-            # คาดว่าเป็น [0]คำนำหน้า, [1]ชื่อ, [2]กลาง, [3]นามสกุล
-            log(f"...กรอกชื่อ (ช่อง 2): {fname}")
-            edits[1].click_input()
-            edits[1].type_keys(fname, with_spaces=True)
-            
-            log(f"...กรอกนามสกุล (ช่อง 4): {lname}")
-            edits[3].click_input()
-            edits[3].type_keys(lname, with_spaces=True)
-        elif len(edits) >= 2:
-            # Fallback
-            log(f"...(Fallback) กรอกชื่อ (ช่อง 1): {fname}")
-            edits[0].click_input()
-            edits[0].type_keys(fname, with_spaces=True)
-            log(f"...(Fallback) กรอกนามสกุล (ช่อง 2): {lname}")
-            edits[1].type_keys("{TAB}{TAB}") 
-            window.type_keys(lname, with_spaces=True)
-        else:
-            log("[!] ไม่เจอช่องกรอกชื่อที่ชัดเจน หรือโหลดยังไม่เสร็จ")
+        # [FIXED UPDATE] ปรับ Logic การหาช่องกรอกใหม่
+        # 1. พยายามหา Edit Controls ก่อน
+        log("...พยายามหาช่องกรอกข้อมูล (Edit Controls)...")
+        edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
+        # กรองเอาเฉพาะที่อยู่ส่วนบน (ไม่เกิน Y=500)
+        top_edits = [e for e in edits if e.rectangle().top < 500]
         
+        name_filled = False
+
+        if len(top_edits) >= 2: 
+            # ถ้าเจอช่อง Edit อย่างน้อย 2 ช่องด้านบน
+            top_edits.sort(key=lambda x: (x.rectangle().top, x.rectangle().left))
+            log(f"   -> เจอช่องกรอกปกติ {len(top_edits)} ช่อง")
+            
+            if len(top_edits) >= 3: # น่าจะมี คำนำหน้า, ชื่อ, นามสกุล
+                log(f"...กรอกชื่อ (ช่อง 2): {fname}")
+                top_edits[1].click_input()
+                top_edits[1].type_keys(fname, with_spaces=True)
+                log(f"...กรอกนามสกุล (ช่อง 3/4): {lname}")
+                top_edits[-1].click_input() # เอาอันขวาสุด/ท้ายสุดของแถวบน
+                top_edits[-1].type_keys(lname, with_spaces=True)
+            else:
+                log(f"...กรอกชื่อ (ช่อง 1): {fname}")
+                top_edits[0].click_input()
+                top_edits[0].type_keys(fname, with_spaces=True)
+                log(f"...กรอกนามสกุล (ช่อง 2): {lname}")
+                top_edits[1].click_input()
+                top_edits[1].type_keys(lname, with_spaces=True)
+            name_filled = True
+        
+        else:
+            # [FALLBACK] ถ้าไม่เจอช่อง Edit ให้ใช้ Click Label + Tab
+            log("[!] ไม่เจอช่อง Edit -> ใช้ระบบสำรอง (Click Label + Tab)")
+            
+            # 2.1 ลองหาคำว่า "ชื่อ"
+            found_label = False
+            for label_text in ["ชื่อ", "คำนำหน้า"]:
+                try:
+                    for child in window.descendants():
+                        if child.is_visible() and label_text == child.window_text().strip():
+                            log(f"...เจอ Label '{label_text}' -> คลิกและ Tab...")
+                            child.click_input()
+                            window.type_keys("{TAB}")
+                            time.sleep(0.2)
+                            window.type_keys(fname, with_spaces=True) # พิมพ์ชื่อ
+                            window.type_keys("{TAB}") # Tab ไปนามสกุล
+                            time.sleep(0.2)
+                            window.type_keys(lname, with_spaces=True) # พิมพ์นามสกุล
+                            name_filled = True
+                            found_label = True
+                            break
+                except: pass
+                if found_label: break
+
+        # [CRITICAL UPDATE] ถ้ายังหาช่องกรอกชื่อ/นามสกุล ไม่เจอ -> หยุดทำงานทันที
+        if not name_filled:
+            log("[FATAL ERROR] ไม่พบช่องกรอกชื่อ/นามสกุล (และ Fallback ไม่สำเร็จ) -> หยุดการทำงานตามคำสั่ง")
+            raise Exception("Critical: Receiver Name/Lastname inputs not found.")
+
         # STEP 2: เลื่อนลงหาเบอร์โทร (หลังจากพยายามกรอกชื่อแล้วเท่านั้น)
         log("...เลื่อนลงเพื่อหาเบอร์โทร...")
         force_scroll_down(window, -10)
@@ -377,6 +412,8 @@ def process_receiver_details_form(window, fname, lname, phone):
 
     except Exception as e:
         log(f"[!] Error กรอกรายละเอียด: {e}")
+        # Re-raise เพื่อให้หยุด Loop หลักด้วย
+        raise e 
 
     log("...กด 'ถัดไป' (Enter) เพื่อไปหน้าใบเสร็จ...")
     smart_next(window)
