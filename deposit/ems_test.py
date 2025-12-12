@@ -347,18 +347,35 @@ def process_receiver_details_form(window, fname, lname, phone):
     for i in range(3):
         log(f"   -> Enter ครั้งที่ {i+1}")
         smart_next(window)
-        time.sleep(1.5) # หน่วงเวลาให้หน้าจอโหลดทัน
+        time.sleep(1.8) # หน่วงเวลาให้หน้าจอโหลดทัน
 
 def process_repeat_transaction(window, should_repeat):
-    log("--- หน้า: ทำรายการซ้ำ ---")
-    if wait_for_text(window, ["ทำรายการซ้ำ", "ซ้ำ"], timeout=8):
-        target = "ใช่" if should_repeat.lower() in ['true', 'yes', 'on'] else "ไม่"
-        log(f"...เลือก: {target}...")
-        smart_click(window, target)
-        if target == "ไม่": window.type_keys("{LEFT}{ENTER}")
-        else: window.type_keys("{ENTER}")
+    log("--- หน้า: ทำรายการซ้ำ (รอ Popup) ---")
+    
+    # เพิ่มเวลารอเป็น 15 วินาที เพื่อให้แน่ใจว่า Popup ขึ้นทัน
+    found_popup = False
+    for i in range(30): # 15 วินาที (0.5s * 30)
+        if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=0.5):
+            found_popup = True
+            break
+        time.sleep(0.5)
+        
+    if found_popup:
+        log("...เจอ Popup ทำรายการซ้ำ...")
+        time.sleep(1.0) # รอให้ปุ่ม Active
+        
+        target = "ใช่" if str(should_repeat).lower() in ['true', 'yes', 'on', '1'] else "ไม่"
+        log(f"...Config ระบุ: {should_repeat} -> เลือกกด: '{target}'")
+        
+        # ลองกดปุ่มโดยหาจากชื่อ
+        if not smart_click(window, target, timeout=3):
+            log(f"[!] หาปุ่ม '{target}' ไม่เจอ -> ใช้ Hotkey สำรอง")
+            if target == "ไม่":
+                window.type_keys("{ESC}")
+            else:
+                window.type_keys("{ENTER}")
     else:
-        log("[WARN] ไม่พบหน้าทำรายการซ้ำ")
+        log("[WARN] ไม่พบ Popup ทำรายการซ้ำภายในเวลาที่กำหนด (Timeout)")
 
 # ================= 4. Run Function (Partial) =================
 def run_partial_test(main_window, config):
