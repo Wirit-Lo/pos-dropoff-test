@@ -19,173 +19,149 @@ def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
 # ================= 2. Helper Functions =================
-def click_element_by_id(window, exact_id, timeout=2):
-    """ฟังก์ชันพื้นฐานสำหรับกดปุ่ม (ใช้ภายใน)"""
-    start = time.time()
-    while time.time() - start < timeout:
-        try:
-            found = [c for c in window.descendants() if c.element_info.automation_id == exact_id and c.is_visible()]
-            if found:
-                found[0].click_input()
-                log(f"[/] กดปุ่ม ID '{exact_id}' สำเร็จ")
-                return True
-        except: pass
-        time.sleep(0.3)
-    return False
+def find_scroll_button(window):
+    """ค้นหาปุ่มเลื่อนขวา (>) โดยดูจากตำแหน่งขวาสุดของจอ"""
+    try:
+        # หาปุ่มทั้งหมด
+        buttons = [b for b in window.descendants(control_type="Button") if b.is_visible()]
+        
+        # กรองปุ่มที่อยู่ขวาสุด (Top 3 ปุ่มที่ค่า Left เยอะสุด)
+        if not buttons: return None
+        
+        # เรียงลำดับตามค่า Left (มากไปน้อย)
+        buttons.sort(key=lambda x: x.rectangle().left, reverse=True)
+        
+        # ปุ่มเลื่อนมักจะเป็นปุ่มขวาสุดที่มีขนาดไม่ใหญ่มาก (เช่น กว้าง < 100)
+        potential_scroll_btns = [b for b in buttons[:3] if b.rectangle().width() < 100]
+        
+        for btn in potential_scroll_btns:
+            # ตรวจสอบ Text หรือกดได้เลยถ้ามั่นใจ
+            txt = btn.window_text()
+            if ">" in txt or "Next" in txt or not txt: # ปุ่มลูกศรมักจะไม่มี Text หรือเป็น >
+                return btn
+                
+        return buttons[0] # ถ้าหาไม่เจอจริงๆ คืนค่าปุ่มขวาสุดไปเลย
+    except:
+        return None
 
-def find_and_click_with_scroll(window, target_id, max_attempts=5):
+def find_and_click_safe_zone(window, target_id, max_attempts=10):
     """
-    [UPDATED] ค้นหาปุ่มและกด โดยเช็คว่าปุ่มตกขอบจอหรือโดนบังหรือไม่
-    ถ้าอยู่ชิดขวาเกินไป จะกดปุ่มเลื่อนหน้าจอก่อน
+    [Logic ใหม่] เลื่อนหาจนกว่าปุ่มจะเข้ามาอยู่ใน Safe Zone (กลางจอ) แล้วค่อยกด
     """
-    log(f"...ค้นหา ID: {target_id} (พร้อมตรวจสอบตำแหน่ง)...")
+    log(f"...กำลังค้นหาปุ่ม '{target_id}' และจัดตำแหน่ง...")
     
     for i in range(max_attempts):
-        try:
-            # 1. ค้นหา Element ใน Tree
-            found = [c for c in window.descendants() if c.element_info.automation_id == target_id and c.is_visible()]
+        # 1. ค้นหาปุ่มเป้าหมาย
+        found = [c for c in window.descendants() if c.element_info.automation_id == target_id and c.is_visible()]
+        
+        target_ready = False
+        
+        if found:
+            target = found[0]
+            rect = target.rectangle()
+            win_rect = window.rectangle()
             
-            should_click = False
-            if found:
-                target = found[0]
-                rect = target.rectangle()
-                win_rect = window.rectangle()
-                
-                # คำนวณจุดกึ่งกลางของปุ่มเป้าหมาย
-                center_x = (rect.left + rect.right) // 2
-                
-                # กำหนดเส้นขอบเขตปลอดภัย (Safe Zone) ประมาณ 85% ของความกว้างหน้าจอ
-                # ถ้าเกินนี้แสดงว่าอาจจะโดนปุ่มลูกศรขวาบังอยู่
-                safe_limit = win_rect.left + (win_rect.width() * 0.85)
-                
-                if center_x < safe_limit:
-                    # อยู่ในระยะปลอดภัย -> กดได้เลย
-                    log(f"   [/] พบปุ่มในระยะปลอดภัย (X={center_x}) -> กำลังกด...")
-                    target.click_input()
-                    return True
-                else:
-                    log(f"   [!] พบปุ่ม '{target_id}' แต่อยู่ชิดขอบขวาเกินไป (X={center_x}) -> ต้องเลื่อนก่อน")
+            # คำนวณขอบเขต
+            # Safe Zone: ปุ่มต้องไม่อยู่ชิดขอบขวาเกินไป (เผื่อโดนปุ่มเลื่อนบัง)
+            # สมมติปุ่มเลื่อนกว้างประมาณ 60-80px
+            unsafe_zone_start = win_rect.right - 120 
+            
+            log(f"   [Check {i+1}] เจอ {target_id} ที่ X={rect.left} ถึง {rect.right}")
+            
+            if rect.right < unsafe_zone_start:
+                # ปุ่มอยู่ในระยะปลอดภัย (ไม่โดนบัง) -> กดได้
+                log(f"   [/] ปุ่มอยู่ใน Safe Zone (ไม่โดนบัง) -> คลิก!")
+                target.click_input()
+                return True
             else:
-                log(f"   [Attempt {i+1}] ยังไม่พบปุ่ม '{target_id}' ในหน้าจอ")
+                log(f"   [!] ปุ่มอยู่ชิดขวาเกินไป (อาจโดนบัง) -> ต้องเลื่อนอีก")
+        else:
+            log(f"   [Check {i+1}] ยังไม่เห็นปุ่มบนหน้าจอ -> ต้องเลื่อนหา")
 
-            # 2. ปฏิบัติการเลื่อนหน้าจอ (Scroll Action)
-            log("   -> กำลังสั่งเลื่อนหน้าจอไปทางขวา...")
+        # 2. กดปุ่มเลื่อน (Scroll)
+        scroll_btn = find_scroll_button(window)
+        if scroll_btn:
+            log(f"      -> กดปุ่มเลื่อนหน้าจอ (พิกัดปุ่ม: {scroll_btn.rectangle().mid_point()})")
+            scroll_btn.click_input()
+        else:
+            log("      -> หาปุ่มเลื่อนไม่เจอ ใช้ปุ่มลูกศรขวาที่คีย์บอร์ดแทน")
+            window.type_keys("{RIGHT}")
             
-            scroll_success = False
-            
-            # วิธี A: หาปุ่มลูกศรขวาบนหน้าจอ (UI Button) แล้วกด
-            # ปกติปุ่มเลื่อนจะอยู่ขวาสุดของจอ
-            try:
-                buttons = [b for b in window.descendants(control_type="Button") if b.is_visible()]
-                right_arrow_btn = None
-                
-                # กรองหาปุ่มที่อยู่ขวาสุด (Top-Right หรือ Right-Center)
-                for btn in buttons:
-                    b_rect = btn.rectangle()
-                    # ถ้าปุ่มอยู่ขวาสุด (90% ขึ้นไป) และไม่ใช่ปุ่มที่เราจะกด
-                    if b_rect.left > win_rect.left + (win_rect.width() * 0.92):
-                        right_arrow_btn = btn
-                        break
-                
-                if right_arrow_btn:
-                    right_arrow_btn.click_input()
-                    log("      กดปุ่มลูกศรขวาบนหน้าจอ (UI Scroll Button)")
-                    scroll_success = True
-            except Exception as e:
-                log(f"      Error หาปุ่มเลื่อน: {e}")
-
-            # วิธี B: ถ้าหาปุ่มไม่เจอ ให้ใช้คีย์บอร์ด
-            if not scroll_success:
-                window.type_keys("{RIGHT}")
-                log("      ใช้คีย์บอร์ดกดลูกศรขวา {RIGHT}")
-            
-            time.sleep(1.5) # รอ Animation เลื่อนให้เสร็จสำคัญมาก
-
-        except Exception as e:
-            log(f"Error Loop: {e}")
-            time.sleep(1)
-
-    log(f"[Fail] ไม่สามารถกดปุ่ม {target_id} ได้หลังจากลอง {max_attempts} ครั้ง")
+        time.sleep(1.5) # รอ Animation เลื่อน
+        
+    log("[Fail] หมดความพยายามในการเลื่อนหา")
     return False
 
 # ================= 3. Main Test Logic =================
 def test_popup_process(main_window, config):
-    log("--- เริ่มทดสอบ (ระบบ Scroll อัจฉริยะ) ---")
+    log("--- เริ่มทดสอบ (ระบบ Safe Zone Scroll) ---")
     
-    # 1. ค้นหาและกดปุ่มบริการ (พร้อมระบบแก้การบัง)
-    target_service_id = "ShippingService_2583" # ID ที่ต้องการ
+    # 1. ค้นหาและกดปุ่มบริการ (ShippingService_2583)
+    # แก้ ID ให้ตรงกับ Config หรือปุ่มจริงของคุณ
+    target_service_id = "ShippingService_2583" 
     
-    if not find_and_click_with_scroll(main_window, target_service_id):
-        log(f"[Error] จบการทำงาน: หา/กดปุ่ม {target_service_id} ไม่สำเร็จ")
+    # ใช้ฟังก์ชันใหม่ที่ฉลาดขึ้น
+    if not find_and_click_safe_zone(main_window, target_service_id):
+        log(f"[Error] ไม่สามารถกดปุ่ม {target_service_id} ได้")
         return
 
-    # [เพิ่ม] กด Enter (ถัดไป) เพื่อเรียก Popup ขึ้นมา
+    # [ส่วน Popup เดิม]
     log("...กด Enter (ถัดไป) เพื่อเรียก Popup...")
     time.sleep(1.0)
     main_window.type_keys("{ENTER}")
 
-    # 2. เริ่มกระบวนการจัดการ Popup
+    # ดึงค่าจาก Config
     qty = config['PRODUCT_QUANTITY'].get('Quantity', '1') if 'PRODUCT_QUANTITY' in config else '1'
     log(f"...รอ Popup 'จำนวน' (ค่า: {qty})...")
     
-    time.sleep(1.5) # รอ Animation Popup เด้ง
+    time.sleep(1.5)
 
     # --- ค้นหา Popup ---
     popup_window = None
-    
-    # หา Top Window
     try:
         app_top = Application(backend="uia").connect(active_only=True).top_window()
         if "จำนวน" in app_top.window_text() or app_top.element_info.control_type == "Window":
             popup_window = app_top
-            log(f"-> เจอ Top Window: {app_top.window_text()}")
+            log(f"-> เจอ Top Window Popup: {app_top.window_text()}")
     except: pass
     
-    # ถ้าไม่เจอ ลองหา Child
     if not popup_window:
         try:
             children = main_window.children(control_type="Window")
             if children: popup_window = children[0]
         except: pass
 
-    # --- เริ่มเจาะหาช่อง Edit ---
+    # --- กรอกข้อมูล ---
     if popup_window:
         try: popup_window.set_focus()
         except: pass
         
-        log("...สแกนหาช่อง Edit ใน Popup...")
-        
         target_edit = None
         try:
             edits = [e for e in popup_window.descendants(control_type="Edit") if e.is_visible()]
-            valid_edits = [e for e in edits if e.rectangle().width() > 30] # กรองปุ่มเล็กๆทิ้ง
-            
-            if valid_edits:
-                target_edit = valid_edits[0]
-                log(f"-> เป้าหมาย: {target_edit} (ID: {target_edit.element_info.automation_id})")
+            valid_edits = [e for e in edits if e.rectangle().width() > 30]
+            if valid_edits: target_edit = valid_edits[0]
         except: pass
 
         if target_edit:
             try:
-                # 1. Focus & Clear
                 target_edit.click_input()
                 time.sleep(0.2)
                 target_edit.type_keys("^a{DELETE}", pause=0.1)
-                
-                # 2. Type & Enter
+                time.sleep(0.1)
                 target_edit.type_keys(str(qty), with_spaces=True)
                 log(f"-> พิมพ์เลข {qty} เรียบร้อย")
                 time.sleep(0.5)
                 popup_window.type_keys("{ENTER}")
-                log("-> กด Enter (ถัดไป) เรียบร้อย")
+                log("-> กด Enter (ถัดไป) ใน Popup เรียบร้อย")
             except Exception as e:
-                log(f"Error ขณะพิมพ์: {e}")
+                log(f"Error: {e}")
         else:
-            log("[Warning] หาช่องไม่เจอ -> Blind Type")
+            log("[Warning] ไม่เจอช่อง Edit -> พิมพ์ใส่ Window เลย")
             popup_window.type_keys(str(qty), with_spaces=True)
             popup_window.type_keys("{ENTER}")
     else:
-        log("[Error] หา Popup Window ไม่เจอ")
+        log("[Error] หา Popup ไม่เจอ")
 
     log("--- จบการทดสอบ ---")
 
