@@ -19,48 +19,34 @@ def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
 # ================= 2. Helper Functions =================
-def find_scroll_button(window, target_rect=None):
+def find_scroll_button(window):
     """
-    ค้นหาปุ่มเลื่อนขวา โดยใช้ ID ที่น่าจะเป็น หรือค้นหาตามตำแหน่งขวาสุด
+    ค้นหาปุ่มเลื่อนขวา โดยใช้ ID 'ArrowIcon' ที่เจอจากการสแกน
     """
     try:
-        # 1. ลองหาจาก ID ที่น่าสงสัย (จาก Dump ของคุณ: Index 85 ArrowIcon)
+        # 1. ค้นหาด้วย ID 'ArrowIcon' (จากที่คุณสแกนเจอ)
         arrow_icons = [c for c in window.descendants() if c.element_info.automation_id == "ArrowIcon" and c.is_visible()]
         if arrow_icons:
-            log("      [Scroll] เจอ ID 'ArrowIcon' -> ใช้ปุ่มนี้")
+            log("      [Scroll] เจอ ID 'ArrowIcon' -> ใช้ปุ่มนี้เลื่อนหน้า")
             return arrow_icons[0]
 
-        # 2. ถ้าไม่เจอ ให้สแกนหาปุ่ม/รูปภาพ ที่อยู่ขวาสุดของจอ และอยู่ในระนาบเดียวกับเป้าหมาย
+        # 2. กรณีสำรอง: ถ้าไม่เจอ ArrowIcon ให้หาปุ่ม/รูปภาพ ที่อยู่ขวาสุดของจอ
+        log("      [Scroll] ไม่เจอ ArrowIcon -> หาปุ่มขวาสุดแทน")
         candidates = []
         candidates.extend(window.descendants(control_type="Button"))
         candidates.extend(window.descendants(control_type="Image"))
         
         visible_candidates = [c for c in candidates if c.is_visible()]
-        
         if not visible_candidates: return None
         
         win_rect = window.rectangle()
-        # กรองเฉพาะตัวที่อยู่ขวาสุด (ขวาเกิน 85% ของหน้าจอ)
+        # กรองเฉพาะตัวที่อยู่ขวาสุด (โซน 85% ของจอขึ้นไป)
         right_side_candidates = [c for c in visible_candidates if c.rectangle().left > win_rect.left + (win_rect.width() * 0.85)]
         
-        # ถ้ามี Target Rect ให้หาตัวที่ Y ใกล้เคียงกัน (ระดับเดียวกัน)
-        if target_rect and right_side_candidates:
-            target_mid_y = (target_rect.top + target_rect.bottom) // 2
-            # เรียงตามระยะห่างจากแกน Y ของเป้าหมาย (ใกล้สุดขึ้นก่อน)
-            right_side_candidates.sort(key=lambda x: abs(((x.rectangle().top + x.rectangle().bottom) // 2) - target_mid_y))
-            
-            best_scroll = right_side_candidates[0]
-            log(f"      [Scroll] เจอวัตถุขวาสุดที่ระดับเดียวกัน ({best_scroll.element_info.control_type}) -> ใช้ปุ่มนี้")
-            return best_scroll
-
-        # 3. ถ้าไม่มี Target หรือหาไม่เจอ เอาตัวขวาสุดที่มีขนาดเล็ก (ปุ่มลูกศร)
         if right_side_candidates:
              # เรียงจากซ้ายไปขวา (เอาตัวขวาสุด)
              right_side_candidates.sort(key=lambda x: x.rectangle().left, reverse=True)
-             for c in right_side_candidates:
-                 # กรองพวกปุ่มใหญ่ๆ ทิ้ง (ปุ่มเลื่อนน่าจะกว้างไม่เกิน 100)
-                 if c.rectangle().width() < 120:
-                     return c
+             return right_side_candidates[0]
                      
         return None
     except Exception as e:
@@ -69,9 +55,9 @@ def find_scroll_button(window, target_rect=None):
 
 def find_and_click_safe_zone(window, target_id, max_attempts=15):
     """
-    [Logic ใหม่ V2] บีบ Safe Zone ให้แคบลง (60%) บังคับเลื่อนจนกว่าจะเห็นเต็มๆ
+    เลื่อนหาปุ่มจนกว่าจะเข้ามาอยู่ใน Safe Zone (กลางจอ) แล้วค่อยกด
     """
-    log(f"...กำลังค้นหาปุ่ม '{target_id}' และจัดตำแหน่ง (Strict Mode)...")
+    log(f"...กำลังค้นหาปุ่ม '{target_id}' และจัดตำแหน่ง...")
     
     last_rect_left = -1
     stuck_counter = 0
@@ -85,17 +71,17 @@ def find_and_click_safe_zone(window, target_id, max_attempts=15):
             rect = target.rectangle()
             win_rect = window.rectangle()
             
-            # คำนวณ Safe Zone: ต้องอยู่ใน "ซ้าย-กลาง" ของจอ (ไม่เกิน 60-70% ของความกว้าง)
-            # เพื่อหนีจาก Overlay ด้านขวา
-            safe_limit = win_rect.left + (win_rect.width() * 0.65) 
+            # Safe Zone: ต้องไม่อยู่ชิดขอบขวา (ไม่เกิน 70% ของหน้าจอ)
+            # เพื่อให้มั่นใจว่าปุ่มเลื่อนมากลางจอแล้ว และไม่โดน ArrowIcon บัง
+            safe_limit = win_rect.left + (win_rect.width() * 0.70) 
             
             log(f"   [Check {i+1}] ปุ่มอยู่ที่ X={rect.left} (Limit: {int(safe_limit)})")
             
-            # เช็คว่าปุ่มขยับไหม (ถ้าเลื่อนแล้วที่เดิม แสดงว่าสุดทางแล้ว หรือเลื่อนไม่ไป)
+            # เช็คว่าปุ่มขยับไหม (ถ้าเลื่อนแล้วที่เดิม แสดงว่าสุดทางแล้ว)
             if abs(rect.left - last_rect_left) < 5 and i > 0:
                 stuck_counter += 1
                 if stuck_counter >= 3:
-                    log("   [!] ปุ่มไม่ขยับแล้ว (อาจสุดทางแล้ว) -> ตัดสินใจกดเลย")
+                    log("   [!] ปุ่มไม่ขยับแล้ว (สุดทาง) -> ตัดสินใจกดเลย")
                     target.click_input()
                     return True
             else:
@@ -104,25 +90,21 @@ def find_and_click_safe_zone(window, target_id, max_attempts=15):
             last_rect_left = rect.left
 
             if rect.right < safe_limit:
-                log(f"   [/] ปุ่มอยู่ใน Safe Zone (เห็นเต็มใบ) -> คลิก!")
-                time.sleep(0.5) # รอนิ่งๆ ก่อนกด
+                log(f"   [/] ปุ่มอยู่ใน Safe Zone (เห็นชัดเจน) -> คลิก!")
+                time.sleep(0.5)
                 target.click_input()
                 return True
             else:
-                log(f"   [!] ปุ่มอยู่ลึกไปทางขวา (โดนบังแน่ๆ) -> ต้องเลื่อนซ้ายเข้ามา")
+                log(f"   [!] ปุ่มอยู่ลึกไปทางขวา -> ต้องเลื่อนซ้ายเข้ามา")
         else:
-            log(f"   [Check {i+1}] ยังไม่เห็นปุ่มบนหน้าจอ -> ต้องเลื่อนหา")
+            log(f"   [Check {i+1}] ยังไม่เห็นปุ่มเป้าหมายบนหน้าจอ -> ต้องเลื่อนหา")
 
-        # 2. ปฏิบัติการเลื่อน (Scroll)
-        # ส่ง rect ของปุ่มเป้าหมายไปช่วยหาปุ่มเลื่อนที่ระดับเดียวกัน (ถ้าเจอ)
-        target_rect_ref = found[0].rectangle() if found else None
-        scroll_btn = find_scroll_button(window, target_rect=target_rect_ref)
+        # 2. สั่งกดปุ่มเลื่อน (ArrowIcon)
+        scroll_btn = find_scroll_button(window)
         
         if scroll_btn:
             try:
-                # ลอง Highlight ดูตำแหน่ง (Optional)
-                # scroll_btn.draw_outline() 
-                log(f"      -> กดปุ่มเลื่อน (ID: {scroll_btn.element_info.automation_id} | Type: {scroll_btn.element_info.control_type})")
+                log(f"      -> กดปุ่มเลื่อน (ID: {scroll_btn.element_info.automation_id})")
                 scroll_btn.click_input()
             except:
                 log("      -> กดปุ่มเลื่อน Error -> ใช้ Keyboard แทน")
@@ -131,16 +113,17 @@ def find_and_click_safe_zone(window, target_id, max_attempts=15):
             log("      -> หาปุ่มเลื่อนไม่เจอ -> ใช้ Keyboard {RIGHT}")
             window.type_keys("{RIGHT}")
             
-        time.sleep(1.2) # รอ Animation เลื่อน
+        time.sleep(1.5) # รอ Animation เลื่อน
         
     log("[Fail] หมดความพยายามในการเลื่อนหา")
     return False
 
 # ================= 3. Main Test Logic =================
 def test_popup_process(main_window, config):
-    log("--- เริ่มทดสอบ (Strict Scroll System) ---")
+    log("--- เริ่มทดสอบ (ระบบ Scroll โดยใช้ ArrowIcon) ---")
     
     # 1. ค้นหาและกดปุ่มบริการ
+    # แก้ ID ตรงนี้ให้ตรงกับบริการที่คุณต้องการเทส
     target_service_id = "ShippingService_2583" 
     
     if not find_and_click_safe_zone(main_window, target_service_id):
@@ -172,7 +155,7 @@ def test_popup_process(main_window, config):
             if children: popup_window = children[0]
         except: pass
 
-    # --- กรอกข้อมูล ---
+    # --- กรอกข้อมูลใน Popup ---
     if popup_window:
         try: popup_window.set_focus()
         except: pass
