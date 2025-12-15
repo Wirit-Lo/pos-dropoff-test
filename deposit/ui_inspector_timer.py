@@ -111,10 +111,10 @@ def print_separator():
 
 def main():
     print("============================================================")
-    print("   UI INSPECTOR (SMART HIERARCHY MODE)")
-    print("   1. นับถอยหลัง 5 วิ -> ชี้เมาส์ที่ปุ่มเล็กๆ")
-    print("   2. ระบบจะโชว์ข้อมูลของตัวที่ชี้ + ตัวพ่อแม่ (Parent)")
-    print("      (ช่วยแก้ปัญหาชี้โดนรูปภาพแล้วไม่มี ID)")
+    print("   UI INSPECTOR (NEIGHBOR SCAN MODE)")
+    print("   1. นับถอยหลัง 5 วิ -> ชี้เมาส์ที่ 'พื้นที่แถวๆ ปุ่ม'")
+    print("   2. ระบบจะโชว์ Parent และ **เพื่อนบ้าน (Siblings)**")
+    print("      (ปุ่มลูกศรมักจะอยู่ระดับเดียวกับกล่องรายการสินค้า)")
     print("============================================================")
     print("")
 
@@ -148,46 +148,60 @@ def main():
                 if auto_id:
                     print(f"   🔑 ID    : '{auto_id}'")
                 else:
-                    print(f"   ⚠️ ID    : (ไม่มี - ลองดู Parent ด้านล่าง)")
+                    print(f"   ⚠️ ID    : (ไม่มี)")
                 
                 print(f"   🏷️  Name  : '{name}'")
                 print(f"   📦 Type  : {control_type}")
                 if rect:
                     print(f"   🔲 Size  : {rect.width()} x {rect.height()}")
 
-                # --- ส่วนแสดงผลพ่อแม่ (Ancestors) [NEW Feature] ---
+                # --- ส่วนแสดงผลพ่อแม่ (Ancestors) และเพื่อนบ้าน (Neighbors) ---
                 ancestors = get_ancestors(elem)
                 if ancestors:
-                    print(f"\n⬆️  PARENTS (ตัวแม่ที่หุ้มอยู่ - มักจะมี ID ตรงนี้):")
+                    print(f"\n⬆️  PARENTS (ตัวแม่):")
                     for i, anc in enumerate(ancestors):
                         p_name = getattr(anc, 'name', '')
                         p_id = getattr(anc, 'automation_id', '')
                         p_type = getattr(anc, 'control_type', '')
-                        
-                        # สร้างข้อความแสดงผล
-                        info = f"   Layer {i+1}: [{p_type}]"
-                        if p_id: 
-                            info += f" 🔑 ID='{p_id}'" # เน้น ID ถ้ามี
-                        else:
-                            info += f" (No ID)"
-                        
-                        if p_name: info += f" Name='{p_name}'"
-                        print(info)
+                        print(f"   Layer {i+1}: [{p_type}] ID='{p_id}' Name='{p_name}'")
+
+                    # [NEW] สแกนหาเพื่อนบ้านจาก Parent ตัวแรก
+                    immediate_parent = ancestors[0]
+                    try:
+                        siblings = immediate_parent.children()
+                        if siblings:
+                            print(f"\n↔️  NEIGHBORS (เพื่อนบ้านในระดับเดียวกัน - ปุ่มอาจจะอยู่ตรงนี้):")
+                            print("   -------------------------------------------------------------")
+                            for i, sib in enumerate(siblings):
+                                s_name = getattr(sib, 'name', '')
+                                s_id = getattr(sib, 'automation_id', '')
+                                s_type = getattr(sib, 'control_type', '')
+                                
+                                # สร้างข้อความ
+                                info = f"Sibling {i+1}: [{s_type}]"
+                                if s_id: info += f" ID='{s_id}'"
+                                if s_name: info += f" Name='{s_name}'"
+                                
+                                # เช็คว่าเป็นตัวที่เราชี้อยู่ไหม
+                                if s_id == auto_id and auto_id != "":
+                                    info += " (👈 ตัวนี้แหละ)"
+                                
+                                # ไฮไลท์ถ้าดูเหมือนปุ่ม (Button/Image)
+                                if "Button" in s_type or "Image" in s_type or ">" in s_name or "Scroll" in s_id:
+                                    print(f"   🔥 {info}  <-- น่าสงสัย!")
+                                else:
+                                    print(f"   {info}")
+                    except:
+                        pass
 
                 # --- ส่วนแสดงลูกๆ (Children) ---
+                # (ลดความสำคัญลง เพราะเราเห็นแล้วว่าเป็น ListItems)
                 try:
                     children = elem.children()
-                    if children:
-                        print(f"\n⬇️  CHILDREN (ไส้ใน - เผื่อตัวที่ชี้เป็นกล่องรวม):")
-                        for i, child in enumerate(children[:10]): 
-                            c_name = getattr(child, 'name', '')
-                            c_id = getattr(child, 'automation_id', '')
-                            c_type = getattr(child, 'control_type', '')
-                            
-                            c_info = f"   Child {i+1}: [{c_type}]"
-                            if c_id: c_info += f" ID='{c_id}'"
-                            if c_name: c_info += f" Name='{c_name}'"
-                            print(c_info)
+                    if children and len(children) < 5: # โชว์เฉพาะถ้ามีลูกน้อยๆ
+                         print(f"\n⬇️  CHILDREN:")
+                         for i, child in enumerate(children): 
+                            print(f"   Child {i+1}: [{child.control_type}] ID='{child.automation_id}'")
                 except:
                     pass
 
@@ -196,7 +210,6 @@ def main():
             
             print_separator()
             
-            # Draw again before pause
             if elem and getattr(elem, 'rectangle', None):
                 draw_red_border(elem.rectangle)
 
