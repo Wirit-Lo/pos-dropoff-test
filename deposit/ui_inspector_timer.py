@@ -1,7 +1,7 @@
 import time
 import datetime
 import sys
-import ctypes # เพิ่ม ctypes เพื่อใช้หาตำแหน่งเมาส์แบบ Native Windows
+import ctypes # ใช้สำหรับวาดรูปและหาเมาส์
 
 # ตรวจสอบและ Import library ที่จำเป็น
 try:
@@ -10,26 +10,49 @@ except ImportError:
     print("Error: ไม่พบไลบรารี pywinauto กรุณาติดตั้ง: pip install pywinauto")
     sys.exit(1)
 
-# สร้าง Structure สำหรับเก็บพิกัดเมาส์
+# --- ส่วนจัดการเมาส์และหน้าจอ (Windows API) ---
 class POINT(ctypes.Structure):
     _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
 
 def get_mouse_pos():
-    """หาตำแหน่งเมาส์ด้วย Windows API โดยตรง"""
+    """หาตำแหน่งเมาส์ด้วย Windows API"""
     pt = POINT()
     ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
     return pt.x, pt.y
 
+def draw_red_border(rect):
+    """วาดกรอบสีแดงทับหน้าจอตรงตำแหน่ง Rect"""
+    if not rect: return
+    
+    # ดึง Device Context ของทั้งหน้าจอ (Desktop)
+    dc = ctypes.windll.user32.GetWindowDC(0)
+    
+    # สร้างปากกาสีแดง (Style=0(Solid), Width=5, Color=0x0000FF(Red in BGR))
+    pen = ctypes.windll.gdi32.CreatePen(0, 5, 0x0000FF) 
+    # เลือก Brush แบบโปร่งใส (Stock Object 5 = NULL_BRUSH)
+    brush = ctypes.windll.gdi32.GetStockObject(5) 
+
+    # เลือกอุปกรณ์วาดเขียนเข้า DC
+    old_pen = ctypes.windll.gdi32.SelectObject(dc, pen)
+    old_brush = ctypes.windll.gdi32.SelectObject(dc, brush)
+
+    # วาดสี่เหลี่ยม (Rectangle)
+    ctypes.windll.gdi32.Rectangle(dc, rect.left, rect.top, rect.right, rect.bottom)
+
+    # คืนค่าและล้างหน่วยความจำ
+    ctypes.windll.gdi32.SelectObject(dc, old_pen)
+    ctypes.windll.gdi32.SelectObject(dc, old_brush)
+    ctypes.windll.gdi32.DeleteObject(pen)
+    ctypes.windll.user32.ReleaseDC(0, dc)
+
 def get_current_element_info():
     """ดึงข้อมูล Element ณ ตำแหน่งเมาส์ปัจจุบัน"""
-    x, y = 0, 0 # กำหนดค่าเริ่มต้นกัน Error
+    x, y = 0, 0
     try:
         x, y = get_mouse_pos()
-        # ดึง UI Element จากจุดพิกัด (UIA Mode)
         elem = uia_element_info.UIAElementInfo.from_point(x, y)
         return x, y, elem
     except Exception as e:
-        # กรณีหาไม่เจอ ให้คืนค่าพิกัดไป แต่อย่างอื่นเป็น None
         return x, y, None
 
 def print_separator():
@@ -37,63 +60,88 @@ def print_separator():
 
 def main():
     print("============================================================")
-    print("   UI INSPECTOR (TIMER MODE) - By Gemini (Fixed)")
-    print("   1. โปรแกรมจะนับถอยหลัง 5 วินาที")
-    print("   2. ให้เอาเมาส์ไปชี้ค้างไว้ที่ปุ่มที่ต้องการ")
-    print("   3. เมื่อครบเวลา ข้อมูลจะถูกบันทึกลง Log ด้านล่าง")
-    print("   (กด Ctrl+C เพื่อหยุดโปรแกรม)")
+    print("   UI INSPECTOR (HIGHLIGHT + PAUSE)")
+    print("   1. นับถอยหลัง 5 วิ -> ชี้เมาส์ที่ปุ่ม")
+    print("   2. เมื่อครบเวลา จะมี 'กรอบสีแดง' ขึ้นที่หน้าจอ")
+    print("   3. โปรแกรมจะ 'หยุด' ให้คุณดูค่า จนกว่าจะกด Enter")
+    print("   (กด Ctrl+C เพื่อออกจากโปรแกรม)")
     print("============================================================")
     print("")
 
     try:
         while True:
-            # --- ส่วนนับถอยหลัง ---
+            # --- 1. ส่วนนับถอยหลัง ---
             for i in range(5, 0, -1):
-                # ใช้ \r เพื่อเขียนทับบรรทัดเดิมตอนนับเวลา
-                print(f"   ⏳ กำลังจะบันทึกค่าในอีก {i} วินาที... (ชี้เมาส์รอไว้เลย)", end='\r')
+                print(f"   ⏳ กำลังจะจับภาพในอีก {i} วินาที... (เตรียมชี้เมาส์)", end='\r')
                 time.sleep(1)
             
-            # --- ส่วนบันทึกข้อมูล (Capture) ---
-            # ล้างบรรทัดนับถอยหลัง
-            print(" " * 60, end='\r') 
+            print(" " * 60, end='\r') # ล้างบรรทัดนับเวลา
             
+            # --- 2. ส่วนบันทึกและวาดรูป ---
             timestamp = datetime.datetime.now().strftime("%H:%M:%S")
             x, y, elem = get_current_element_info()
+
+            # วาดกรอบสีแดงทันทีถ้าเจอ Element
+            if elem and getattr(elem, 'rectangle', None):
+                draw_red_border(elem.rectangle)
 
             print(f"[{timestamp}] 📸 บันทึกข้อมูลที่พิกัด ({x}, {y})")
             print_separator()
 
             if elem:
-                # ดึงค่าต่างๆ (ใช้ .get() หรือเข้าถึง attribute ตรงๆ แล้วแต่ version)
                 name = getattr(elem, 'name', '')
                 auto_id = getattr(elem, 'automation_id', '')
                 control_type = getattr(elem, 'control_type', '')
                 class_name = getattr(elem, 'class_name', '')
                 rect = getattr(elem, 'rectangle', None)
 
-                # แสดงผล Automation ID (ตัวสำคัญสุด)
+                # แสดง ID เด่นๆ
                 if auto_id:
-                    print(f"   🔑 Automation ID :  '{auto_id}'  <-- (ก๊อปปี้ค่านี้ไปใช้)")
+                    print(f"   🔑 Automation ID :  '{auto_id}'")
                 else:
-                    print(f"   🔑 Automation ID :  (ไม่มี/Empty)")
+                    print(f"   🔑 Automation ID :  (ไม่มี)")
 
                 print(f"   🏷️  Name (Text)   :  '{name}'")
                 print(f"   📦 Control Type  :  {control_type}")
-                print(f"   💻 Class Name    :  {class_name}")
                 
                 if rect:
-                    print(f"   🔲 Rectangle     :  (L:{rect.left}, T:{rect.top}, R:{rect.right}, B:{rect.bottom})")
-                    print(f"   📐 Width/Height  :  W={rect.width()}, H={rect.height()}")
-                
-                # วิเคราะห์เบื้องต้นให้
-                if not auto_id and not name:
-                    print("\n   ⚠️  คำแนะนำ: Element นี้ไม่มีทั้ง ID และชื่อ")
-                    print(f"       ลองใช้พิกัดแทน: click_input(coords=({x}, {y}))")
+                    print(f"   🔲 Rectangle     :  W={rect.width()}, H={rect.height()}")
+                    # วาดซ้ำอีกทีเผื่อหาย (บางแอป Refresh จอบ่อย)
+                    draw_red_border(rect)
+
+                # --- แสดง Children ---
+                try:
+                    children = elem.children()
+                    if children:
+                        print(f"\n   📂 พบ {len(children)} รายการข้างใน (Children):")
+                        print("   --------------------------------------------------")
+                        for i, child in enumerate(children[:15]): 
+                            c_name = getattr(child, 'name', '')
+                            c_id = getattr(child, 'automation_id', '')
+                            c_type = getattr(child, 'control_type', '')
+                            
+                            info_str = f"[{c_type}]"
+                            if c_id: info_str += f" ID:'{c_id}'"
+                            if c_name: info_str += f" Name:'{c_name}'"
+                            print(f"      {i+1}. {info_str}")
+                        
+                        if len(children) > 15:
+                            print(f"      ... (และอีก {len(children)-15} รายการ)")
+                except:
+                    print("\n   ⚠️ ไม่สามารถดึง Children ได้")
+
             else:
-                print("   ❌ ไม่พบ UI Element (อาจจะเป็นพื้นที่ว่างหรือโปรแกรมเข้าถึงไม่ได้)")
+                print("   ❌ ไม่พบ UI Element")
             
             print_separator()
-            print("\n") # เว้นบรรทัดเตรียมรอบต่อไป
+            
+            # --- 3. ส่วนหยุดรอ (Pause) ---
+            # วาดกรอบย้ำอีกทีก่อนรอ input
+            if elem and getattr(elem, 'rectangle', None):
+                draw_red_border(elem.rectangle)
+
+            input("\n   ⏸️  ดูข้อมูลเสร็จแล้ว กด [Enter] เพื่อเริ่มสแกนใหม่...")
+            print("\n" * 2)
 
     except KeyboardInterrupt:
         print("\n--- จบการทำงาน ---")
