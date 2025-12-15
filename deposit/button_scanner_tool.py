@@ -1,127 +1,101 @@
 import time
-import os
-from pywinauto import Desktop, Application
+from pywinauto import Desktop
 
 def main():
-    os.system('cls' if os.name == 'nt' else 'clear')
-    print("="*100)
-    print("   UI ELEMENT SCANNER - ค้นหา ID ของปุ่ม (Button) และปุ่มเลื่อน (Scroll)")
-    print("="*100)
+    print("="*80)
+    print("   UI ELEMENT SCANNER - สแกนหา ID ของปุ่มและช่องกรอกข้อมูล   ")
+    print("="*80)
 
-    # 1. เชื่อมต่อกับหน้าต่าง
-    print("\n[Step 1] กำลังเชื่อมต่อกับหน้าต่าง...")
-    target_window = None
+    # 1. ค้นหาหน้าต่าง POS อัตโนมัติ
+    print("\n[Step 1] กำลังค้นหาหน้าต่างโปรแกรม...")
+    desktop = Desktop(backend="uia")
+    windows = desktop.windows()
     
-    # วิธี A: ลองหาหน้าต่าง POS ด้วยชื่อที่น่าจะเป็น
-    try:
-        regex_title = ".*Escher.*|.*POS.*|.*Retail.*|.*Riposte.*"
-        app = Application(backend="uia").connect(title_re=regex_title, timeout=2)
-        target_window = app.top_window()
-        print(f" -> [Auto] เจอหน้าต่างโปรแกรม POS: '{target_window.window_text()}'")
-    except:
-        # วิธี B: ถ้าไม่เจอ ให้เอาหน้าต่างที่ Active อยู่
-        try:
-            print(" -> [Auto] ไม่เจอ POS โดยตรง -> กำลังจับหน้าต่างที่ Active ล่าสุด...")
-            print("    (กรุณาคลิกที่หน้าต่าง POS ภายใน 3 วินาที ถ้ายังไม่ได้เลือก)")
-            time.sleep(3)
-            
-            app = Application(backend="uia").connect(active_only=True)
-            target_window = app.top_window()
-            print(f" -> [Active] เป้าหมายคือหน้าต่าง: '{target_window.window_text()}'")
-        except Exception as e:
-            print(f"[Error] ไม่สามารถจับหน้าต่างได้: {e}")
-
+    target_window = None
+    for w in windows:
+        if w.is_visible():
+            txt = w.window_text()
+            # กรองหาชื่อที่น่าจะเป็น POS (แก้ตรงนี้ได้ถ้าชื่อไม่ตรง)
+            if "Escher" in txt or "Retail" in txt or "POS" in txt:
+                target_window = w
+                print(f" -> เจอเป้าหมาย: '{txt}'")
+                break
+    
     if not target_window:
-        print("\n[!] ไม่พบหน้าต่างเป้าหมายเลย ลองดูรายชื่อหน้าต่างที่เปิดอยู่:")
-        try:
-            desktop = Desktop(backend="uia")
-            windows = desktop.windows()
-            for w in windows:
-                if w.is_visible() and w.window_text():
-                    print(f"   - {w.window_text()}")
-        except: pass
+        print("\n[!] ไม่พบหน้าต่าง POS (กรุณาเปิดโปรแกรมทิ้งไว้ก่อนรัน)")
+        print("    รายชื่อหน้าต่างที่เจอในเครื่อง:")
+        for w in windows:
+            if w.is_visible() and w.window_text().strip():
+                print(f"    - {w.window_text()}")
         return
 
-    # 2. สแกนหาปุ่ม
-    print(f"\n[Step 2] กำลังสแกนหา Elements ในหน้าต่าง '{target_window.window_text()}'...")
-    print("   (เน้น Button และ Image เพื่อหาปุ่มเลื่อน...)\n")
+    # 2. สแกนหาปุ่มและลิสต์ไอเท็ม
+    print(f"\n[Step 2] กำลังดึงข้อมูลปุ่มและช่องกรอกทั้งหมดใน '{target_window.window_text()}'...")
+    print("(อาจใช้เวลาสักครู่...)\n")
 
     try:
-        # ดึง Button และ Image (เผื่อปุ่มเลื่อนเป็น Image)
+        # ดึง Element ที่น่าสนใจ
+        # เราเน้น Button (ปุ่ม), Edit (ช่องกรอก), Image (รูปภาพ/ไอคอน), Text (ข้อความ)
         buttons = target_window.descendants(control_type="Button")
+        edits = target_window.descendants(control_type="Edit")
         images = target_window.descendants(control_type="Image")
         
-        # รวมรายการและกรองเฉพาะที่มองเห็น
-        all_elements = buttons + images
-        visible_elements = [e for e in all_elements if e.is_visible()]
+        all_elements = []
+        for b in buttons: all_elements.append(("Button", b))
+        for e in edits: all_elements.append(("Edit", e))
+        for i in images: all_elements.append(("Image", i))
 
-        print(f" -> พบ Elements ทั้งหมด: {len(all_elements)}")
-        print(f" -> ที่มองเห็นได้ (Visible): {len(visible_elements)}\n")
+        # กรองเฉพาะที่มองเห็น (Visible)
+        visible_elements = [x for x in all_elements if x[1].is_visible()]
 
-        # 3. แสดงรายงาน (Report)
-        header = f"{'IDX':<5} | {'TYPE':<8} | {'TEXT / NAME':<20} | {'AUTOMATION_ID':<35} | {'COORDS (L, T, R, B)':<20} | {'NOTE'}"
-        print("-" * 120)
+        # หัวตาราง
+        header = f"{'IDX':<4} | {'TYPE':<8} | {'TEXT (ชื่อ/ค่า)':<20} | {'AUTOMATION_ID':<30} | {'POS (x,y)'}"
+        print("-" * len(header))
         print(header)
-        print("-" * 120)
+        print("-" * len(header))
 
-        win_rect = target_window.rectangle()
-        win_width = win_rect.width()
-        right_zone_x = win_rect.left + (win_width * 0.75) # โซนขวาสุด 25%
-
-        for idx, elem in enumerate(visible_elements):
+        found_count = 0
+        for idx, (etype, elem) in enumerate(visible_elements):
             try:
                 # ดึงค่าต่างๆ
-                etype = "Button" if elem.element_info.control_type == "Button" else "Image"
                 text = elem.window_text().strip()
                 auto_id = elem.element_info.automation_id
                 rect = elem.rectangle()
+                pos_str = f"({rect.left}, {rect.top})"
                 
-                coords = f"{rect.left},{rect.top},{rect.right},{rect.bottom}"
-                
-                # ถ้าไม่มี Text ลองดูข้างใน
-                if not text:
+                # ถ้าไม่มีชื่อ ลองดูชื่อของลูก (Child) เผื่อเป็นไอคอนที่มี text ซ่อน
+                if not text and etype == "Button":
                     children = elem.children()
-                    if children:
-                        try: text = f"[{children[0].element_info.control_type}]"
-                        except: text = "(No Text)"
-                    else:
-                        text = "(No Text)"
-
-                # ตัดคำ
-                disp_text = (text[:18] + '..') if len(text) > 18 else text
-                disp_id = (auto_id[:32] + '..') if len(auto_id) > 32 else auto_id
-
-                # Logic วิเคราะห์ปุ่ม
-                note = ""
+                    for child in children:
+                        child_txt = child.window_text().strip()
+                        if child_txt:
+                            text = f"[{child_txt}]"
+                            break
                 
-                # 1. เช็คว่าเป็นปุ่มเลื่อนหรือไม่ (อยู่ขวาสุด + ขนาดเล็ก + keywords)
-                is_right_side = rect.left > right_zone_x
-                is_small_width = rect.width() < 120
-                keywords = [">", "next", "scroll", "arrow", "page", "right"]
-                has_keyword = any(k in auto_id.lower() or k in text.lower() for k in keywords)
+                # ตัดข้อความยาวๆ
+                display_text = (text[:18] + '..') if len(text) > 18 else text
+                display_id = (auto_id[:28] + '..') if len(auto_id) > 28 else auto_id
 
-                if is_right_side and (is_small_width or has_keyword):
-                    note = "<<< ปุ่มเลื่อน (Scroll)?"
-                elif "Shipping" in auto_id:
-                    note = "<<< บริการขนส่ง"
-                elif "Arrow" in auto_id:
-                    note = "<<< ไอคอนลูกศร"
-
-                print(f"{idx:<5} | {etype:<8} | {disp_text:<20} | {disp_id:<35} | {coords:<20} | {note}")
+                # เน้นรายการที่น่าสนใจ (เช่น ช่องกรอกเงิน หรือ ปุ่มบวก)
+                highlight = ""
+                if etype == "Edit": highlight = " <--- ช่องกรอก?"
+                if text == "+" or "Plus" in auto_id or "Add" in auto_id: highlight = " <--- ปุ่มบวก?"
+                
+                print(f"{idx:<4} | {etype:<8} | {display_text:<20} | {display_id:<30} | {pos_str} {highlight}")
+                found_count += 1
                 
             except Exception as e:
                 pass
 
-        print("-" * 120)
-        print("\nวิธีดู:")
-        print("1. มองหาบรรทัดที่มี Note ว่า '<<< ปุ่มเลื่อน (Scroll)?'")
-        print("2. เช็ค COORDS ว่าอยู่ด้านขวาของจอหรือไม่ (ค่าแรก > 1000+)")
-        print("3. จด AutomationID ไปใช้ในสคริปต์")
+        print("-" * len(header))
+        print(f"\nสรุป: เจอทั้งหมด {found_count} รายการ")
+        print("วิธีดู:")
+        print("3. จด AutomationId ไปใส่ในโค้ด")
         
     except Exception as e:
-        print(f"Error scanning: {e}")
+        print(f"Error scanning window: {e}")
 
-    input("\nกด Enter เพื่อจบการทำงาน...")
+    input("\nกด Enter เพื่อปิดโปรแกรม...")
 
 if __name__ == "__main__":
     main()
