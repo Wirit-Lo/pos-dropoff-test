@@ -492,12 +492,38 @@ def run_smart_scenario(main_window, config):
     wait_until_id_appears(main_window, "ShippingService_2580", timeout=wait_timeout)
     # คลิก 1 ครั้ง
     if not click_element_by_id(main_window, "ShippingService_2580"):
-        if not click_element_by_fuzzy_id(main_window, "EMSS"): return
+        if not click_element_by_fuzzy_id(main_window, "ShippingService_2580"): return
     
     # กด Enter (ถัดไป) ทันที
     log("...กด Enter (ถัดไป)...")
     main_window.type_keys("{ENTER}")
     time.sleep(step_delay)
+    
+    # --- [NEW] ส่วนจัดการ Popup จำนวน ---
+    # อ่านค่าจาก Config (ถ้าไม่มีใช้ค่า default เป็น 1)
+    qty = config['PRODUCT_QUANTITY'].get('Quantity', '1') if 'PRODUCT_QUANTITY' in config else '1'
+    log(f"...จัดการ Popup จำนวน ({qty} ชิ้น)...")
+    
+    time.sleep(1.0) # รอ Popup เด้งขึ้นมา
+    try:
+        # พยายามหาช่อง Edit ใน Popup เพื่อกรอกจำนวน
+        qty_edits = [e for e in main_window.descendants(control_type="Edit") if e.is_visible()]
+        if qty_edits:
+            # คลิกและพิมพ์ค่าลงในช่อง Edit ช่องแรกที่เจอ (ปกติ Popup จะมีช่องเดียว)
+            qty_edits[0].click_input()
+            qty_edits[0].type_keys(str(qty), with_spaces=True)
+        else:
+            # ถ้าหาช่องไม่เจอ ให้ลองพิมพ์ตัวเลขเลย (กรณี Focus อยู่แล้ว)
+            main_window.type_keys(str(qty), with_spaces=True)
+        
+        time.sleep(0.5)
+        main_window.type_keys("{ENTER}") # กด Enter ยืนยันจำนวน
+    except Exception as e:
+        log(f"[!] Error กรอกจำนวน: {e} -> ลองกด Enter ผ่าน")
+        main_window.type_keys("{ENTER}")
+    
+    time.sleep(step_delay)
+    # --- จบส่วนจัดการ Popup ---
     
     time.sleep(1)
     smart_next(main_window) 
