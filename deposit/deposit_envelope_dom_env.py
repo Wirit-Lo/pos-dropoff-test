@@ -495,91 +495,87 @@ def run_smart_scenario(main_window, config):
         # ใช้ EMSS หรือคำค้นหาสำรองกรณีหา ID ตรงๆ ไม่เจอ
         if not click_element_by_fuzzy_id(main_window, "EMSS"): return
     
-    # --- [ส่วนจัดการ Popup จำนวน แบบเจาะจง] ---
+    # --- [แก้ไขใหม่] โฟกัสจัดการ Popup จำนวน โดยหาเป็น New Window ---
     qty = config['PRODUCT_QUANTITY'].get('Quantity', '1') if 'PRODUCT_QUANTITY' in config else '1'
     
-    log(f"...รอ Popup 'จำนวน' (ค่าที่ต้องการ: {qty})...")
-    
-    # 1. รอจนกว่า Popup จะเด้งขึ้นมา (เช็คจาก Text คำว่า "จำนวน")
-    popup_appeared = False
-    for _ in range(10): # รอสูงสุด 5 วินาที
-        if wait_for_text(main_window, "จำนวน", timeout=0.5):
-            popup_appeared = True
-            break
-        time.sleep(0.5)
-        
-    if popup_appeared:
-        log("...Popup ปรากฏแล้ว เริ่มหาช่องกรอก...")
-        time.sleep(0.5) # รอ Animation นิ่งๆ
-        
-        found_input = False
-        # พยายามหาช่อง Input 3 รอบ
-        for attempt in range(3):
-            try:
-                # เทคนิค: หา Edit ทั้งหมดที่ Visible
-                edits = [e for e in main_window.descendants(control_type="Edit") if e.is_visible()]
-                
-                # กรอง Edit ที่ดูน่าจะเป็นช่องกรอกจำนวน (ขนาดต้องไม่เล็กเกินไป และไม่อยู่ขอบจอ)
-                valid_edits = [e for e in edits if e.rectangle().width() > 30 and e.rectangle().height() > 15]
-                
-                target_edit = None
-                
-                if valid_edits:
-                    # ปกติช่องจำนวนจะเป็น Edit ตัวแรก หรือตัวที่ Active ใน Popup
-                    target_edit = valid_edits[0]
-                else:
-                    # ถ้าหา Edit ไม่เจอ ลองหา Text ที่ Interact ได้ (บางแอพใช้ Custom Control)
-                    log(f"   [Attempt {attempt+1}] ไม่เจอ Edit ลองหา Text ที่ Focus ได้...")
-                    texts = [t for t in main_window.descendants(control_type="Text") if t.is_visible()]
-                    # กรองเฉพาะ Text ที่ดูเหมือนกล่องข้อความ (สมมติ)
-                    # ส่วนมากวิธี Edit ดีที่สุด
-                    pass
+    log(f"...รอ Popup 'จำนวน' ขึ้นมา (ค่าที่ต้องการ: {qty})...")
+    time.sleep(1.5) # รอ Animation
 
-                if target_edit:
-                    log(f"   เจอช่องกรอก! (ID: {target_edit.element_info.automation_id}) -> กำลังแก้ไข...")
+    # เทคนิค: ลองหาหน้าต่างใหม่ที่เป็น Popup (อาจจะไม่ได้อยู่ใน main_window)
+    # เราจะใช้ app.top_window() เพื่อจับหน้าต่างที่อยู่บนสุด ณ ตอนนั้น ซึ่งควรจะเป็น Popup
+    try:
+        popup_window = main_window.children(control_type="Window")[0] if main_window.children(control_type="Window") else None
+        
+        # ถ้าหา child ไม่เจอ ให้ลองใช้ app.top_window() จับตัวบนสุด
+        if not popup_window or "จำนวน" not in popup_window.window_text():
+             # ลองจับ Top Window ใหม่
+             current_top = app.top_window()
+             if "จำนวน" in current_top.window_text() or current_top.child_window(title="จำนวน", control_type="Text").exists():
+                 popup_window = current_top
+    except:
+        popup_window = app.top_window()
+
+    if popup_window:
+        log("...จับ Popup ได้แล้ว เริ่มกระบวนการกรอก...")
+        
+        # วนลูปหาช่อง Edit ใน Popup (เน้นเฉพาะใน Popup Window)
+        found_edit = False
+        for i in range(3):
+            try:
+                # หา Edit ทั้งหมดใน Popup นี้
+                edits = [e for e in popup_window.descendants(control_type="Edit") if e.is_visible()]
+                
+                # กรอง Edit ที่ขนาดสมเหตุสมผล (กว้างพอสมควร)
+                valid_edits = [e for e in edits if e.rectangle().width() > 30]
+
+                if valid_edits:
+                    target_edit = valid_edits[0]
+                    log(f"   [/] เจอช่องกรอก (AutomationId: {target_edit.element_info.automation_id})")
                     
-                    # 1. คลิกเน้นๆ ที่ตรงกลางช่อง
+                    # 1. คลิกให้โฟกัส
                     target_edit.click_input()
                     time.sleep(0.2)
                     
-                    # 2. ล้างค่าเดิมแบบโหด (Ctrl+A -> Delete และ Backspace รัวๆ)
-                    # บางที Ctrl+A ไม่ติด ต้องย้ำ
+                    # 2. ล้างค่าเก่า (Ctrl+A -> Delete)
                     target_edit.type_keys("^a", pause=0.1)
                     target_edit.type_keys("{DELETE}", pause=0.1)
-                    target_edit.type_keys("{BACKSPACE}" * 3, pause=0.05) 
                     
-                    # 3. พิมพ์ค่าใหม่
+                    # 3. พิมพ์เลขใหม่
                     target_edit.type_keys(str(qty), with_spaces=True)
-                    log(f"   พิมพ์เลข {qty} เรียบร้อย")
+                    log(f"   พิมพ์เลข {qty} สำเร็จ")
                     time.sleep(0.5)
                     
-                    # 4. กด Enter (ถัดไป)
-                    main_window.type_keys("{ENTER}")
-                    log("   กด Enter (ถัดไป) ใน Popup")
+                    # 4. กด Enter เพื่อยืนยัน (กดใน Popup)
+                    popup_window.type_keys("{ENTER}")
+                    log("   กด Enter (ถัดไป) ใน Popup แล้ว")
                     
-                    found_input = True
+                    found_edit = True
                     break
                 else:
-                    log(f"   [Attempt {attempt+1}] ยังหาช่อง Edit ไม่เจอ...")
+                    log(f"   [Attempt {i+1}] ยังไม่เจอช่อง Edit ใน Popup...")
+                    time.sleep(0.5)
             except Exception as e:
-                log(f"Error ขณะจัดการ Popup: {e}")
-            
-            time.sleep(1.0)
-            
-        if not found_input:
-            log("[Warning] หาช่องกรอกไม่เจอเลย -> ลองกด Enter สุ่มไปก่อน")
-            main_window.type_keys("{ENTER}")
-            
+                log(f"   Error in Popup: {e}")
+        
+        if not found_edit:
+            log("[Warning] หาช่อง Edit ไม่เจอ -> ลองกดเลขแล้ว Enter เลย (Blind Type)")
+            popup_window.type_keys(str(qty), with_spaces=True)
+            popup_window.type_keys("{ENTER}")
     else:
-        log("[Warning] ไม่พบ Popup 'จำนวน' (อาจข้ามขั้นตอนนี้ไปแล้ว หรือหา Text ไม่เจอ)")
-        # อาจจะลองกด Enter เผื่อไว้
+        log("[Warning] ไม่สามารถจับ Object ของ Popup ได้ -> ใช้วิธี Blind Key กด Enter")
         main_window.type_keys("{ENTER}")
 
+    # --- จบส่วน Popup ---
+
     # --- [ส่วนตรวจจับการข้ามหน้า] ---
-    log("...รอตรวจสอบหน้าถัดไป (2.0s)...")
+    log("...รอหน้าถัดไปโหลด (2.0s)...")
     time.sleep(2.0) 
     
-    # เช็คว่าข้ามไปหน้า "ทำรายการซ้ำ" เลยไหม (ดูจากรูปที่คุณส่งมาล่าสุด)
+    # รีเฟรช main_window เผื่อ Popup หายไปแล้ว focus เปลี่ยน
+    try: main_window.set_focus()
+    except: pass
+
+    # เช็คว่าข้ามไปหน้า "ทำรายการซ้ำ" เลยไหม
     is_repeat_page = wait_for_text(main_window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=2)
 
     if not is_repeat_page:
