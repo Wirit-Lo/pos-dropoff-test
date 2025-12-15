@@ -32,15 +32,32 @@ def click_element_by_id(window, exact_id, timeout=5):
         time.sleep(0.5)
     return False
 
-def wait_until_id_appears(window, exact_id, timeout=10):
-    log(f"...รอโหลด ID: {exact_id}...")
-    start = time.time()
-    while time.time() - start < timeout:
+def find_and_click_with_scroll(window, target_id, max_attempts=5):
+    """[NEW] ค้นหาปุ่ม ถ้าไม่เจอให้ลองเลื่อนหน้าจอ (Scroll) ไปทางขวา"""
+    log(f"...กำลังค้นหา ID: {target_id} (พร้อมระบบ Scroll)...")
+    
+    for i in range(max_attempts):
+        # 1. ลองหาและกดเลย
+        if click_element_by_id(window, target_id, timeout=1):
+            return True
+            
+        # 2. ถ้าไม่เจอ ให้ลองเลื่อนจอ
+        log(f"   [Attempt {i+1}] ยังไม่เจอ '{target_id}' -> กำลังเลื่อนหน้าจอ...")
+        
+        # วิธี A: กดปุ่มลูกศรขวาบนคีย์บอร์ด (วิธีมาตรฐาน)
+        window.type_keys("{RIGHT}")
+        time.sleep(0.5)
+        
+        # วิธี B: เผื่อมีปุ่มลูกศร > บนหน้าจอ ลองหาและกดดู (Optional)
         try:
-            for child in window.descendants():
-                if child.element_info.automation_id == exact_id and child.is_visible(): return True
+            # ลองหาปุ่มที่มีเครื่องหมาย > หรือคำว่า Next
+            scroll_btns = [c for c in window.descendants(control_type="Button") 
+                          if ">" in c.window_text() or "ถัดไป" in c.window_text()]
+            if scroll_btns:
+                scroll_btns[0].click_input()
+                time.sleep(0.5)
         except: pass
-        time.sleep(1)
+        
     return False
 
 # ================= 3. Main Test Logic =================
@@ -49,9 +66,10 @@ def test_popup_process(main_window, config):
     
     # 1. กดปุ่มบริการหลัก (ShippingService_2580)
     # หมายเหตุ: ต้องเปิดหน้านี้รอไว้ก่อนรัน
-    wait_until_id_appears(main_window, "ShippingService_2583", timeout=5)
-    if not click_element_by_id(main_window, "ShippingService_2583"):
-        log("[Error] หาปุ่มบริการไม่เจอ (ShippingService_2583)")
+    target_service_id = "ShippingService_2583" # แก้ไข ID ตามที่คุณแจ้งมา
+    
+    if not find_and_click_with_scroll(main_window, target_service_id):
+        log(f"[Error] หาปุ่มบริการ {target_service_id} ไม่เจอ แม้จะเลื่อนหน้าจอแล้ว")
         return
 
     # [เพิ่ม] กด Enter (ถัดไป) เพื่อเรียก Popup ขึ้นมา
