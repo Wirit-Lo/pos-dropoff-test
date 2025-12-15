@@ -54,11 +54,17 @@ def test_popup_process(main_window, config):
         log("[Error] หาปุ่มบริการไม่เจอ (ShippingService_2580)")
         return
 
+    # [เพิ่ม] กด Enter (ถัดไป) เพื่อเรียก Popup ขึ้นมา
+    log("...กด Enter (ถัดไป) เพื่อเรียก Popup...")
+    time.sleep(0.5)
+    main_window.type_keys("{ENTER}")
+
     # 2. เริ่มกระบวนการจัดการ Popup
-    qty = config['PRODUCT_QUANTITY'].get('Quantity', '5') if 'PRODUCT_QUANTITY' in config else '5' # ลองเปลี่ยนเลขเทสดู
-    log(f"...รอ Popup 'จำนวน' (จะใส่เลข: {qty})...")
+    # ดึงค่าจาก Config ตามที่ต้องการ
+    qty = config['PRODUCT_QUANTITY'].get('Quantity', '1') if 'PRODUCT_QUANTITY' in config else '1'
+    log(f"...รอ Popup 'จำนวน' (จะใส่เลขจาก Config: {qty})...")
     
-    time.sleep(1.5) # รอ Animation
+    time.sleep(1.5) # รอ Animation Popup เด้ง
 
     # --- [DEBUG MODE] ค้นหา Popup ---
     popup_window = None
@@ -74,37 +80,45 @@ def test_popup_process(main_window, config):
     # วิธีที่ 2: ถ้าไม่เจอ ให้ใช้ Top Window (หน้าต่างที่อยู่บนสุดของ Windows)
     if not popup_window:
         try:
+            # เชื่อมต่อกับ Window ที่ Active อยู่ (น่าจะเป็น Popup)
             app_top = Application(backend="uia").connect(active_only=True).top_window()
             log(f"-> ตรวจสอบ Top Window: {app_top.window_text()}")
-            if "จำนวน" in app_top.window_text() or "Escher" in app_top.window_text():
+            # ตรวจสอบชื่อหน้าต่างว่าน่าจะเป็น Popup ไหม (บางทีไม่มีชื่อ แต่เป็น Dialog)
+            if "จำนวน" in app_top.window_text() or "Escher" in app_top.window_text() or app_top.element_info.control_type == "Window":
                 popup_window = app_top
         except Exception as e:
             log(f"-> Error หา Top Window: {e}")
 
     # --- เริ่มเจาะหาช่อง Edit ---
     if popup_window:
-        popup_window.set_focus()
+        try:
+            popup_window.set_focus()
+        except: pass
+        
         log("...กำลังสแกนหาช่อง Edit ใน Popup...")
         
         target_edit = None
         
         # ดึง Edit ทั้งหมดออกมาดู
-        edits = popup_window.descendants(control_type="Edit")
-        visible_edits = [e for e in edits if e.is_visible()]
-        
-        log(f"-> พบ Edit ทั้งหมด: {len(edits)} ช่อง (Visible: {len(visible_edits)})")
-        
-        if visible_edits:
-            # กรองช่องที่เล็กเกินไป (พวกปุ่มซ่อน)
-            valid_edits = [e for e in visible_edits if e.rectangle().width() > 30]
+        try:
+            edits = popup_window.descendants(control_type="Edit")
+            visible_edits = [e for e in edits if e.is_visible()]
             
-            if valid_edits:
-                target_edit = valid_edits[0]
-                log(f"-> เป้าหมาย: {target_edit} (ID: {target_edit.element_info.automation_id})")
+            log(f"-> พบ Edit ทั้งหมด: {len(edits)} ช่อง (Visible: {len(visible_edits)})")
+            
+            if visible_edits:
+                # กรองช่องที่เล็กเกินไป (พวกปุ่มซ่อน)
+                valid_edits = [e for e in visible_edits if e.rectangle().width() > 30]
+                
+                if valid_edits:
+                    target_edit = valid_edits[0]
+                    log(f"-> เป้าหมาย: {target_edit} (ID: {target_edit.element_info.automation_id})")
+                else:
+                    log("[!] เจอ Edit แต่ขนาดเล็กผิดปกติ")
             else:
-                log("[!] เจอ Edit แต่ขนาดเล็กผิดปกติ")
-        else:
-            log("[!] ไม่เจอช่อง Edit ที่มองเห็นได้เลย")
+                log("[!] ไม่เจอช่อง Edit ที่มองเห็นได้เลย")
+        except Exception as e:
+            log(f"Error สแกนหา Edit: {e}")
 
         # ถ้าเจอช่องแล้ว ให้กระทำการ
         if target_edit:
@@ -135,7 +149,7 @@ def test_popup_process(main_window, config):
             popup_window.type_keys("{ENTER}")
 
     else:
-        log("[Error] หา Popup Window ไม่เจอเลย")
+        log("[Error] หา Popup Window ไม่เจอเลย (อาจจะเด้งช้าหรือจับผิดตัว)")
 
     log("--- จบการทดสอบ ---")
 
@@ -154,4 +168,3 @@ if __name__ == "__main__":
             
         except Exception as e:
             log(f"Error Connect: {e}")
-            
