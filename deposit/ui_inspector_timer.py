@@ -45,12 +45,58 @@ def draw_red_border(rect):
     ctypes.windll.gdi32.DeleteObject(pen)
     ctypes.windll.user32.ReleaseDC(0, dc)
 
+def drill_down_element(elem, x, y):
+    """
+    ฟังก์ชันเจาะลึก: หากเจอ Container ใหญ่ ให้วนหาลูกๆ ข้างใน
+    เพื่อหา Element ที่เล็กที่สุดที่ตรงกับพิกัดเมาส์ (x, y)
+    """
+    current = elem
+    while True:
+        try:
+            children = current.children()
+            if not children:
+                break
+            
+            # หา Child ทุกตัวที่พื้นที่ครอบคลุมพิกัดเมาส์
+            candidates = []
+            for child in children:
+                rect = getattr(child, 'rectangle', None)
+                if rect:
+                    if (rect.left <= x < rect.right) and (rect.top <= y < rect.bottom):
+                        candidates.append(child)
+            
+            if not candidates:
+                break
+
+            # เลือกตัวที่มีขนาดพื้นที่ 'เล็กที่สุด' (Most Specific)
+            # เพื่อให้ได้ปุ่มเล็กๆ แทนที่จะเป็นกล่องใหญ่
+            candidates.sort(key=lambda c: (c.rectangle.width() * c.rectangle.height()))
+            best_candidate = candidates[0]
+
+            # ถ้าตัวลูกที่หาได้ มันคือตัวเดียวกับตัวปัจจุบัน (กัน Loop) ก็หยุด
+            if best_candidate == current:
+                break
+                
+            current = best_candidate
+            # วนลูปต่อเพื่อหาลูกของลูก (Deepest Descendant)
+            
+        except Exception:
+            break
+            
+    return current
+
 def get_current_element_info():
-    """ดึงข้อมูล Element ณ ตำแหน่งเมาส์ปัจจุบัน"""
+    """ดึงข้อมูล Element ณ ตำแหน่งเมาส์ปัจจุบัน (แบบเจาะลึก)"""
     x, y = 0, 0
     try:
         x, y = get_mouse_pos()
+        # 1. หา Element หลักจาก Windows API
         elem = uia_element_info.UIAElementInfo.from_point(x, y)
+        
+        # 2. ทำการ Drill Down เจาะหาตัวลูกที่แท้จริง
+        if elem:
+            elem = drill_down_element(elem, x, y)
+            
         return x, y, elem
     except Exception as e:
         return x, y, None
@@ -60,9 +106,10 @@ def print_separator():
 
 def main():
     print("============================================================")
-    print("   UI INSPECTOR (HIGHLIGHT + PAUSE)")
+    print("   UI INSPECTOR (DEEP SCAN MODE)")
     print("   1. นับถอยหลัง 5 วิ -> ชี้เมาส์ที่ปุ่ม")
     print("   2. เมื่อครบเวลา จะมี 'กรอบสีแดง' ขึ้นที่หน้าจอ")
+    print("      (ระบบจะพยายามเจาะหากล่องเล็กที่สุดใต้เมาส์)")
     print("   3. โปรแกรมจะ 'หยุด' ให้คุณดูค่า จนกว่าจะกด Enter")
     print("   (กด Ctrl+C เพื่อออกจากโปรแกรม)")
     print("============================================================")
@@ -109,7 +156,7 @@ def main():
                     # วาดซ้ำอีกทีเผื่อหาย (บางแอป Refresh จอบ่อย)
                     draw_red_border(rect)
 
-                # --- แสดง Children ---
+                # --- แสดง Children (ถ้ายังมีลูกเหลืออีก) ---
                 try:
                     children = elem.children()
                     if children:
