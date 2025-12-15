@@ -12,28 +12,41 @@ def main():
     print("\n[Step 1] กำลังเชื่อมต่อกับหน้าต่าง...")
     target_window = None
     
+    # วิธี A: ลองหาหน้าต่าง POS ด้วยชื่อที่น่าจะเป็น (เพิ่ม Riposte ตาม Log เก่า)
     try:
-        # วิธี A: ลองหาหน้าต่าง POS ก่อน
-        app = Application(backend="uia").connect(title_re=".*Escher.*|.*POS.*|.*Retail.*", timeout=1)
+        # เพิ่ม Riposte และชื่ออื่นๆ
+        regex_title = ".*Escher.*|.*POS.*|.*Retail.*|.*Riposte.*"
+        app = Application(backend="uia").connect(title_re=regex_title, timeout=2)
         target_window = app.top_window()
-        print(f" -> เจอหน้าต่างโปรแกรม POS: '{target_window.window_text()}'")
+        print(f" -> [Auto] เจอหน้าต่างโปรแกรม POS: '{target_window.window_text()}'")
     except:
-        # วิธี B: ถ้าไม่เจอ ให้เอาหน้าต่างที่ Active อยู่ (ที่เราเปิดค้างไว้)
+        # วิธี B: ถ้าไม่เจอ ให้เอาหน้าต่างที่ Active อยู่ (วิธีที่แก้ Bug แล้ว)
         try:
-            print(" -> ไม่เจอ POS โดยตรง -> กำลังจับหน้าต่างที่ Active ล่าสุด...")
-            desktop = Desktop(backend="uia")
-            target_window = desktop.active_window() # หรือใช้ top_window()
-            print(f" -> เป้าหมายคือหน้าต่าง: '{target_window.window_text()}'")
+            print(" -> [Auto] ไม่เจอ POS โดยตรง -> กำลังจับหน้าต่างที่ Active ล่าสุด...")
+            print("    (กรุณาคลิกที่หน้าต่าง POS ภายใน 2 วินาที ถ้ายังไม่ได้เลือก)")
+            time.sleep(2)
+            
+            # แก้ไข: ใช้ connect(active_only=True) แทน desktop.active_window()
+            app = Application(backend="uia").connect(active_only=True)
+            target_window = app.top_window()
+            print(f" -> [Active] เป้าหมายคือหน้าต่าง: '{target_window.window_text()}'")
         except Exception as e:
             print(f"[Error] ไม่สามารถจับหน้าต่างได้: {e}")
-            return
 
     if not target_window:
-        print("[Error] ไม่พบหน้าต่างเป้าหมาย")
+        print("\n[!] ไม่พบหน้าต่างเป้าหมายเลย ลองดูรายชื่อหน้าต่างที่เปิดอยู่:")
+        try:
+            desktop = Desktop(backend="uia")
+            windows = desktop.windows()
+            for w in windows:
+                if w.is_visible() and w.window_text():
+                    print(f"   - {w.window_text()}")
+        except: pass
+        print("\nคำแนะนำ: เปิดโปรแกรม POS ค้างไว้ แล้วรันสคริปต์นี้ใหม่อีกครั้ง")
         return
 
     # 2. สแกนหาปุ่ม
-    print(f"\n[Step 2] กำลังสแกนหา 'Button' ทั้งหมดในหน้านี้...")
+    print(f"\n[Step 2] กำลังสแกนหา 'Button' ทั้งหมดในหน้าต่าง '{target_window.window_text()}'...")
     print("   (กรุณารอสักครู่ อาจใช้เวลา 5-10 วินาที หากมีปุ่มเยอะ)...\n")
 
     try:
@@ -67,7 +80,10 @@ def main():
                 if not text:
                     children = btn.children()
                     if children:
-                        text = f"[{children[0].element_info.control_type}]"
+                        try:
+                            text = f"[{children[0].element_info.control_type}]"
+                        except:
+                            text = "[Icon]"
                     else:
                         text = "(No Text)"
 
