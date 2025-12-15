@@ -5,28 +5,26 @@ from pywinauto import Desktop, Application
 def main():
     os.system('cls' if os.name == 'nt' else 'clear')
     print("="*100)
-    print("   BUTTON INSPECTOR - เครื่องมือค้นหา ID และพิกัดปุ่ม (Button Only)")
+    print("   UI ELEMENT SCANNER - ค้นหา ID ของปุ่ม (Button) และปุ่มเลื่อน (Scroll)")
     print("="*100)
 
     # 1. เชื่อมต่อกับหน้าต่าง
     print("\n[Step 1] กำลังเชื่อมต่อกับหน้าต่าง...")
     target_window = None
     
-    # วิธี A: ลองหาหน้าต่าง POS ด้วยชื่อที่น่าจะเป็น (เพิ่ม Riposte ตาม Log เก่า)
+    # วิธี A: ลองหาหน้าต่าง POS ด้วยชื่อที่น่าจะเป็น
     try:
-        # เพิ่ม Riposte และชื่ออื่นๆ
         regex_title = ".*Escher.*|.*POS.*|.*Retail.*|.*Riposte.*"
         app = Application(backend="uia").connect(title_re=regex_title, timeout=2)
         target_window = app.top_window()
         print(f" -> [Auto] เจอหน้าต่างโปรแกรม POS: '{target_window.window_text()}'")
     except:
-        # วิธี B: ถ้าไม่เจอ ให้เอาหน้าต่างที่ Active อยู่ (วิธีที่แก้ Bug แล้ว)
+        # วิธี B: ถ้าไม่เจอ ให้เอาหน้าต่างที่ Active อยู่
         try:
             print(" -> [Auto] ไม่เจอ POS โดยตรง -> กำลังจับหน้าต่างที่ Active ล่าสุด...")
-            print("    (กรุณาคลิกที่หน้าต่าง POS ภายใน 2 วินาที ถ้ายังไม่ได้เลือก)")
-            time.sleep(2)
+            print("    (กรุณาคลิกที่หน้าต่าง POS ภายใน 3 วินาที ถ้ายังไม่ได้เลือก)")
+            time.sleep(3)
             
-            # แก้ไข: ใช้ connect(active_only=True) แทน desktop.active_window()
             app = Application(backend="uia").connect(active_only=True)
             target_window = app.top_window()
             print(f" -> [Active] เป้าหมายคือหน้าต่าง: '{target_window.window_text()}'")
@@ -42,73 +40,83 @@ def main():
                 if w.is_visible() and w.window_text():
                     print(f"   - {w.window_text()}")
         except: pass
-        print("\nคำแนะนำ: เปิดโปรแกรม POS ค้างไว้ แล้วรันสคริปต์นี้ใหม่อีกครั้ง")
         return
 
     # 2. สแกนหาปุ่ม
-    print(f"\n[Step 2] กำลังสแกนหา 'Button' ทั้งหมดในหน้าต่าง '{target_window.window_text()}'...")
-    print("   (กรุณารอสักครู่ อาจใช้เวลา 5-10 วินาที หากมีปุ่มเยอะ)...\n")
+    print(f"\n[Step 2] กำลังสแกนหา Elements ในหน้าต่าง '{target_window.window_text()}'...")
+    print("   (เน้น Button และ Image เพื่อหาปุ่มเลื่อน...)\n")
 
     try:
-        # ดึงเฉพาะ Button
+        # ดึง Button และ Image (เผื่อปุ่มเลื่อนเป็น Image)
         buttons = target_window.descendants(control_type="Button")
+        images = target_window.descendants(control_type="Image")
         
-        # กรองเฉพาะปุ่มที่มองเห็น (Visible) เพื่อไม่ให้สับสน
-        visible_buttons = [b for b in buttons if b.is_visible()]
+        # รวมรายการและกรองเฉพาะที่มองเห็น
+        all_elements = buttons + images
+        visible_elements = [e for e in all_elements if e.is_visible()]
 
-        print(f" -> พบปุ่มทั้งหมด: {len(buttons)} ปุ่ม")
-        print(f" -> ปุ่มที่มองเห็นได้ (Visible): {len(visible_buttons)} ปุ่ม\n")
+        print(f" -> พบ Elements ทั้งหมด: {len(all_elements)}")
+        print(f" -> ที่มองเห็นได้ (Visible): {len(visible_elements)}\n")
 
         # 3. แสดงรายงาน (Report)
-        # จัด Format ตาราง
-        header = f"{'IDX':<5} | {'TEXT / NAME':<25} | {'AUTOMATION_ID':<35} | {'COORDS (L, T, R, B)':<20} | {'SIZE (WxH)'}"
-        print("-" * 110)
+        header = f"{'IDX':<5} | {'TYPE':<8} | {'TEXT / NAME':<20} | {'AUTOMATION_ID':<35} | {'COORDS (L, T, R, B)':<20} | {'NOTE'}"
+        print("-" * 120)
         print(header)
-        print("-" * 110)
+        print("-" * 120)
 
-        for idx, btn in enumerate(visible_buttons):
+        win_rect = target_window.rectangle()
+        win_width = win_rect.width()
+        right_zone_x = win_rect.left + (win_width * 0.75) # โซนขวาสุด 25%
+
+        for idx, elem in enumerate(visible_elements):
             try:
                 # ดึงค่าต่างๆ
-                text = btn.window_text().strip()
-                auto_id = btn.element_info.automation_id
-                rect = btn.rectangle()
+                etype = "Button" if elem.element_info.control_type == "Button" else "Image"
+                text = elem.window_text().strip()
+                auto_id = elem.element_info.automation_id
+                rect = elem.rectangle()
                 
-                coords = f"{rect.left}, {rect.top}, {rect.right}, {rect.bottom}"
-                size = f"{rect.width()} x {rect.height()}"
-
-                # ถ้าปุ่มไม่มี Text ลองดูข้างในเผื่อเป็น Icon
+                coords = f"{rect.left},{rect.top},{rect.right},{rect.bottom}"
+                
+                # ถ้าไม่มี Text ลองดูข้างใน
                 if not text:
-                    children = btn.children()
+                    children = elem.children()
                     if children:
-                        try:
-                            text = f"[{children[0].element_info.control_type}]"
-                        except:
-                            text = "[Icon]"
+                        try: text = f"[{children[0].element_info.control_type}]"
+                        except: text = "(No Text)"
                     else:
                         text = "(No Text)"
 
-                # ตัดคำถ้าข่อยาวเกินไป
-                disp_text = (text[:22] + '..') if len(text) > 22 else text
+                # ตัดคำ
+                disp_text = (text[:18] + '..') if len(text) > 18 else text
                 disp_id = (auto_id[:32] + '..') if len(auto_id) > 32 else auto_id
 
-                # Highlight ปุ่มที่น่าสนใจ
-                # เช่น ปุ่มที่มีคำว่า > หรือ Next หรือ ID มีคำว่า Scroll/Page
+                # Logic วิเคราะห์ปุ่ม
                 note = ""
-                if ">" in text or "Next" in text or "Scroll" in auto_id or "Arrow" in auto_id:
-                    note = " <--- ปุ่มเลื่อน??"
-                if "Shipping" in auto_id:
-                    note = " <--- ปุ่มบริการ"
+                
+                # 1. เช็คว่าเป็นปุ่มเลื่อนหรือไม่ (อยู่ขวาสุด + ขนาดเล็ก + keywords)
+                is_right_side = rect.left > right_zone_x
+                is_small_width = rect.width() < 120
+                keywords = [">", "next", "scroll", "arrow", "page", "right"]
+                has_keyword = any(k in auto_id.lower() or k in text.lower() for k in keywords)
 
-                print(f"{idx:<5} | {disp_text:<25} | {disp_id:<35} | {coords:<20} | {size} {note}")
+                if is_right_side and (is_small_width or has_keyword):
+                    note = "<<< ปุ่มเลื่อน (Scroll)?"
+                elif "Shipping" in auto_id:
+                    note = "<<< บริการขนส่ง"
+                elif "Arrow" in auto_id:
+                    note = "<<< ไอคอนลูกศร"
+
+                print(f"{idx:<5} | {etype:<8} | {disp_text:<20} | {disp_id:<35} | {coords:<20} | {note}")
                 
             except Exception as e:
-                print(f"{idx:<5} | Error reading element: {e}")
+                pass
 
-        print("-" * 110)
-        print("\nคำแนะนำการหาปุ่มเลื่อน:")
-        print("1. ดูคอลัมน์ COORDS ค่าแรก (Left) และค่าที่สาม (Right) ที่มีค่าสูงๆ (ด้านขวาของจอ)")
-        print("2. ดูคอลัมน์ SIZE ที่ขนาดไม่กว้างมาก (เช่น 40x80, 50x50)")
-        print("3. มองหา TEXT ที่เป็น '>' หรือ AutomationID ที่เกี่ยวกับ 'Arrow', 'Scroll', 'Next'")
+        print("-" * 120)
+        print("\nวิธีดู:")
+        print("1. มองหาบรรทัดที่มี Note ว่า '<<< ปุ่มเลื่อน (Scroll)?'")
+        print("2. เช็ค COORDS ว่าอยู่ด้านขวาของจอหรือไม่ (ค่าแรก > 1000+)")
+        print("3. จด AutomationID ไปใช้ในสคริปต์")
         
     except Exception as e:
         print(f"Error scanning: {e}")
