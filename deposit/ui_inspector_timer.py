@@ -70,10 +70,9 @@ def drill_down_element(elem, x, y):
             break
     return current
 
-def get_ancestors(elem, limit=3):
+def get_ancestors(elem, limit=5):
     """
-    ฟังก์ชันย้อนหาพ่อแม่ (Parent) ขึ้นไปตามจำนวนชั้นที่กำหนด
-    มีประโยชน์มากเวลากดโดนปุ่มลูก (Text/Image) แต่ ID อยู่ที่ปุ่มแม่ (Button)
+    ฟังก์ชันย้อนหาพ่อแม่ (Parent) ขึ้นไปตามจำนวนชั้นที่กำหนด (เพิ่ม Limit เป็น 5 ชั้น)
     """
     ancestors = []
     try:
@@ -82,7 +81,6 @@ def get_ancestors(elem, limit=3):
             # uia_element_info บางเวอร์ชันใช้ .parent บางอันเป็น method
             parent = getattr(current, 'parent', None)
             if not parent:
-                # ลองเรียกเป็น method เผื่อเป็นเวอร์ชันเก่า
                 try: parent = current.get_parent()
                 except: pass
                 
@@ -111,10 +109,10 @@ def print_separator():
 
 def main():
     print("============================================================")
-    print("   UI INSPECTOR (NEIGHBOR SCAN MODE)")
-    print("   1. นับถอยหลัง 5 วิ -> ชี้เมาส์ที่ 'พื้นที่แถวๆ ปุ่ม'")
-    print("   2. ระบบจะโชว์ Parent และ **เพื่อนบ้าน (Siblings)**")
-    print("      (ปุ่มลูกศรมักจะอยู่ระดับเดียวกับกล่องรายการสินค้า)")
+    print("   UI INSPECTOR (HIERARCHY SCAN MODE)")
+    print("   1. นับถอยหลัง 5 วิ -> ชี้เมาส์ที่พื้นที่ว่างใกล้ๆ ปุ่ม")
+    print("   2. ระบบจะสแกนหา 'พี่น้องของพ่อ' และ 'พี่น้องของปู่' (Uncles)")
+    print("      (เพื่อหาปุ่มที่ซ่อนอยู่ใน Layer อื่น)")
     print("============================================================")
     print("")
 
@@ -145,66 +143,60 @@ def main():
 
                 # --- ส่วนแสดงผลตัวที่ชี้อยู่ (Target) ---
                 print(f"🎯 TARGET (ตัวที่เมาส์ชี้):")
-                if auto_id:
-                    print(f"   🔑 ID    : '{auto_id}'")
-                else:
-                    print(f"   ⚠️ ID    : (ไม่มี)")
-                
+                if auto_id: print(f"   🔑 ID    : '{auto_id}'")
+                else: print(f"   ⚠️ ID    : (ไม่มี)")
                 print(f"   🏷️  Name  : '{name}'")
                 print(f"   📦 Type  : {control_type}")
-                if rect:
-                    print(f"   🔲 Size  : {rect.width()} x {rect.height()}")
+                if rect: print(f"   🔲 Size  : {rect.width()} x {rect.height()}")
 
-                # --- ส่วนแสดงผลพ่อแม่ (Ancestors) และเพื่อนบ้าน (Neighbors) ---
-                ancestors = get_ancestors(elem)
+                # --- ส่วนแสดงผล Ancestors และ ญาติๆ (Uncles/Aunts) ---
+                ancestors = get_ancestors(elem, limit=3) # ดูย้อนขึ้นไป 3 ชั้น
                 if ancestors:
-                    print(f"\n⬆️  PARENTS (ตัวแม่):")
-                    for i, anc in enumerate(ancestors):
-                        p_name = getattr(anc, 'name', '')
-                        p_id = getattr(anc, 'automation_id', '')
-                        p_type = getattr(anc, 'control_type', '')
-                        print(f"   Layer {i+1}: [{p_type}] ID='{p_id}' Name='{p_name}'")
+                    print(f"\n📡  SCANNING LAYERS (ค้นหาปุ่มในชั้นที่สูงกว่า):")
+                    
+                    for level, parent in enumerate(ancestors):
+                        p_name = getattr(parent, 'name', '')
+                        p_id = getattr(parent, 'automation_id', '')
+                        p_type = getattr(parent, 'control_type', '')
+                        
+                        print(f"\n   [Layer {level+1} Parent]: Type={p_type} ID='{p_id}'")
+                        
+                        # สแกนลูกๆ ของ Parent แต่ละชั้น (ซึ่งก็คือ พี่น้อง/ลุงป้า ของ Target)
+                        try:
+                            siblings = parent.children()
+                            if siblings:
+                                print(f"      └── มีลูก {len(siblings)} ตัว (ตรวจสอบดูข้างล่าง):")
+                                for i, sib in enumerate(siblings):
+                                    s_name = getattr(sib, 'name', '')
+                                    s_id = getattr(sib, 'automation_id', '')
+                                    s_type = getattr(sib, 'control_type', '')
+                                    s_rect = getattr(sib, 'rectangle', None)
+                                    
+                                    # สร้าง Info string
+                                    info = f"          {i+1}. [{s_type}]"
+                                    if s_id: info += f" ID='{s_id}'"
+                                    if s_name: info += f" Name='{s_name}'"
+                                    
+                                    # เช็คว่าเป็นตัว Target หรือ Ancestor ของ Target หรือไม่ (เพื่อไม่ให้งง)
+                                    is_related = False
+                                    if s_id == auto_id and s_id != "": is_related = True
+                                    # (เช็คแบบง่ายๆ)
+                                    
+                                    # ไฮไลท์ถ้าดูเหมือนปุ่มที่เราตามหา
+                                    is_suspicious = False
+                                    if "Button" in s_type or "Image" in s_type or ">" in s_name or "Scroll" in str(s_id) or "Arrow" in str(s_id):
+                                        is_suspicious = True
 
-                    # [NEW] สแกนหาเพื่อนบ้านจาก Parent ตัวแรก
-                    immediate_parent = ancestors[0]
-                    try:
-                        siblings = immediate_parent.children()
-                        if siblings:
-                            print(f"\n↔️  NEIGHBORS (เพื่อนบ้านในระดับเดียวกัน - ปุ่มอาจจะอยู่ตรงนี้):")
-                            print("   -------------------------------------------------------------")
-                            for i, sib in enumerate(siblings):
-                                s_name = getattr(sib, 'name', '')
-                                s_id = getattr(sib, 'automation_id', '')
-                                s_type = getattr(sib, 'control_type', '')
-                                
-                                # สร้างข้อความ
-                                info = f"Sibling {i+1}: [{s_type}]"
-                                if s_id: info += f" ID='{s_id}'"
-                                if s_name: info += f" Name='{s_name}'"
-                                
-                                # เช็คว่าเป็นตัวที่เราชี้อยู่ไหม
-                                if s_id == auto_id and auto_id != "":
-                                    info += " (👈 ตัวนี้แหละ)"
-                                
-                                # ไฮไลท์ถ้าดูเหมือนปุ่ม (Button/Image)
-                                if "Button" in s_type or "Image" in s_type or ">" in s_name or "Scroll" in s_id:
-                                    print(f"   🔥 {info}  <-- น่าสงสัย!")
-                                else:
-                                    print(f"   {info}")
-                    except:
-                        pass
+                                    if is_suspicious:
+                                        print(f"          🔥🔥 {info}  <-- (น่าสงสัย!!)")
+                                    elif not is_related and level > 0: 
+                                        # โชว์เฉพาะตัวที่ไม่ใช่สายเลือดตรง (Uncles) ในชั้นสูงๆ
+                                        print(f"{info}")
+                                    elif level == 0:
+                                         print(f"{info}")
 
-                # --- ส่วนแสดงลูกๆ (Children) ---
-                # (ลดความสำคัญลง เพราะเราเห็นแล้วว่าเป็น ListItems)
-                try:
-                    children = elem.children()
-                    if children and len(children) < 5: # โชว์เฉพาะถ้ามีลูกน้อยๆ
-                         print(f"\n⬇️  CHILDREN:")
-                         for i, child in enumerate(children): 
-                            print(f"   Child {i+1}: [{child.control_type}] ID='{child.automation_id}'")
-                except:
-                    pass
-
+                        except:
+                            pass
             else:
                 print("   ❌ ไม่พบ UI Element")
             
