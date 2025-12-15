@@ -490,15 +490,16 @@ def run_smart_scenario(main_window, config):
 
     log("...รอหน้าบริการหลัก...")
     wait_until_id_appears(main_window, "ShippingService_2580", timeout=wait_timeout)
-    # คลิก 1 ครั้ง
+     # คลิก 1 ครั้ง
     if not click_element_by_id(main_window, "ShippingService_2580"):
-        if not click_element_by_fuzzy_id(main_window, "ShippingService_2580"): return
+        # ใช้ EMSS หรือคำค้นหาสำรองกรณีหา ID ตรงๆ ไม่เจอ
+        if not click_element_by_fuzzy_id(main_window, "EMSS"): return
     
     # กด Enter (ถัดไป) ทันที
     log("...กด Enter (ถัดไป)...")
     main_window.type_keys("{ENTER}")
     time.sleep(step_delay)
-    
+
     # --- [NEW] ส่วนจัดการ Popup จำนวน ---
     # อ่านค่าจาก Config (ถ้าไม่มีใช้ค่า default เป็น 1)
     qty = config['PRODUCT_QUANTITY'].get('Quantity', '1') if 'PRODUCT_QUANTITY' in config else '1'
