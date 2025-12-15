@@ -495,32 +495,50 @@ def run_smart_scenario(main_window, config):
         # ใช้ EMSS หรือคำค้นหาสำรองกรณีหา ID ตรงๆ ไม่เจอ
         if not click_element_by_fuzzy_id(main_window, "EMSS"): return
     
-    # กด Enter (ถัดไป) ทันที
-    log("...กด Enter (ถัดไป)...")
-    main_window.type_keys("{ENTER}")
-    time.sleep(step_delay)
-
-    # --- [NEW] ส่วนจัดการ Popup จำนวน ---
-    # อ่านค่าจาก Config (ถ้าไม่มีใช้ค่า default เป็น 1)
-    qty = config['PRODUCT_QUANTITY'].get('Quantity', '1') if 'PRODUCT_QUANTITY' in config else '1'
-    log(f"...จัดการ Popup จำนวน ({qty} ชิ้น)...")
+    # ลบการกด Enter ทิ้งไปก่อนหน้านี้ เพราะเราจะไปจัดการใน Popup แทน
+    # main_window.type_keys("{ENTER}") <--- ลบบรรทัดนี้ออก หรือ comment ไว้
     
-    time.sleep(1.0) # รอ Popup เด้งขึ้นมา
-    try:
-        # พยายามหาช่อง Edit ใน Popup เพื่อกรอกจำนวน
-        qty_edits = [e for e in main_window.descendants(control_type="Edit") if e.is_visible()]
-        if qty_edits:
-            # คลิกและพิมพ์ค่าลงในช่อง Edit ช่องแรกที่เจอ (ปกติ Popup จะมีช่องเดียว)
-            qty_edits[0].click_input()
-            qty_edits[0].type_keys(str(qty), with_spaces=True)
-        else:
-            # ถ้าหาช่องไม่เจอ ให้ลองพิมพ์ตัวเลขเลย (กรณี Focus อยู่แล้ว)
-            main_window.type_keys(str(qty), with_spaces=True)
+    log("...รอ Popup จำนวน...")
+    time.sleep(1.0) # รอ Animation Popup เด้ง
+
+    # --- [NEW] ส่วนจัดการ Popup จำนวน (ปรับปรุงใหม่) ---
+    qty = config['PRODUCT_QUANTITY'].get('Quantity', '1') if 'PRODUCT_QUANTITY' in config else '1'
+    
+    # วนลูปหาช่องกรอกจำนวน (Edit Control) เพื่อความชัวร์
+    found_popup = False
+    for _ in range(5): # ลองหา 5 รอบ (ประมาณ 2.5 วินาที)
+        try:
+            # หาช่อง Edit ที่ Visible อยู่ (ปกติ Popup จะมีช่อง Edit ใหญ่ๆ ช่องเดียว)
+            qty_edits = [e for e in main_window.descendants(control_type="Edit") if e.is_visible()]
+            
+            if qty_edits:
+                edit_box = qty_edits[0]
+                log(f"...เจอช่องกรอกจำนวนแล้ว กำลังใส่ค่า {qty}...")
+                
+                # 1. คลิกที่ช่องเพื่อให้ Focus (แก้ปัญหาหน้าจอเปลี่ยนขนาดแล้วตำแหน่งเพี้ยน เพราะใช้ Object หา)
+                edit_box.click_input()
+                time.sleep(0.2)
+                
+                # 2. ล้างค่าเก่า (Ctrl+A -> Delete) กันพลาดกรณีมีเลข 1 ค้าง
+                edit_box.type_keys("^a{DELETE}")
+                time.sleep(0.1)
+                
+                # 3. พิมพ์เลขใหม่
+                edit_box.type_keys(str(qty), with_spaces=True)
+                time.sleep(0.5)
+                
+                # 4. กด Enter เพื่อไป 'ถัดไป'
+                main_window.type_keys("{ENTER}")
+                
+                found_popup = True
+                break
+        except Exception as e:
+            log(f"กำลังหา Popup... {e}")
         
         time.sleep(0.5)
-        main_window.type_keys("{ENTER}") # กด Enter ยืนยันจำนวน
-    except Exception as e:
-        log(f"[!] Error กรอกจำนวน: {e} -> ลองกด Enter ผ่าน")
+
+    if not found_popup:
+        log("Warning: ไม่เจอ Popup จำนวน หรือข้ามขั้นตอนนี้ไปแล้ว -> ลองกด Enter เผื่อไว้")
         main_window.type_keys("{ENTER}")
     
     time.sleep(step_delay)
