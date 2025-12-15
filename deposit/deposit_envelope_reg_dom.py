@@ -489,8 +489,8 @@ def run_smart_scenario(main_window, config):
         time.sleep(0.5)
 
     log("...รอหน้าบริการหลัก...")
-    wait_until_id_appears(main_window, "ShippingService_5000", timeout=wait_timeout)
-    if not click_element_by_id(main_window, "ShippingService_5000"):
+    wait_until_id_appears(main_window, "ShippingService_500006", timeout=wait_timeout)
+    if not click_element_by_id(main_window, "ShippingService_500006"):
         if not click_element_by_fuzzy_id(main_window, "EMSS"): return
 
         main_window.type_keys("{ENTER}")
