@@ -49,9 +49,9 @@ def test_popup_process(main_window, config):
     
     # 1. กดปุ่มบริการหลัก (ShippingService_2580)
     # หมายเหตุ: ต้องเปิดหน้านี้รอไว้ก่อนรัน
-    wait_until_id_appears(main_window, "ShippingService_5000", timeout=5)
-    if not click_element_by_id(main_window, "ShippingService_5000"):
-        log("[Error] หาปุ่มบริการไม่เจอ (ShippingService_5000)")
+    wait_until_id_appears(main_window, "ShippingService_3564", timeout=5)
+    if not click_element_by_id(main_window, "ShippingService_3564"):
+        log("[Error] หาปุ่มบริการไม่เจอ (ShippingService_3564)")
         return
 
     # [เพิ่ม] กด Enter (ถัดไป) เพื่อเรียก Popup ขึ้นมา
