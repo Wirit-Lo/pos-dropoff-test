@@ -594,15 +594,15 @@ def run_smart_scenario(main_window, config):
     
     time.sleep(1.0) # สำคัญ: รอให้เมนูย่อย (ปุ่มวงกลม) เด้งขึ้นมาหลังจากกดปุ่มหลัก
     
-    # ตรวจสอบค่า Config (อย่าลืมประกาศตัวแปร register_flag ด้านบนตอนอ่าน Config ด้วยนะครับ)
     if str(register_flag).lower() in ['true', 'yes', 'on', '1']:
         log("...Config สั่งให้เลือก: ลงทะเบียน (Register)...")
         
-        # สั่งกดปุ่มที่มีคำว่า "ลงทะเบียน" (ปรับคำได้ตามหน้าจอจริง เช่น "ลงทะเบียน", "EMS")
-        if not smart_click(main_window, "ลงทะเบียน", timeout=3):
-             log("[Warning] หาปุ่ม 'ลงทะเบียน' ไม่เจอ (อาจจะไม่มีให้เลือก)")
+        # [แก้ไข] ใช้ click_element_by_id แทน smart_click
+        # เป้าหมาย: ID 'RegisteredToggleIcon'
+        if not click_element_by_id(main_window, "RegisteredToggleIcon", timeout=3):
+             log("[Warning] หาปุ่ม ID: 'RegisteredToggleIcon' ไม่เจอ (อาจจะไม่มีให้เลือก หรือ ID ผิด)")
              
-    time.sleep(0.5) # พักนิดนึงเพื่อให้แน่ใจว่าติ๊กแล้ว
+    time.sleep(0.5)
 
     # ================================================
 
