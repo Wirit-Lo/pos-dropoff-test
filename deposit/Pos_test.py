@@ -20,101 +20,131 @@ def log(message):
 
 # ================= 2. Core Functions (แก้ไขใหม่) =================
 
-def click_scroll_arrow_smart(window):
+def click_scroll_arrow_smart(window, direction='right'):
     """
-    ฟังก์ชันกดปุ่มเลื่อนขวาแบบเจาะจง (Smart Click)
-    หลักการ: หา 'กล่องรายการสินค้า' (ShippingServiceList) แล้วกดที่ขอบขวาของมัน
+    ฟังก์ชันกดปุ่มเลื่อนหน้าจอ (Smart Click)
+    รองรับ:
+     - direction='right' : เลื่อนไปทางขวา
+     - direction='left'  : เลื่อนไปทางซ้าย
     """
     try:
-        # 1. ค้นหากล่องรายการสินค้าด้วย ID ที่ได้จาก Inspector
-        # ใช้ descendants เพราะมันมักจะอยู่ใน Group ย่อย
+        # 1. ค้นหากล่องรายการสินค้า
         target_group = window.descendants(automation_id="ShippingServiceList")
         
+        # --- กรณีหา ID กล่องไม่เจอ (Fallback) ---
         if not target_group:
-            log("   [Warning] หา ID 'ShippingServiceList' ไม่เจอ -> จะลองกดที่ขอบจอขวาแทน")
-            # Fallback: ถ้าหากล่องไม่เจอจริงๆ ให้กดที่ขอบขวาของหน้าจอ (95% ของความกว้าง)
             win_rect = window.rectangle()
-            fallback_x = win_rect.left + int(win_rect.width() * 0.95) # 95% ไปทางขวา
-            fallback_y = win_rect.top + int(win_rect.height() * 0.50) # กึ่งกลางแนวตั้ง
+            fallback_y = win_rect.top + int(win_rect.height() * 0.50)
+            
+            if direction == 'right':
+                fallback_x = win_rect.left + int(win_rect.width() * 0.95) # 95% ขวา
+            else: 
+                fallback_x = win_rect.left + int(win_rect.width() * 0.05) # 5% ซ้าย
+                
             window.click_input(coords=(fallback_x, fallback_y))
             return True
 
-        # 2. คำนวณจุดคลิกจากกล่องที่เจอ
+        # --- กรณีเจอกล่อง (คำนวณแม่นยำ) ---
         container = target_group[0]
         rect = container.rectangle()
-        
-        # จุด X: เอาขอบขวาสุด ลบเข้ามา 45 pixel (เพื่อให้เข้ากลางปุ่มลูกศรมากขึ้น)
-        target_x = rect.right - 45
-        # จุด Y: กึ่งกลางแนวตั้งของกล่อง
         target_y = (rect.top + rect.bottom) // 2
 
-        log(f"   [Scroll] พบกล่องรายการสินค้า -> คลิกที่ขอบขวา ({target_x}, {target_y})")
+        if direction == 'right':
+            # เลื่อนขวา: ขอบขวาสุด - 45 pixel
+            target_x = rect.right - 45
+            log(f"   [Scroll Action] เลื่อนขวา -> คลิก ({target_x}, {target_y})")
+        else:
+            # เลื่อนซ้าย: ขอบซ้ายสุด + 45 pixel
+            target_x = rect.left + 45
+            log(f"   [Scroll Action] เลื่อนซ้าย -> คลิก ({target_x}, {target_y})")
         
-        # 3. สั่งคลิก (ระบุ double=False เพื่อความชัวร์)
         window.click_input(button='left', coords=(target_x, target_y), double=False)
         return True
 
     except Exception as e:
-        log(f"   [Error] Scroll Failed: {e}")
+        log(f"   [Error] Scroll {direction} Failed: {e}")
         return False
 
-def find_and_click_with_rotate_logic(window, target_id, max_rotations=10):
+def find_and_click_with_rotate_logic(window, target_id, max_scrolls=7):
     """
-    ค้นหาปุ่มบริการแบบวนลูป (Search -> Click -> If Not Found -> Scroll)
+    ค้นหาปุ่มบริการแบบอัจฉริยะ (Bidirectional Search)
+    1. กวาดหาทางขวา (Right Sweep)
+    2. ถ้าไม่เจอ -> กวาดหาทางซ้าย (Left Sweep) เพื่อย้อนกลับ
     """
     log(f"...กำลังค้นหาปุ่มบริการ ID: '{target_id}'...")
-    
-    for i in range(1, max_rotations + 1):
-        # 1. สแกนหาปุ่มเป้าหมายในหน้าจอปัจจุบัน
-        found_elements = [c for c in window.descendants() if str(c.element_info.automation_id) == target_id and c.is_visible()]
-        
-        should_scroll = False # ตัวแปรควบคุมการเลื่อน
 
-        if found_elements:
-            target = found_elements[0]
-            rect = target.rectangle()
-            win_rect = window.rectangle()
-            
-            # [แก้ไข] Safe Zone Check: ปรับลดระยะปลอดภัยเหลือ 70% ของจอ
-            # เพื่อป้องกันปุ่มที่อยู่ขวาสุด (ใต้ Panel) ไม่ให้ถูกกด
-            safe_limit = win_rect.left + (win_rect.width() * 0.70) 
-            
-            # ตรวจสอบว่า "ขอบขวาของปุ่ม" เกินระยะปลอดภัยหรือไม่
-            if rect.right < safe_limit:
-                 log(f"   [{i}] ✅ เจอปุ่มใน Safe Zone (Right={rect.right} < {int(safe_limit)}) -> กำลังกด...")
-                 try:
-                    target.click_input()
-                 except:
-                    # กรณี Click ปกติไม่ติด (เช่น ติด Animation) ให้ลอง Focus+Enter
-                    target.set_focus()
-                    window.type_keys("{ENTER}")
-                 return True
-            else:
-                 # ถ้าเจอปุ่ม แต่อยู่เกินระยะ Safe Zone ให้สั่งเลื่อน
-                 log(f"   [{i}] ⚠️ เจอปุ่มแต่โดนบัง/อยู่ขวาสุด (Right={rect.right}) -> ต้องเลื่อนให้เข้ามากลางจอ")
-                 should_scroll = True
+    def attempt_click_in_current_view():
+        """ฟังก์ชันย่อย: ลองหาและกดปุ่มในหน้าจอตอนนี้"""
+        found_elements = [c for c in window.descendants() if str(c.element_info.automation_id) == target_id and c.is_visible()]
+        if not found_elements:
+            return "NOT_FOUND" # ไม่เจอปุ่ม
+
+        target = found_elements[0]
+        rect = target.rectangle()
+        win_rect = window.rectangle()
+        
+        # Safe Zone Check (70% ของจอ)
+        safe_limit = win_rect.left + (win_rect.width() * 0.70) 
+        
+        if rect.right < safe_limit:
+            log(f"   ✅ เจอปุ่มใน Safe Zone -> กดเลย")
+            try:
+                target.click_input()
+            except:
+                target.set_focus()
+                window.type_keys("{ENTER}")
+            return "CLICKED"
         else:
-            log(f"   [{i}] ไม่เจอปุ่มในหน้านี้ -> เลื่อนขวา...")
-            should_scroll = True
+            log(f"   ⚠️ เจอปุ่มแต่อยู่ขวาสุด (โดนบัง) -> ต้องเลื่อนขวาอีกนิด")
+            return "BLOCKED" # เจอปุ่มแต่กดลำบาก
+
+    # --- Phase 1: กวาดหาทางขวา (Right Sweep) ---
+    log("--- [Phase 1] ค้นหาและเลื่อนขวา ---")
+    for i in range(1, max_scrolls + 1):
+        result = attempt_click_in_current_view()
         
-        # 2. สั่งเลื่อนหน้าจอ (ถ้าไม่เจอ หรือ เจอปุ่มแต่โดนบัง)
-        if should_scroll:
-            if not click_scroll_arrow_smart(window):
-                # ถ้าฟังก์ชัน Smart Click พังจริงๆ ให้กดปุ่มลูกศรขวาที่คีย์บอร์ดแทน
-                log("   [Fallback] Smart Click ไม่ทำงาน -> ใช้ปุ่มลูกศรขวาบนคีย์บอร์ด")
-                window.type_keys("{RIGHT}")
-            
-            time.sleep(1.5) # รอ Animation เลื่อน (สำคัญมาก)
+        if result == "CLICKED":
+            return True
+        elif result == "BLOCKED":
+            # ถ้าโดนบัง ให้เลื่อนขวาเพื่อดึงปุ่มเข้ามา
+            click_scroll_arrow_smart(window, direction='right')
+            time.sleep(1.5)
+            # ลองกดอีกทีหลังเลื่อน
+            if attempt_click_in_current_view() == "CLICKED": return True
+            continue 
         
-    log(f"[X] หมดความพยายามในการหาปุ่ม '{target_id}'")
+        # ถ้าไม่เจอเลย (NOT_FOUND) -> เลื่อนขวาไปหน้าถัดไป
+        log(f"   [{i}/{max_scrolls}] ไม่เจอ -> เลื่อนขวา...")
+        if not click_scroll_arrow_smart(window, direction='right'):
+             window.type_keys("{RIGHT}")
+        time.sleep(1.5)
+
+    # --- Phase 2: ถ้ายังไม่เจอ -> กวาดหาทางซ้าย (Left Sweep) ---
+    # เผื่อว่าเราเลื่อนเลย หรือปุ่มมันอยู่หน้าแรกๆ
+    log("--- [Phase 2] ไม่เจอทางขวา -> ลองเลื่อนกลับทางซ้าย (Reverse Search) ---")
+    # เพิ่มรอบการค้นหาตอนถอยกลับ (บวกเพิ่มเพื่อให้แน่ใจว่ากลับไปถึงต้นทาง)
+    reverse_scrolls = max_scrolls + 3 
+    
+    for i in range(1, reverse_scrolls + 1):
+        result = attempt_click_in_current_view()
+        
+        if result == "CLICKED":
+            return True
+        
+        # ไม่ว่าจะ BLOCKED หรือ NOT_FOUND ในเฟสนี้ เราจะเลื่อนซ้ายอย่างเดียวเพื่อย้อนกลับ
+        log(f"   [Reverse {i}/{reverse_scrolls}] ไม่เจอ/ย้อนกลับ -> เลื่อนซ้าย...")
+        if not click_scroll_arrow_smart(window, direction='left'):
+             window.type_keys("{LEFT}")
+        time.sleep(1.5)
+
+    log(f"[X] หมดความพยายามในการหาปุ่ม '{target_id}' (หาทั้งไปและกลับแล้ว)")
     return False
 
 # ================= 3. Main Logic (เหมือนเดิม) =================
 def test_process(main_window, config):
     log("--- เริ่มการทำงาน ---")
     
-    # [STEP 1] เลือกบริการ (แก้ไข ID ตรงนี้ถ้าเปลี่ยนบริการ)
-    # สมมติใช้ ID เดิม หรือถ้าจะเทสอันอื่นก็เปลี่ยนได้เลย
+    # [STEP 1] เลือกบริการ
     target_service_id = "ShippingService_2583" 
     
     if not find_and_click_with_rotate_logic(main_window, target_service_id):
@@ -152,7 +182,6 @@ def test_process(main_window, config):
         log(f"   [Popup] เจอหน้าต่าง: {popup_window.window_text()}")
         try:
             popup_window.set_focus()
-            # พยายามหาช่องกรอกจำนวน (Edit Box)
             edits = popup_window.descendants(control_type="Edit")
             target_edit = None
             for e in edits:
@@ -167,7 +196,6 @@ def test_process(main_window, config):
                 popup_window.type_keys("{ENTER}")
                 log("   [Success] กรอกจำนวนและยืนยันเรียบร้อย")
             else:
-                # ถ้าหาช่องไม่เจอ พิมพ์ใส่ Window เลย (Blind Type)
                 popup_window.type_keys(str(qty), with_spaces=True)
                 popup_window.type_keys("{ENTER}")
                 log("   [Success] (Blind Mode) กรอกจำนวนเรียบร้อย")
