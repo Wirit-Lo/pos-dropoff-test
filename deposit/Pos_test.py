@@ -22,58 +22,55 @@ def log(message):
 
 import time
 
-def click_scroll_arrow_smart(window, direction='right', repeat=3):
+def click_scroll_arrow_smart(window, direction='right', repeat=1):
     """
-    ฟังก์ชันกดปุ่มเลื่อนหน้าจอ (Smart Click) แบบรวดเร็ว
-    Args:
-        window: object หน้าต่างโปรแกรม
-        direction (str): 'right' (ไปขวา) หรือ 'left' (ไปซ้าย)
-        repeat (int): จำนวนครั้งที่จะกดคลิกต่อการเรียก 1 ครั้ง (ค่าปกติ 3 เพื่อให้เลื่อนไวขึ้น)
+    ฟังก์ชันเลื่อนหน้าจอแบบ Drag (ปัดหน้าจอ)
+    วิธีนี้แก้ปัญหาการ Click แล้วไม่เลื่อน โดยการจำลองการลากเมาส์แทน
     """
     try:
         # 1. ค้นหากล่องรายการสินค้า
         target_group = window.descendants(automation_id="ShippingServiceList")
         
-        target_x = 0
-        target_y = 0
-
-        # --- กรณีหา ID กล่องไม่เจอ (Fallback) ---
-        if not target_group:
-            win_rect = window.rectangle()
-            fallback_y = win_rect.top + int(win_rect.height() * 0.50) # กึ่งกลางแนวตั้ง
-            
-            if direction == 'right':
-                log("   [Warning] หา ID ไม่เจอ -> กดขอบจอขวา")
-                fallback_x = win_rect.left + int(win_rect.width() * 0.95) # 95% ขวา
-            else: 
-                log("   [Warning] หา ID ไม่เจอ -> กดขอบจอซ้าย")
-                fallback_x = win_rect.left + int(win_rect.width() * 0.05) # 5% ซ้าย
-                
-            target_x, target_y = fallback_x, fallback_y
-
-        # --- กรณีเจอกล่อง (คำนวณแม่นยำ) ---
+        # กำหนดพื้นที่ที่จะทำการลาก (Rect)
+        if target_group:
+            # กรณีเจอ ID: ใช้ขนาดจริงของกล่อง
+            rect = target_group[0].rectangle()
+            log(f"   [Smart Scroll] พบกล่องรายการ: {rect}")
         else:
-            container = target_group[0]
-            rect = container.rectangle()
-            target_y = (rect.top + rect.bottom) // 2 # กึ่งกลางแนวตั้ง
+            # กรณีไม่เจอ ID (Fallback): ใช้ขนาดหน้าต่างโปรแกรม
+            rect = window.rectangle()
+            log("   [Warning] ไม่พบ ID -> ใช้ขนาดหน้าต่างโปรแกรมแทน")
 
-            if direction == 'right':
-                # เลื่อนขวา: ขอบขวาสุด - 45 pixel
-                target_x = rect.right - 45
-                log(f"   [Scroll Right] คลิกขอบขวา ({target_x}, {target_y}) x {repeat} ครั้ง")
-            else:
-                # เลื่อนซ้าย: ขอบซ้ายสุด + 45 pixel
-                target_x = rect.left + 45
-                log(f"   [Scroll Left] คลิกขอบซ้าย ({target_x}, {target_y}) x {repeat} ครั้ง")
+        # คำนวณจุดกึ่งกลางแนวตั้ง (แกน Y)
+        center_y = (rect.top + rect.bottom) // 2
         
-        # สั่งคลิก (วนลูปตามจำนวน repeat เพื่อให้เลื่อนไวขึ้น)
+        # คำนวณจุดเริ่มต้น (Start) และจุดสิ้นสุด (End) สำหรับการลาก
+        # margin: ระยะเว้นจากขอบเข้ามา เพื่อให้มั่นใจว่ากดโดนเนื้อหาที่จะลาก (20% จากขอบ)
+        width = rect.width()
+        margin = int(width * 0.2) 
+
+        start_x = 0
+        end_x = 0
+
+        if direction == 'right':
+            # ต้องการดูข้อมูลทางขวา -> ต้องลากเนื้อหาจาก "ขวา" ไป "ซ้าย"
+            start_x = rect.right - margin
+            end_x = rect.left + margin
+            log(f"   [Action] กำลังปัดหน้าจอไปทางขวา (Drag Right->Left) x {repeat} รอบ")
+        else:
+            # ต้องการดูข้อมูลทางซ้าย -> ต้องลากเนื้อหาจาก "ซ้าย" ไป "ขวา"
+            start_x = rect.left + margin
+            end_x = rect.right - margin
+            log(f"   [Action] กำลังปัดหน้าจอไปทางซ้าย (Drag Left->Right) x {repeat} รอบ")
+
+        # เริ่มทำการลาก (Loop ตามจำนวน repeat)
         for i in range(repeat):
-            # ใช้ double=False เพื่อยืนยันว่าเป็นการคลิกแยกครั้ง (ไม่ใช่ Double Click event)
-            window.click_input(button='left', coords=(target_x, target_y), double=False)
+            # drag_mouse_input(dst, src) -> ลากจาก src ไป dst
+            window.drag_mouse_input(dst=(end_x, center_y), src=(start_x, center_y))
             
-            # (Optional) หน่วงเวลาสั้นๆ ระหว่างคลิกเล็กน้อยเพื่อให้ UI รับทัน (0.05 - 0.1 วินาที)
-            # ถ้าโปรแกรมตอบสนองไว สามารถเอาบรรทัด sleep ออกได้เลยครับ
-            time.sleep(0.05) 
+            # พักเล็กน้อยเพื่อให้ UI ขยับตามทัน
+            if repeat > 1:
+                time.sleep(0.5)
 
         return True
 
