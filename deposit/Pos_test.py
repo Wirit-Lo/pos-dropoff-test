@@ -42,7 +42,7 @@ def click_scroll_arrow_smart(window, direction='right', repeat=5):
         # 3. สร้างคำสั่งกดปุ่มรัวๆ
         keys_string = key_code * repeat
         
-        # 4. ส่งคำสั่งคีย์บอร์ด (ปรับความเร็วตรง pause=0.02)
+        # 4. ส่งคำสั่งคีย์บอร์ด (ปรับความเร็วตรง pause=0.2 เพื่อให้ไม่หลุด)
         window.type_keys(keys_string, pause=0.2, set_foreground=False)
 
         return True
@@ -162,20 +162,6 @@ def click_element_by_id(window, exact_id, timeout=5, index=0):
         time.sleep(0.5)
     return False
 
-def click_element_by_fuzzy_id(window, keyword, timeout=5):
-    start = time.time()
-    while time.time() - start < timeout:
-        try:
-            for child in window.descendants():
-                aid = child.element_info.automation_id
-                if child.is_visible() and aid and keyword in aid:
-                    child.click_input()
-                    log(f"[/] เจอ Fuzzy ID: '{aid}' -> กดสำเร็จ")
-                    return True
-        except: pass
-        time.sleep(0.5)
-    return False
-
 def wait_until_id_appears(window, exact_id, timeout=10):
     log(f"...รอโหลด ID: {exact_id}...")
     start = time.time()
@@ -206,9 +192,9 @@ def smart_next(window):
     if submits:
         submits.sort(key=lambda x: x.rectangle().top)
         submits[-1].click_input()
-        log("   [/] กดปุ่ม 'ถัดไป' (Footer)")
+        log(f"   [/] กดปุ่ม 'ถัดไป' (Footer)")
     else:
-        log("   [!] หาปุ่มถัดไปไม่เจอ -> กด Enter")
+        log(f"   [!] หาปุ่มถัดไปไม่เจอ -> กด Enter")
         window.type_keys("{ENTER}")
 
 def check_error_popup(window, delay=0.5):
@@ -276,10 +262,18 @@ def smart_input_weight(window, value):
 
 def process_special_services(window, services_str):
     log("--- หน้า: บริการพิเศษ ---")
-    if wait_for_text(window, "บริการพิเศษ", timeout=5):
-        if services_str.strip():
-            for s in services_str.split(','):
-                if s: smart_click(window, s.strip())
+    # รอให้หน้าจอโหลดก่อน (ไม่ว่าจะติ๊กหรือไม่)
+    wait_for_text(window, ["บริการพิเศษ", "Additional Services"], timeout=3)
+    
+    # ติ๊กเฉพาะตอนที่มีค่า Config และเป็นค่าจริง
+    if services_str and services_str.strip():
+        log(f"...เลือกบริการพิเศษ: {services_str}...")
+        for s in services_str.split(','):
+            if s: smart_click(window, s.strip(), timeout=2)
+    else:
+        log("...ไม่มีบริการพิเศษต้องเลือก (Config=False/Empty)...")
+        
+    # [FIX] กดถัดไปเสมอ ไม่ว่าจะติ๊กหรือไม่ติ๊ก
     smart_next(window)
 
 def process_sender_info_page(window):
@@ -515,8 +509,8 @@ def run_smart_scenario(main_window, config):
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
         register_flag = config['DEPOSIT_ENVELOPE'].get('RegisterOption', 'False')
         special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
-        add_insurance_flag = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
-        insurance_amt = config['DEPOSIT_ENVELOPE'].get('Insurance', '1000')
+        # add_insurance_flag = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
+        # insurance_amt = config['DEPOSIT_ENVELOPE'].get('Insurance', '1000')
         special_services = config['SPECIAL_SERVICES'].get('Services', '')
         addr_keyword = config['RECEIVER'].get('AddressKeyword', '99/99')
         rcv_fname = config['RECEIVER_DETAILS'].get('FirstName', 'A')
@@ -575,18 +569,44 @@ def run_smart_scenario(main_window, config):
     if not find_and_click_with_rotate_logic(main_window, "ShippingService_2583"):
         log("[Error] หาปุ่มบริการไม่เจอ (ShippingService_2583)")
         return
-    # เช็คค่าจาก Config ที่อ่านมาข้างบน
+
+    # [FIXED SECTION: Register Toggle & Next]
+    # -------------------------------------------------------------------------
+    # เช็คค่าจาก Config ว่าจะติ๊กหรือไม่
     if str(register_flag).lower() in ['true', 'yes', 'on', '1']:
         log("...Config สั่งให้เลือก: ลงทะเบียน (Register)...")
-        
-        # ใช้ ID ตามที่คุณแจ้งมา: 'RegisteredToggleIcon'
         if not click_element_by_id(main_window, "RegisteredToggleIcon", timeout=3):
              log("[Warning] หาปุ่ม ID: 'RegisteredToggleIcon' ไม่เจอ")
-             
-        time.sleep(0.5)
-        main_window.type_keys("{ENTER}")
     
+    time.sleep(0.5)
     
+    # [สำคัญ] เอาคำสั่งกด ENTER (ถัดไป) ออกมาอยู่นอก if
+    # เพื่อให้มันทำงานเสมอ แม้ว่า register_flag จะเป็น False
+    log("...กดถัดไป (Enter) เพื่อเข้าสู่หน้าบริการเสริม...")
+    main_window.type_keys("{ENTER}")
+    # -------------------------------------------------------------------------
+
+    time.sleep(step_delay)
+    
+    # [RESTORED SECTIONS: เติมส่วนที่หายไปกลับเข้ามา]
+    # -------------------------------------------------------------------------
+    # 1. บริการพิเศษ (EMS, ประกัน ฯลฯ)
+    process_special_services(main_window, special_services)
+    time.sleep(step_delay)
+    
+    # 2. ข้อมูลผู้ส่ง (มักจะข้าม)
+    process_sender_info_page(main_window)
+    time.sleep(step_delay)
+    
+    # 3. เลือกที่อยู่ผู้รับ
+    process_receiver_address_selection(main_window, addr_keyword, manual_data)
+    time.sleep(step_delay)
+    
+    # 4. กรอกชื่อผู้รับและเบอร์โทร
+    process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone)
+    time.sleep(step_delay)
+    # -------------------------------------------------------------------------
+
     # ทำรายการซ้ำ (กด ใช่/ไม่)
     process_repeat_transaction(main_window, repeat_flag)
     
