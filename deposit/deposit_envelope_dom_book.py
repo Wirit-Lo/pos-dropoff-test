@@ -42,7 +42,7 @@ def click_scroll_arrow_smart(window, direction='right', repeat=5):
         # 3. สร้างคำสั่งกดปุ่มรัวๆ
         keys_string = key_code * repeat
         
-        # 4. ส่งคำสั่งคีย์บอร์ด
+        # 4. ส่งคำสั่งคีย์บอร์ด (ปรับความเร็วตรง pause=0.02)
         window.type_keys(keys_string, pause=0.02, set_foreground=False)
 
         return True
@@ -73,32 +73,29 @@ def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
             rect = target.rectangle()
             win_rect = window.rectangle()
             
-            # [Safe Zone Check] 70% ของจอ
+            # [Safe Zone Check] เช็คว่าปุ่มตกขอบจอไหม (70% ของจอ)
             safe_limit = win_rect.left + (win_rect.width() * 0.70) 
             
-            # ตรวจสอบว่า "ขอบขวาของปุ่ม" เกินระยะปลอดภัยหรือไม่
             if rect.right < safe_limit:
-                 log(f"   [{i}] ✅ เจอปุ่มใน Safe Zone (Right={rect.right} < {int(safe_limit)}) -> กำลังกด...")
-                 try:
-                    target.click_input()
-                 except:
-                    target.set_focus()
-                    window.type_keys("{ENTER}")
+                 # ถ้าอยู่ในระยะปลอดภัย ให้กดเลย
+                 log(f"   [{i}] ✅ เจอปุ่มใน Safe Zone -> กำลังกด...")
+                 try: target.click_input()
+                 except: target.set_focus(); window.type_keys("{ENTER}")
                  return True
             else:
-                 log(f"   [{i}] ⚠️ เจอปุ่มแต่โดนบัง/อยู่ขวาสุด (Right={rect.right}) -> ต้องเลื่อนให้เข้ามากลางจอ")
+                 # ถ้าตกขอบ ให้สั่งเลื่อน
+                 log(f"   [{i}] ⚠️ เจอปุ่มแต่โดนบัง/อยู่ขวาสุด -> ต้องเลื่อน")
                  should_scroll = True
         else:
+            # ถ้าหาไม่เจอเลย ให้สั่งเลื่อน
             log(f"   [{i}] ไม่เจอปุ่มในหน้านี้ -> เลื่อนขวา...")
             should_scroll = True
         
-        # 2. สั่งเลื่อนหน้าจอ
+        # 2. สั่งเลื่อนหน้าจอ (เรียกใช้ฟังก์ชันข้อ 1)
         if should_scroll:
-            if not click_scroll_arrow_smart(window, repeat=5):
-                log("   [Fallback] ใช้ปุ่มลูกศรขวาบนคีย์บอร์ด (สำรอง)")
-                window.type_keys("{RIGHT}")
-            
-            time.sleep(1.0) # รอ Animation เลื่อน
+            if not click_scroll_arrow_smart(window, repeat=10):
+                window.type_keys("{RIGHT}") # สำรอง
+            time.sleep(1.0) # รอเลื่อน
         
     log(f"[X] หมดความพยายามในการหาปุ่ม '{target_id}'")
     return False
@@ -513,43 +510,38 @@ def process_payment(window, payment_method, received_amount):
 # ================= 4. Workflow Main =================
 def run_smart_scenario(main_window, config):
     try:
-        # --- Config Data Loading ---
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
         postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
-        register_flag = config['DEPOSIT_ENVELOPE'].get('RegisterOption', 'False')
+        max_search_rotations = int(config['SETTINGS'].get('MaxSearchRotations', 5))
         special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
+        add_insurance_flag = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
+        insurance_amt = config['DEPOSIT_ENVELOPE'].get('Insurance', '1000')
         special_services = config['SPECIAL_SERVICES'].get('Services', '')
         addr_keyword = config['RECEIVER'].get('AddressKeyword', '99/99')
         rcv_fname = config['RECEIVER_DETAILS'].get('FirstName', 'A')
         rcv_lname = config['RECEIVER_DETAILS'].get('LastName', 'B')
         rcv_phone = config['RECEIVER_DETAILS'].get('PhoneNumber', '081')
         repeat_flag = config['REPEAT_TRANSACTION'].get('Repeat', 'False')
-        pay_method = config['PAYMENT'].get('Method', 'เงินสด')
-        pay_amount = config['PAYMENT'].get('ReceivedAmount', '1000')
-        qty = config['PRODUCT_QUANTITY'].get('Quantity', '1')
-
-        # --- Settings Loading ---
+        
+        # Payment Config
+        pay_method = config['PAYMENT'].get('Method', 'เงินสด') if 'PAYMENT' in config else 'เงินสด'
+        pay_amount = config['PAYMENT'].get('ReceivedAmount', '1000') if 'PAYMENT' in config else '1000'
+        
         step_delay = float(config['SETTINGS'].get('StepDelay', 0.8))
         scroll_dist = int(config['SETTINGS'].get('ScrollDistance', -5))
         wait_timeout = int(config['SETTINGS'].get('ElementWaitTimeout', 15))
-        
-        # [NEW] อ่านค่า Max รอบในการเลื่อนหาปุ่ม (ค่าปกติ 15)
-        max_search_rotations = int(config['SETTINGS'].get('MaxSearchRotations', 5))
 
         manual_data = {
-            'Province': config['MANUAL_ADDRESS_FALLBACK'].get('Province', ''),
-            'District': config['MANUAL_ADDRESS_FALLBACK'].get('District', ''),
-            'SubDistrict': config['MANUAL_ADDRESS_FALLBACK'].get('SubDistrict', '')
+            'Province': config['MANUAL_ADDRESS_FALLBACK'].get('Province', '') if 'MANUAL_ADDRESS_FALLBACK' in config else '',
+            'District': config['MANUAL_ADDRESS_FALLBACK'].get('District', '') if 'MANUAL_ADDRESS_FALLBACK' in config else '',
+            'SubDistrict': config['MANUAL_ADDRESS_FALLBACK'].get('SubDistrict', '') if 'MANUAL_ADDRESS_FALLBACK' in config else ''
         }
-    except Exception as e: 
-        log(f"[Error] อ่าน Config ไม่สำเร็จ: {e}")
-        return
+    except: log("[Error] อ่าน Config ไม่สำเร็จ"); return
 
     log(f"--- เริ่มต้นการทำงาน ---")
     time.sleep(0.5)
 
-    # ... (ส่วนต้นของ Workflow เหมือนเดิม) ...
     if not smart_click(main_window, "รับฝากสิ่งของ"): return
     time.sleep(step_delay)
     process_sender_info_popup(main_window, phone, postal) 
@@ -577,108 +569,32 @@ def run_smart_scenario(main_window, config):
         if found: break
         time.sleep(0.5)
 
-    # ================= [ส่วนที่แก้ไข: System Wait & Scroll Search] =================
-    
-    log(f"...รอโหลดหน้าบริการหลัก (Timeout: {wait_timeout}s)...")
-    
-    # 1. รอให้รายการสินค้าโหลดขึ้นมาก่อน (ใช้ wait_timeout จาก Config)
-    wait_until_id_appears(main_window, "ShippingServiceList", timeout=wait_timeout)
-    time.sleep(1.5) # รอเพิ่มเติมให้ UI นิ่งจริงๆ
-    
-    log(f"...กำลังค้นหาและกดปุ่ม ShippingService_2583 (Max Rotations: {max_search_rotations})...")
-    
-    # 2. เลื่อนหาปุ่ม (ใช้ max_search_rotations จาก Config)
-    if not find_and_click_with_rotate_logic(main_window, "ShippingService_2583", max_rotations=max_search_rotations):
-        log("[Error] หาปุ่มบริการไม่เจอ (ShippingService_2583) แม้จะเลื่อนหาแล้ว")
+    log("...รอหน้าบริการหลัก...")
+    wait_until_id_appears(main_window, "ShippingService_2583", timeout=wait_timeout)
+     # คลิก 1 ครั้ง
+    if not find_and_click_with_rotate_logic(main_window, "ShippingService_2583", max_rotations= max_search_rotations):
+        log("[Error] หาปุ่มบริการไม่เจอ (ShippingService_2583)")
         return
+        main_window.type_keys("{ENTER}")
     
-    time.sleep(1.0) # สำคัญ: รอให้เมนูย่อย (ปุ่มวงกลม) เด้งขึ้นมาหลังจากกดปุ่มหลัก
+    time.sleep(1)
+    smart_next(main_window) 
+    time.sleep(step_delay)
+    process_special_services(main_window, special_services)
+    time.sleep(step_delay)
+    process_sender_info_page(main_window)
+    time.sleep(step_delay)
+    process_receiver_address_selection(main_window, addr_keyword, manual_data)
+    time.sleep(step_delay)
+    process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone)
+    time.sleep(step_delay)
     
-    if str(register_flag).lower() in ['true', 'yes', 'on', '1']:
-        log("...Config สั่งให้เลือก: ลงทะเบียน (Register)...")
-        
-        # ใช้ ID ตามที่คุณแจ้งมา: 'RegisteredToggleIcon'
-        if not click_element_by_id(main_window, "RegisteredToggleIcon", timeout=3):
-             log("[Warning] หาปุ่ม ID: 'RegisteredToggleIcon' ไม่เจอ")
-             
-    time.sleep(0.5)
-
-    # ================================================
-
-    # [เพิ่ม] กด Enter (ถัดไป) เพื่อเรียก Popup ขึ้นมา
-    log("...กด Enter (ถัดไป) เพื่อเรียก Popup...")
-    time.sleep(0.5)
-    main_window.type_keys("{ENTER}")
-
-    # 2. เริ่มกระบวนการจัดการ Popup
-    log(f"...รอ Popup 'จำนวน' (จะใส่เลขจาก Config: {qty})...")
-    time.sleep(1.5) 
-
-    # --- [Popup Logic เดิม] ---
-    popup_window = None
-    try:
-        children = main_window.children(control_type="Window")
-        if children: popup_window = children[0]
-    except: pass
-    if not popup_window:
-        try:
-            app_top = Application(backend="uia").connect(active_only=True).top_window()
-            if "จำนวน" in app_top.window_text() or "Escher" in app_top.window_text() or app_top.element_info.control_type == "Window":
-                popup_window = app_top
-        except: pass
-
-    if popup_window:
-        try: popup_window.set_focus()
-        except: pass
-        target_edit = None
-        try:
-            visible_edits = [e for e in popup_window.descendants(control_type="Edit") if e.is_visible()]
-            if visible_edits:
-                valid_edits = [e for e in visible_edits if e.rectangle().width() > 30]
-                if valid_edits: target_edit = valid_edits[0]
-        except: pass
-
-        if target_edit:
-            try:
-                target_edit.click_input()
-                time.sleep(0.2)
-                target_edit.type_keys("^a", pause=0.1)
-                target_edit.type_keys("{DELETE}", pause=0.1)
-                target_edit.type_keys(str(qty), with_spaces=True)
-                time.sleep(0.5)
-                popup_window.type_keys("{ENTER}")
-            except: pass
-        else:
-            popup_window.type_keys(str(qty), with_spaces=True)
-            popup_window.type_keys("{ENTER}")
-    else:
-        log("[Error] หา Popup Window ไม่เจอ")
-
-    # --- จบส่วน Popup ---
-
-    # --- [ส่วนตรวจจับการข้ามหน้า] ---
-    log("...รอหน้าถัดไปโหลด (2.0s)...")
-    time.sleep(2.0) 
-    try: main_window.set_focus()
-    except: pass
-    is_repeat_page = wait_for_text(main_window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=2)
-
-    if not is_repeat_page:
-        if wait_for_text(main_window, ["บริการพิเศษ", "Special Services"], timeout=3):
-             process_special_services(main_window, special_services)
-        time.sleep(step_delay)
-        process_sender_info_page(main_window)
-        time.sleep(step_delay)
-        log("...เข้าสู่ขั้นตอนค้นหาผู้รับ...")
-        process_receiver_address_selection(main_window, addr_keyword, manual_data)
-        time.sleep(step_delay)
-        process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone)
-        time.sleep(step_delay)
-    else:
-        log("...ระบบข้ามไปหน้า 'ทำรายการซ้ำ' ทันที (เจอ Popup ทำซ้ำ)...")
-    
+    # ทำรายการซ้ำ (กด ใช่/ไม่)
     process_repeat_transaction(main_window, repeat_flag)
+    
+    # ชำระเงิน (ต่อจากทำรายการซ้ำ)
     process_payment(main_window, pay_method, pay_amount)
+
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
 # ================= 5. Start App =================
