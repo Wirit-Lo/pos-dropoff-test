@@ -20,8 +20,6 @@ def log(message):
 
 # ================= 2. Core Functions (แก้ไขใหม่) =================
 
-import time
-
 def click_scroll_arrow_smart(window, direction='right', repeat=3):
     """
     ฟังก์ชันเลื่อนหน้าจอแบบ Drag (ลาก/ปัดหน้าจอ)
@@ -29,7 +27,7 @@ def click_scroll_arrow_smart(window, direction='right', repeat=3):
     - ข้อสังเกต: จะมีการคลุมดำ (Highlight Text) เกิดขึ้น ซึ่งช่วยยืนยันว่าเราจับที่เนื้อหาตรงกลางจริง
     
     Args:
-        repeat (int): จำนวนรอบการลาก ยิ่งเยอะยิ่งเลื่อนไปไกล (default=3 เพื่อให้ไวขึ้น)
+        repeat (int): จำนวนรอบการลาก ยิ่งเยอะยิ่งเลื่อนไปไกล (default=7 เพื่อให้ไวขึ้น)
     """
     try:
         # 1. ค้นหากล่องรายการสินค้า
