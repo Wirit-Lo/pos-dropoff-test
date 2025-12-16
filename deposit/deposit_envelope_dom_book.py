@@ -20,7 +20,7 @@ def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
 # ================= 2. Helper Functions =================
-def click_scroll_arrow_smart(window, direction='right', repeat=5):
+def click_scroll_arrow_smart(window, direction='right', repeat=10):
     """
     ฟังก์ชันเลื่อนหน้าจอโดยใช้ "แป้นพิมพ์" (Keyboard Arrow Keys) ล้วน 100%
     - ตัดระบบ Mouse/Drag ออกทั้งหมด เพื่อความเสถียรสูงสุด
@@ -52,7 +52,7 @@ def click_scroll_arrow_smart(window, direction='right', repeat=5):
         keys_string = key_code * repeat
         
         # 4. ส่งคำสั่งคีย์บอร์ด
-        # pause=0.01: ใส่ดีเลย์ระหว่างปุ่มนิดเดียวพอ เพื่อให้โปรแกรมรับทันแต่ยังไวอยู่
+        # pause=0.02: ใส่ดีเลย์ระหว่างปุ่มนิดเดียวพอ เพื่อให้โปรแกรมรับทันแต่ยังไวอยู่
         window.type_keys(keys_string, pause=0.02, set_foreground=False)
 
         return True
@@ -67,11 +67,12 @@ def click_scroll_arrow_smart(window, direction='right', repeat=5):
         except:
             return False
 
-def find_and_click_with_rotate_logic(window, target_id, max_rotations=10):
+def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
     """
     ค้นหาปุ่มบริการแบบวนลูป (Search -> Click -> If Not Found -> Scroll)
+    - ปรับ max_rotations เป็น 15 เพื่อให้ค้นหาได้นานขึ้น
     """
-    log(f"...กำลังค้นหาปุ่มบริการ ID: '{target_id}'...")
+    log(f"...กำลังค้นหาปุ่มบริการ ID: '{target_id}' (โหมด Scroll)...")
     
     for i in range(1, max_rotations + 1):
         # 1. สแกนหาปุ่มเป้าหมายในหน้าจอปัจจุบัน
@@ -84,7 +85,7 @@ def find_and_click_with_rotate_logic(window, target_id, max_rotations=10):
             rect = target.rectangle()
             win_rect = window.rectangle()
             
-            # [แก้ไข] Safe Zone Check: ปรับลดระยะปลอดภัยเหลือ 70% ของจอ
+            # [Safe Zone Check] ปรับลดระยะปลอดภัยเหลือ 70% ของจอ
             # เพื่อป้องกันปุ่มที่อยู่ขวาสุด (ใต้ Panel) ไม่ให้ถูกกด
             safe_limit = win_rect.left + (win_rect.width() * 0.70) 
             
@@ -108,12 +109,13 @@ def find_and_click_with_rotate_logic(window, target_id, max_rotations=10):
         
         # 2. สั่งเลื่อนหน้าจอ (ถ้าไม่เจอ หรือ เจอปุ่มแต่โดนบัง)
         if should_scroll:
-            if not click_scroll_arrow_smart(window):
-                # ถ้าฟังก์ชัน Smart Click พังจริงๆ ให้กดปุ่มลูกศรขวาที่คีย์บอร์ดแทน
-                log("   [Fallback] Smart Click ไม่ทำงาน -> ใช้ปุ่มลูกศรขวาบนคีย์บอร์ด")
+            # ใช้ click_scroll_arrow_smart แบบ Keyboard ที่เสถียรที่สุด
+            if not click_scroll_arrow_smart(window, repeat=10):
+                # Fallback เผื่อฟังก์ชันหลักพัง
+                log("   [Fallback] ใช้ปุ่มลูกศรขวาบนคีย์บอร์ด (สำรอง)")
                 window.type_keys("{RIGHT}")
             
-            time.sleep(1.5) # รอ Animation เลื่อน (สำคัญมาก)
+            time.sleep(1.0) # รอ Animation เลื่อน (สำคัญมาก)
         
     log(f"[X] หมดความพยายามในการหาปุ่ม '{target_id}'")
     return False
@@ -586,12 +588,18 @@ def run_smart_scenario(main_window, config):
         if found: break
         time.sleep(0.5)
 
-    log("...รอหน้าบริการหลัก...")
-    wait_until_id_appears(main_window, "ShippingService_2583", timeout=wait_timeout)
-     # คลิก 1 ครั้ง
-    if not click_element_by_id(main_window, "ShippingService_2583"):
-        log("[Error] หาปุ่มบริการไม่เจอ (ShippingService_2583)")
+    # ================= [ส่วนที่แก้ไข] =================
+    # เปลี่ยนจากการรอและกดเฉยๆ เป็นการใช้ find_and_click_with_rotate_logic
+    # เพื่อให้มีการวนลูปเช็ค -> ถ้าไม่เจอ -> กดเลื่อน (Scroll) -> หาใหม่
+    
+    log("...กำลังค้นหาและกดปุ่ม ShippingService_2583 (รองรับการเลื่อน)...")
+    
+    # ใช้ฟังก์ชันนี้จะช่วยเลื่อนหาปุ่มให้อัตโนมัติถ้าปุ่มยังไม่โผล่หรือโดนบัง
+    if not find_and_click_with_rotate_logic(main_window, "ShippingService_2583", max_rotations=15):
+        log("[Error] หาปุ่มบริการไม่เจอ (ShippingService_2583) แม้จะเลื่อนหาแล้ว")
         return
+
+    # ================================================
 
     # [เพิ่ม] กด Enter (ถัดไป) เพื่อเรียก Popup ขึ้นมา
     log("...กด Enter (ถัดไป) เพื่อเรียก Popup...")
