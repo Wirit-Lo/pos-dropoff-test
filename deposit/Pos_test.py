@@ -27,7 +27,7 @@ def click_scroll_arrow_smart(window, direction='right', repeat=3):
     - ข้อสังเกต: จะมีการคลุมดำ (Highlight Text) เกิดขึ้น ซึ่งช่วยยืนยันว่าเราจับที่เนื้อหาตรงกลางจริง
     
     Args:
-        repeat (int): จำนวนรอบการลาก ยิ่งเยอะยิ่งเลื่อนไปไกล (default=7 เพื่อให้ไวขึ้น)
+        repeat (int): จำนวนรอบการลาก ยิ่งเยอะยิ่งเลื่อนไปไกล (default=3 เพื่อให้ไวขึ้น)
     """
     try:
         # 1. ค้นหากล่องรายการสินค้า
@@ -69,7 +69,7 @@ def click_scroll_arrow_smart(window, direction='right', repeat=3):
             
             # ใส่ delay น้อยมากๆ (0.05) เพื่อให้ต่อเนื่องและไวขึ้น แต่ไม่เร็ว จนโปรแกรมแฮงค์
             if repeat > 1:
-                time.sleep(0.05)
+                time.sleep(0.01)
 
         return True
 
