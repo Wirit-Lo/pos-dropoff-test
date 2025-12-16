@@ -75,9 +75,9 @@ def find_and_click_with_rotate_logic(window, target_id, max_rotations=10):
             rect = target.rectangle()
             win_rect = window.rectangle()
             
-            # [แก้ไข] Safe Zone Check: ปรับลดระยะปลอดภัยเหลือ 50% ของจอ
+            # [แก้ไข] Safe Zone Check: ปรับลดระยะปลอดภัยเหลือ 70% ของจอ
             # เพื่อป้องกันปุ่มที่อยู่ขวาสุด (ใต้ Panel) ไม่ให้ถูกกด
-            safe_limit = win_rect.left + (win_rect.width() * 0.50) 
+            safe_limit = win_rect.left + (win_rect.width() * 0.70) 
             
             # ตรวจสอบว่า "ขอบขวาของปุ่ม" เกินระยะปลอดภัยหรือไม่
             if rect.right < safe_limit:
