@@ -32,7 +32,7 @@ def click_scroll_arrow_smart(window):
         
         if not target_group:
             log("   [Warning] หา ID 'ShippingServiceList' ไม่เจอ -> จะลองกดที่ขอบจอขวาแทน")
-            # Fallback: ถ้าหากล่องไม่เจอจริงๆ ให้กดที่ขอบขวาของหน้าจอ (75% ของความกว้าง)
+            # Fallback: ถ้าหากล่องไม่เจอจริงๆ ให้กดที่ขอบขวาของหน้าจอ (95% ของความกว้าง)
             win_rect = window.rectangle()
             fallback_x = win_rect.left + int(win_rect.width() * 0.95) # 95% ไปทางขวา
             fallback_y = win_rect.top + int(win_rect.height() * 0.50) # กึ่งกลางแนวตั้ง
@@ -43,15 +43,15 @@ def click_scroll_arrow_smart(window):
         container = target_group[0]
         rect = container.rectangle()
         
-        # จุด X: เอาขอบขวาสุด ลบเข้ามา 35 pixel (เพื่อให้โดนปุ่มลูกศรพอดี)
-        target_x = rect.right - 35
+        # จุด X: เอาขอบขวาสุด ลบเข้ามา 45 pixel (เพื่อให้เข้ากลางปุ่มลูกศรมากขึ้น)
+        target_x = rect.right - 45
         # จุด Y: กึ่งกลางแนวตั้งของกล่อง
         target_y = (rect.top + rect.bottom) // 2
 
         log(f"   [Scroll] พบกล่องรายการสินค้า -> คลิกที่ขอบขวา ({target_x}, {target_y})")
         
-        # 3. สั่งคลิก
-        window.click_input(coords=(target_x, target_y))
+        # 3. สั่งคลิก (ระบุ double=False เพื่อความชัวร์)
+        window.click_input(button='left', coords=(target_x, target_y), double=False)
         return True
 
     except Exception as e:
@@ -68,16 +68,20 @@ def find_and_click_with_rotate_logic(window, target_id, max_rotations=10):
         # 1. สแกนหาปุ่มเป้าหมายในหน้าจอปัจจุบัน
         found_elements = [c for c in window.descendants() if str(c.element_info.automation_id) == target_id and c.is_visible()]
         
+        should_scroll = False # ตัวแปรควบคุมการเลื่อน
+
         if found_elements:
             target = found_elements[0]
             rect = target.rectangle()
             win_rect = window.rectangle()
             
-            # Safe Zone Check: เช็คว่าปุ่มไม่ได้หลบมุมขวาจนกดไม่ได้
-            safe_limit = win_rect.left + (win_rect.width() * 0.98) # ยอมให้อยู่ขวาสุดๆ ได้
+            # [แก้ไข] Safe Zone Check: ปรับลดระยะปลอดภัยเหลือ 50% ของจอ
+            # เพื่อป้องกันปุ่มที่อยู่ขวาสุด (ใต้ Panel) ไม่ให้ถูกกด
+            safe_limit = win_rect.left + (win_rect.width() * 0.50) 
             
-            if rect.left < safe_limit:
-                 log(f"   [{i}] ✅ เจอปุ่มแล้ว! -> กำลังกด...")
+            # ตรวจสอบว่า "ขอบขวาของปุ่ม" เกินระยะปลอดภัยหรือไม่
+            if rect.right < safe_limit:
+                 log(f"   [{i}] ✅ เจอปุ่มใน Safe Zone (Right={rect.right} < {int(safe_limit)}) -> กำลังกด...")
                  try:
                     target.click_input()
                  except:
@@ -86,16 +90,21 @@ def find_and_click_with_rotate_logic(window, target_id, max_rotations=10):
                     window.type_keys("{ENTER}")
                  return True
             else:
-                 log(f"   [{i}] เจอปุ่ม แต่อยู่ตกขอบจอ -> ต้องเลื่อนหาก่อน")
+                 # ถ้าเจอปุ่ม แต่อยู่เกินระยะ Safe Zone ให้สั่งเลื่อน
+                 log(f"   [{i}] ⚠️ เจอปุ่มแต่โดนบัง/อยู่ขวาสุด (Right={rect.right}) -> ต้องเลื่อนให้เข้ามากลางจอ")
+                 should_scroll = True
         else:
             log(f"   [{i}] ไม่เจอปุ่มในหน้านี้ -> เลื่อนขวา...")
+            should_scroll = True
         
-        # 2. ถ้าไม่เจอ หรือกดไม่ได้ -> สั่งเลื่อนหน้าจอ
-        if not click_scroll_arrow_smart(window):
-            # ถ้าฟังก์ชัน Smart Click พังจริงๆ ให้กดปุ่มลูกศรขวาที่คีย์บอร์ดแทน
-            window.type_keys("{RIGHT}")
+        # 2. สั่งเลื่อนหน้าจอ (ถ้าไม่เจอ หรือ เจอปุ่มแต่โดนบัง)
+        if should_scroll:
+            if not click_scroll_arrow_smart(window):
+                # ถ้าฟังก์ชัน Smart Click พังจริงๆ ให้กดปุ่มลูกศรขวาที่คีย์บอร์ดแทน
+                log("   [Fallback] Smart Click ไม่ทำงาน -> ใช้ปุ่มลูกศรขวาบนคีย์บอร์ด")
+                window.type_keys("{RIGHT}")
             
-        time.sleep(1.5) # รอ Animation เลื่อน (สำคัญ)
+            time.sleep(1.5) # รอ Animation เลื่อน (สำคัญมาก)
         
     log(f"[X] หมดความพยายามในการหาปุ่ม '{target_id}'")
     return False
@@ -191,4 +200,3 @@ if __name__ == "__main__":
             
         except Exception as e:
             log(f"Critical Error: {e}")
-            
