@@ -20,17 +20,23 @@ def log(message):
 
 # ================= 2. Core Functions (แก้ไขใหม่) =================
 
-def click_scroll_arrow_smart(window, direction='right'):
+import time
+
+def click_scroll_arrow_smart(window, direction='right', repeat=3):
     """
-    ฟังก์ชันกดปุ่มเลื่อนหน้าจอ (Smart Click)
-    รองรับ:
-     - direction='right' : เลื่อนไปทางขวา (ค่าเริ่มต้น)
-     - direction='left'  : เลื่อนไปทางซ้าย (เลื่อนกลับ)
+    ฟังก์ชันกดปุ่มเลื่อนหน้าจอ (Smart Click) แบบรวดเร็ว
+    Args:
+        window: object หน้าต่างโปรแกรม
+        direction (str): 'right' (ไปขวา) หรือ 'left' (ไปซ้าย)
+        repeat (int): จำนวนครั้งที่จะกดคลิกต่อการเรียก 1 ครั้ง (ค่าปกติ 3 เพื่อให้เลื่อนไวขึ้น)
     """
     try:
         # 1. ค้นหากล่องรายการสินค้า
         target_group = window.descendants(automation_id="ShippingServiceList")
         
+        target_x = 0
+        target_y = 0
+
         # --- กรณีหา ID กล่องไม่เจอ (Fallback) ---
         if not target_group:
             win_rect = window.rectangle()
@@ -43,25 +49,32 @@ def click_scroll_arrow_smart(window, direction='right'):
                 log("   [Warning] หา ID ไม่เจอ -> กดขอบจอซ้าย")
                 fallback_x = win_rect.left + int(win_rect.width() * 0.05) # 5% ซ้าย
                 
-            window.click_input(coords=(fallback_x, fallback_y))
-            return True
+            target_x, target_y = fallback_x, fallback_y
 
         # --- กรณีเจอกล่อง (คำนวณแม่นยำ) ---
-        container = target_group[0]
-        rect = container.rectangle()
-        target_y = (rect.top + rect.bottom) // 2 # กึ่งกลางแนวตั้ง
-
-        if direction == 'right':
-            # เลื่อนขวา: ขอบขวาสุด - 45 pixel
-            target_x = rect.right - 45
-            log(f"   [Scroll Right] คลิกขอบขวา ({target_x}, {target_y})")
         else:
-            # เลื่อนซ้าย: ขอบซ้ายสุด + 45 pixel
-            target_x = rect.left + 45
-            log(f"   [Scroll Left] คลิกขอบซ้าย ({target_x}, {target_y})")
+            container = target_group[0]
+            rect = container.rectangle()
+            target_y = (rect.top + rect.bottom) // 2 # กึ่งกลางแนวตั้ง
+
+            if direction == 'right':
+                # เลื่อนขวา: ขอบขวาสุด - 45 pixel
+                target_x = rect.right - 45
+                log(f"   [Scroll Right] คลิกขอบขวา ({target_x}, {target_y}) x {repeat} ครั้ง")
+            else:
+                # เลื่อนซ้าย: ขอบซ้ายสุด + 45 pixel
+                target_x = rect.left + 45
+                log(f"   [Scroll Left] คลิกขอบซ้าย ({target_x}, {target_y}) x {repeat} ครั้ง")
         
-        # สั่งคลิก
-        window.click_input(button='left', coords=(target_x, target_y), double=False)
+        # สั่งคลิก (วนลูปตามจำนวน repeat เพื่อให้เลื่อนไวขึ้น)
+        for i in range(repeat):
+            # ใช้ double=False เพื่อยืนยันว่าเป็นการคลิกแยกครั้ง (ไม่ใช่ Double Click event)
+            window.click_input(button='left', coords=(target_x, target_y), double=False)
+            
+            # (Optional) หน่วงเวลาสั้นๆ ระหว่างคลิกเล็กน้อยเพื่อให้ UI รับทัน (0.05 - 0.1 วินาที)
+            # ถ้าโปรแกรมตอบสนองไว สามารถเอาบรรทัด sleep ออกได้เลยครับ
+            time.sleep(0.05) 
+
         return True
 
     except Exception as e:
