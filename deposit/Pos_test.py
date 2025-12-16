@@ -20,6 +20,86 @@ def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
 # ================= 2. Helper Functions =================
+def click_scroll_arrow_smart(window, direction='right', repeat=5):
+    """
+    ฟังก์ชันเลื่อนหน้าจอโดยใช้ "แป้นพิมพ์" (Keyboard Arrow Keys) ล้วน 100%
+    """
+    try:
+        # 1. พยายามโฟกัสไปที่กล่องรายการสินค้าก่อน
+        target_group = window.descendants(auto_id="ShippingServiceList")
+        
+        if target_group:
+            target_group[0].set_focus()
+        else:
+            window.set_focus()
+
+        # 2. กำหนดปุ่มที่จะกด
+        if direction == 'right':
+            key_code = '{RIGHT}'
+        else:
+            key_code = '{LEFT}'
+
+        # 3. สร้างคำสั่งกดปุ่มรัวๆ
+        keys_string = key_code * repeat
+        
+        # 4. ส่งคำสั่งคีย์บอร์ด (ปรับความเร็วตรง pause=0.02)
+        window.type_keys(keys_string, pause=0.02, set_foreground=False)
+
+        return True
+
+    except Exception as e:
+        print(f"Keyboard Scroll Error: {e}")
+        try:
+             key_code = '{RIGHT}' if direction == 'right' else '{LEFT}'
+             window.type_keys(key_code * repeat, pause=0.05)
+             return True
+        except:
+            return False
+
+def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
+    """
+    ค้นหาปุ่มบริการแบบวนลูป (Search -> Click -> If Not Found -> Scroll)
+    """
+    log(f"...กำลังค้นหาปุ่มบริการ ID: '{target_id}' (โหมด Scroll, Limit={max_rotations} รอบ)...")
+    
+    for i in range(1, max_rotations + 1):
+        # 1. สแกนหาปุ่มเป้าหมายในหน้าจอปัจจุบัน
+        found_elements = [c for c in window.descendants() if str(c.element_info.automation_id) == target_id and c.is_visible()]
+        
+        should_scroll = False # ตัวแปรควบคุมการเลื่อน
+
+        if found_elements:
+            target = found_elements[0]
+            rect = target.rectangle()
+            win_rect = window.rectangle()
+            
+            # [Safe Zone Check] เช็คว่าปุ่มตกขอบจอไหม (70% ของจอ)
+            safe_limit = win_rect.left + (win_rect.width() * 0.70) 
+            
+            if rect.right < safe_limit:
+                 # ถ้าอยู่ในระยะปลอดภัย ให้กดเลย
+                 log(f"   [{i}] ✅ เจอปุ่มใน Safe Zone -> กำลังกด...")
+                 try: target.click_input()
+                 except: target.set_focus(); window.type_keys("{ENTER}")
+                 return True
+            else:
+                 # ถ้าตกขอบ ให้สั่งเลื่อน
+                 log(f"   [{i}] ⚠️ เจอปุ่มแต่โดนบัง/อยู่ขวาสุด -> ต้องเลื่อน")
+                 should_scroll = True
+        else:
+            # ถ้าหาไม่เจอเลย ให้สั่งเลื่อน
+            log(f"   [{i}] ไม่เจอปุ่มในหน้านี้ -> เลื่อนขวา...")
+            should_scroll = True
+        
+        # 2. สั่งเลื่อนหน้าจอ (เรียกใช้ฟังก์ชันข้อ 1)
+        if should_scroll:
+            if not click_scroll_arrow_smart(window, repeat=10):
+                window.type_keys("{RIGHT}") # สำรอง
+            time.sleep(1.0) # รอเลื่อน
+        
+    log(f"[X] หมดความพยายามในการหาปุ่ม '{target_id}'")
+    return False
+
 def force_scroll_down(window, scroll_dist=-5):
     try:
         window.set_focus()
@@ -490,8 +570,10 @@ def run_smart_scenario(main_window, config):
 
     log("...รอหน้าบริการหลัก...")
     wait_until_id_appears(main_window, "ShippingService_2583", timeout=wait_timeout)
+     # คลิก 1 ครั้ง
     if not click_element_by_id(main_window, "ShippingService_2583"):
-        if not click_element_by_fuzzy_id(main_window, "EMSS"): return
+        log("[Error] หาปุ่มบริการไม่เจอ (ShippingService_2583)")
+        return
 
         main_window.type_keys("{ENTER}")
     
