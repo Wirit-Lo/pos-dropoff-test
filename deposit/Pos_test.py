@@ -20,53 +20,52 @@ def log(message):
 
 # ================= 2. Core Functions (แก้ไขใหม่) =================
 
-def click_scroll_arrow_smart(window, direction='right', repeat=15):
+def click_scroll_arrow_smart(window, direction='right', repeat=10):
     """
-    ฟังก์ชันเลื่อนหน้าจอแบบ Drag (ลาก/ปัดหน้าจอ) แบบ Speed
-    - repeat: ค่าเริ่มต้นปรับเป็น 5 รอบ เพื่อให้เลื่อนไปได้ไกลขึ้นมาก
-    - ตัด delay ทิ้งเพื่อให้ทำงานต่อเนื่องทันที
+    ฟังก์ชันเลื่อนหน้าจอโดยใช้ "แป้นพิมพ์" (Keyboard Arrow Keys) ล้วน 100%
+    - ตัดระบบ Mouse/Drag ออกทั้งหมด เพื่อความเสถียรสูงสุด
+    - ใช้การส่งปุ่มลูกศรเข้าไปที่โปรแกรมโดยตรง
+    
+    Args:
+        repeat (int): จำนวนครั้งที่จะกดปุ่ม (ยิ่งเยอะ ยิ่งเลื่อนไกล/ไว)
     """
     try:
-        # 1. ค้นหากล่องรายการสินค้า
-        target_group = window.descendants(automation_id="ShippingServiceList")
+        # 1. พยายามโฟกัสไปที่กล่องรายการสินค้าก่อน (ถ้าหาเจอ) 
+        # เพื่อให้แน่ใจว่าเวลากดลูกศร มันจะเลื่อนที่กล่องรายการ ไม่ใช่เลื่อน Cursor ที่อื่น
+        target_group = window.descendants(auto_id="ShippingServiceList")
         
-        # กำหนดพื้นที่ที่จะทำการลาก (Rect)
         if target_group:
-            rect = target_group[0].rectangle()
+            # ถ้าเจอ ID กล่อง -> สั่งโฟกัสที่กล่องนั้น
+            target_group[0].set_focus()
         else:
-            rect = window.rectangle()
+            # ถ้าไม่เจอ -> สั่งโฟกัสที่หน้าต่างหลักแทน (กันเหนียว)
+            window.set_focus()
 
-        # คำนวณจุดกึ่งกลางแนวตั้ง (แกน Y)
-        center_y = (rect.top + rect.bottom) // 2
-        
-        # ปรับ Margin ให้น้อยที่สุด (20px) เพื่อให้ระยะลากกว้างที่สุดเท่าที่จะทำได้
-        margin = 20
-
-        start_x = 0
-        end_x = 0
-
+        # 2. กำหนดปุ่มที่จะกด
         if direction == 'right':
-            # ต้องการดูข้อมูลทางขวา -> ลากจาก "ขวาสุด" ไป "ซ้ายสุด"
-            start_x = rect.right - margin
-            end_x = rect.left + margin
+            key_code = '{RIGHT}'
         else:
-            # ต้องการดูข้อมูลทางซ้าย -> ลากจาก "ซ้ายสุด" ไป "ขวาสุด"
-            start_x = rect.left + margin
-            end_x = rect.right - margin
+            key_code = '{LEFT}'
 
-        # เริ่มทำการลาก (Loop ตามจำนวน repeat)
-        for i in range(repeat):
-            # drag_mouse_input: ลากเมาส์ (เกิดแถบคลุมดำ)
-            # ตัด delay ออกเพื่อให้ลากต่อเนื่องทันที
-            window.drag_mouse_input(dst=(end_x, center_y), src=(start_x, center_y))
-            
-            # ไม่มีการ Sleep เพื่อความไวสูงสุด
+        # 3. สร้างคำสั่งกดปุ่มรัวๆ ตามจำนวน repeat
+        # ตัวอย่าง: ถ้า repeat=5 จะได้ keys_string = "{RIGHT}{RIGHT}{RIGHT}{RIGHT}{RIGHT}"
+        keys_string = key_code * repeat
+        
+        # 4. ส่งคำสั่งคีย์บอร์ด
+        # pause=0.01: ใส่ดีเลย์ระหว่างปุ่มนิดเดียวพอ เพื่อให้โปรแกรมรับทันแต่ยังไวอยู่
+        window.type_keys(keys_string, pause=0.02, set_foreground=False)
 
         return True
 
     except Exception as e:
-        print(f"Scroll Error: {e}")
-        return False
+        print(f"Keyboard Scroll Error: {e}")
+        # กรณีฉุกเฉิน: ถ้า set_focus ไม่ได้ ให้ลองส่งเข้า Window หลักตรงๆ อีกรอบ
+        try:
+             key_code = '{RIGHT}' if direction == 'right' else '{LEFT}'
+             window.type_keys(key_code * repeat, pause=0.05)
+             return True
+        except:
+            return False
 
 def find_and_click_with_rotate_logic(window, target_id, max_rotations=10):
     """
