@@ -20,6 +20,104 @@ def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
 # ================= 2. Helper Functions =================
+def click_scroll_arrow_smart(window, direction='right', repeat=5):
+    """
+    ฟังก์ชันเลื่อนหน้าจอโดยใช้ "แป้นพิมพ์" (Keyboard Arrow Keys) ล้วน 100%
+    - ตัดระบบ Mouse/Drag ออกทั้งหมด เพื่อความเสถียรสูงสุด
+    - ใช้การส่งปุ่มลูกศรเข้าไปที่โปรแกรมโดยตรง
+    
+    Args:
+        repeat (int): จำนวนครั้งที่จะกดปุ่ม (ยิ่งเยอะ ยิ่งเลื่อนไกล/ไว)
+    """
+    try:
+        # 1. พยายามโฟกัสไปที่กล่องรายการสินค้าก่อน (ถ้าหาเจอ) 
+        # เพื่อให้แน่ใจว่าเวลากดลูกศร มันจะเลื่อนที่กล่องรายการ ไม่ใช่เลื่อน Cursor ที่อื่น
+        target_group = window.descendants(auto_id="ShippingServiceList")
+        
+        if target_group:
+            # ถ้าเจอ ID กล่อง -> สั่งโฟกัสที่กล่องนั้น
+            target_group[0].set_focus()
+        else:
+            # ถ้าไม่เจอ -> สั่งโฟกัสที่หน้าต่างหลักแทน (กันเหนียว)
+            window.set_focus()
+
+        # 2. กำหนดปุ่มที่จะกด
+        if direction == 'right':
+            key_code = '{RIGHT}'
+        else:
+            key_code = '{LEFT}'
+
+        # 3. สร้างคำสั่งกดปุ่มรัวๆ ตามจำนวน repeat
+        # ตัวอย่าง: ถ้า repeat=5 จะได้ keys_string = "{RIGHT}{RIGHT}{RIGHT}{RIGHT}{RIGHT}"
+        keys_string = key_code * repeat
+        
+        # 4. ส่งคำสั่งคีย์บอร์ด
+        # pause=0.01: ใส่ดีเลย์ระหว่างปุ่มนิดเดียวพอ เพื่อให้โปรแกรมรับทันแต่ยังไวอยู่
+        window.type_keys(keys_string, pause=0.02, set_foreground=False)
+
+        return True
+
+    except Exception as e:
+        print(f"Keyboard Scroll Error: {e}")
+        # กรณีฉุกเฉิน: ถ้า set_focus ไม่ได้ ให้ลองส่งเข้า Window หลักตรงๆ อีกรอบ
+        try:
+             key_code = '{RIGHT}' if direction == 'right' else '{LEFT}'
+             window.type_keys(key_code * repeat, pause=0.05)
+             return True
+        except:
+            return False
+
+def find_and_click_with_rotate_logic(window, target_id, max_rotations=10):
+    """
+    ค้นหาปุ่มบริการแบบวนลูป (Search -> Click -> If Not Found -> Scroll)
+    """
+    log(f"...กำลังค้นหาปุ่มบริการ ID: '{target_id}'...")
+    
+    for i in range(1, max_rotations + 1):
+        # 1. สแกนหาปุ่มเป้าหมายในหน้าจอปัจจุบัน
+        found_elements = [c for c in window.descendants() if str(c.element_info.automation_id) == target_id and c.is_visible()]
+        
+        should_scroll = False # ตัวแปรควบคุมการเลื่อน
+
+        if found_elements:
+            target = found_elements[0]
+            rect = target.rectangle()
+            win_rect = window.rectangle()
+            
+            # [แก้ไข] Safe Zone Check: ปรับลดระยะปลอดภัยเหลือ 70% ของจอ
+            # เพื่อป้องกันปุ่มที่อยู่ขวาสุด (ใต้ Panel) ไม่ให้ถูกกด
+            safe_limit = win_rect.left + (win_rect.width() * 0.70) 
+            
+            # ตรวจสอบว่า "ขอบขวาของปุ่ม" เกินระยะปลอดภัยหรือไม่
+            if rect.right < safe_limit:
+                 log(f"   [{i}] ✅ เจอปุ่มใน Safe Zone (Right={rect.right} < {int(safe_limit)}) -> กำลังกด...")
+                 try:
+                    target.click_input()
+                 except:
+                    # กรณี Click ปกติไม่ติด (เช่น ติด Animation) ให้ลอง Focus+Enter
+                    target.set_focus()
+                    window.type_keys("{ENTER}")
+                 return True
+            else:
+                 # ถ้าเจอปุ่ม แต่อยู่เกินระยะ Safe Zone ให้สั่งเลื่อน
+                 log(f"   [{i}] ⚠️ เจอปุ่มแต่โดนบัง/อยู่ขวาสุด (Right={rect.right}) -> ต้องเลื่อนให้เข้ามากลางจอ")
+                 should_scroll = True
+        else:
+            log(f"   [{i}] ไม่เจอปุ่มในหน้านี้ -> เลื่อนขวา...")
+            should_scroll = True
+        
+        # 2. สั่งเลื่อนหน้าจอ (ถ้าไม่เจอ หรือ เจอปุ่มแต่โดนบัง)
+        if should_scroll:
+            if not click_scroll_arrow_smart(window):
+                # ถ้าฟังก์ชัน Smart Click พังจริงๆ ให้กดปุ่มลูกศรขวาที่คีย์บอร์ดแทน
+                log("   [Fallback] Smart Click ไม่ทำงาน -> ใช้ปุ่มลูกศรขวาบนคีย์บอร์ด")
+                window.type_keys("{RIGHT}")
+            
+            time.sleep(1.5) # รอ Animation เลื่อน (สำคัญมาก)
+        
+    log(f"[X] หมดความพยายามในการหาปุ่ม '{target_id}'")
+    return False
+
 def force_scroll_down(window, scroll_dist=-5):
     try:
         window.set_focus()
