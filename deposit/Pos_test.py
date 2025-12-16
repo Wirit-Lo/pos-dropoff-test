@@ -20,52 +20,64 @@ def log(message):
 
 # ================= 2. Core Functions (แก้ไขใหม่) =================
 
-def click_scroll_arrow_smart(window, direction='right'):
+import time
+
+def click_scroll_arrow_smart(window, direction='right', repeat=1):
     """
-    ฟังก์ชันกดปุ่มเลื่อนหน้าจอ (Smart Click)
-    รองรับ:
-     - direction='right' : เลื่อนไปทางขวา (ค่าเริ่มต้น)
-     - direction='left'  : เลื่อนไปทางซ้าย (เลื่อนกลับ)
+    ฟังก์ชันเลื่อนหน้าจอแบบ Mouse Wheel (กลิ้งลูกกลิ้งเมาส์)
+    วิธีนี้จะ smooth กว่าและไม่เกิดการลากคลุมดำ (Select Text)
     """
     try:
         # 1. ค้นหากล่องรายการสินค้า
         target_group = window.descendants(automation_id="ShippingServiceList")
         
-        # --- กรณีหา ID กล่องไม่เจอ (Fallback) ---
-        if not target_group:
-            win_rect = window.rectangle()
-            fallback_y = win_rect.top + int(win_rect.height() * 0.50) # กึ่งกลางแนวตั้ง
-            
-            if direction == 'right':
-                log("   [Warning] หา ID ไม่เจอ -> กดขอบจอขวา")
-                fallback_x = win_rect.left + int(win_rect.width() * 0.95) # 95% ขวา
-            else: 
-                log("   [Warning] หา ID ไม่เจอ -> กดขอบจอซ้าย")
-                fallback_x = win_rect.left + int(win_rect.width() * 0.05) # 5% ซ้าย
-                
-            window.click_input(coords=(fallback_x, fallback_y))
-            return True
+        # กำหนดพื้นที่ที่จะวางเมาส์เพื่อกลิ้ง
+        if target_group:
+            rect = target_group[0].rectangle()
+            # log(f"   [Smart Scroll] พบกล่องรายการ: {rect}")
+        else:
+            rect = window.rectangle()
+            # log("   [Warning] ไม่พบ ID -> ใช้ขนาดหน้าต่างโปรแกรมแทน")
 
-        # --- กรณีเจอกล่อง (คำนวณแม่นยำ) ---
-        container = target_group[0]
-        rect = container.rectangle()
-        target_y = (rect.top + rect.bottom) // 2 # กึ่งกลางแนวตั้ง
+        # จุดที่จะวางเมาส์เพื่อกลิ้ง (วางตรงกลางกล่อง)
+        center_x = (rect.left + rect.right) // 2
+        center_y = (rect.top + rect.bottom) // 2
+
+        # กำหนดจำนวนการหมุน (Wheel dist)
+        # wheel_dist: จำนวนกึ๊กที่จะหมุน (ลบ = ลง/ขวา, บวก = ขึ้น/ซ้าย ขึ้นอยู่กับการตั้งค่าแอพ)
+        # โดยปกติ: wheel_mouse_input(wheel_dist=...) เป็นการเลื่อนแนวตั้ง (Vertical)
+        # แต่ถ้าแอพรองรับ Shift+Scroll หรือ Scroll แนวนอน ต้องใช้วิธีอื่น
+        # *หมายเหตุ: pywinauto รองรับ wheel_dist ธรรมดา ถ้าแอพนี้เป็น List แนวนอน 
+        # การหมุนลูกกลิ้งเฉยๆ อาจจะไม่ไปซ้ายขวา แต่ถ้าแอพรองรับเมาส์วางแล้วหมุนได้เลย ลองใช้โค้ดนี้ดูครับ*
+
+        # ถ้าต้องการ Scroll ซ้ายขวาโดยเฉพาะ โดยไม่ใช้ Drag (เพราะไม่อยากให้คลุมดำ)
+        # เราจะกลับมาใช้การ Click ที่ปุ่มลูกศร (Arrow Button) แต่ระบุพิกัดให้แม่นยำที่สุด
+        
+        target_y = center_y
+        offset = 45 # ระยะห่างจากขอบ
 
         if direction == 'right':
-            # เลื่อนขวา: ขอบขวาสุด - 45 pixel
-            target_x = rect.right - 45
-            log(f"   [Scroll Right] คลิกขอบขวา ({target_x}, {target_y})")
+            # กดปุ่มขวา (อยู่ด้านขวาสุดของกล่อง)
+            target_x = rect.right - offset
+            # log(f"   [Action] คลิกปุ่มขวา ({target_x}, {target_y})")
         else:
-            # เลื่อนซ้าย: ขอบซ้ายสุด + 45 pixel
-            target_x = rect.left + 45
-            log(f"   [Scroll Left] คลิกขอบซ้าย ({target_x}, {target_y})")
-        
-        # สั่งคลิก
-        window.click_input(button='left', coords=(target_x, target_y), double=False)
+            # กดปุ่มซ้าย (อยู่ด้านซ้ายสุดของกล่อง)
+            target_x = rect.left + offset
+            # log(f"   [Action] คลิกปุ่มซ้าย ({target_x}, {target_y})")
+
+        # ใช้ Loop เพื่อกดรัวๆ (แทนการลาก)
+        for i in range(repeat):
+            window.click_input(button='left', coords=(target_x, target_y), double=False)
+            
+            # หน่วงเวลาสั้นๆ (ถ้าไม่หน่วง โปรแกรมอาจรับ input ไม่ทัน)
+            if repeat > 1:
+                time.sleep(0.1) 
+
         return True
 
     except Exception as e:
-        log(f"   [Error] Scroll {direction} Failed: {e}")
+        # log(f"   [Error] Scroll {direction} Failed: {e}")
+        print(e)
         return False
 
 def find_and_click_with_rotate_logic(window, target_id, max_rotations=10):
