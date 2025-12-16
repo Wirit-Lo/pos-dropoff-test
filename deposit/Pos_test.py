@@ -22,62 +22,61 @@ def log(message):
 
 import time
 
-def click_scroll_arrow_smart(window, direction='right', repeat=1):
+def click_scroll_arrow_smart(window, direction='right', repeat=3):
     """
-    ฟังก์ชันเลื่อนหน้าจอแบบ Mouse Wheel (กลิ้งลูกกลิ้งเมาส์)
-    วิธีนี้จะ smooth กว่าและไม่เกิดการลากคลุมดำ (Select Text)
+    ฟังก์ชันเลื่อนหน้าจอแบบ Drag (ลาก/ปัดหน้าจอ)
+    - ข้อดี: ทนต่อการเปลี่ยนขนาดหน้าจอ (ไม่ต้องเล็งปุ่มลูกศรเล็กๆ)
+    - ข้อสังเกต: จะมีการคลุมดำ (Highlight Text) เกิดขึ้น ซึ่งช่วยยืนยันว่าเราจับที่เนื้อหาตรงกลางจริง
+    
+    Args:
+        repeat (int): จำนวนรอบการลาก ยิ่งเยอะยิ่งเลื่อนไปไกล (default=3 เพื่อให้ไวขึ้น)
     """
     try:
         # 1. ค้นหากล่องรายการสินค้า
         target_group = window.descendants(automation_id="ShippingServiceList")
         
-        # กำหนดพื้นที่ที่จะวางเมาส์เพื่อกลิ้ง
+        # กำหนดพื้นที่ที่จะทำการลาก (Rect)
         if target_group:
+            # กรณีเจอ ID: ใช้ขนาดจริงของกล่อง
             rect = target_group[0].rectangle()
-            # log(f"   [Smart Scroll] พบกล่องรายการ: {rect}")
         else:
+            # กรณีไม่เจอ ID (Fallback): ใช้ขนาดหน้าต่างโปรแกรม
             rect = window.rectangle()
-            # log("   [Warning] ไม่พบ ID -> ใช้ขนาดหน้าต่างโปรแกรมแทน")
 
-        # จุดที่จะวางเมาส์เพื่อกลิ้ง (วางตรงกลางกล่อง)
-        center_x = (rect.left + rect.right) // 2
+        # คำนวณจุดกึ่งกลางแนวตั้ง (แกน Y)
         center_y = (rect.top + rect.bottom) // 2
-
-        # กำหนดจำนวนการหมุน (Wheel dist)
-        # wheel_dist: จำนวนกึ๊กที่จะหมุน (ลบ = ลง/ขวา, บวก = ขึ้น/ซ้าย ขึ้นอยู่กับการตั้งค่าแอพ)
-        # โดยปกติ: wheel_mouse_input(wheel_dist=...) เป็นการเลื่อนแนวตั้ง (Vertical)
-        # แต่ถ้าแอพรองรับ Shift+Scroll หรือ Scroll แนวนอน ต้องใช้วิธีอื่น
-        # *หมายเหตุ: pywinauto รองรับ wheel_dist ธรรมดา ถ้าแอพนี้เป็น List แนวนอน 
-        # การหมุนลูกกลิ้งเฉยๆ อาจจะไม่ไปซ้ายขวา แต่ถ้าแอพรองรับเมาส์วางแล้วหมุนได้เลย ลองใช้โค้ดนี้ดูครับ*
-
-        # ถ้าต้องการ Scroll ซ้ายขวาโดยเฉพาะ โดยไม่ใช้ Drag (เพราะไม่อยากให้คลุมดำ)
-        # เราจะกลับมาใช้การ Click ที่ปุ่มลูกศร (Arrow Button) แต่ระบุพิกัดให้แม่นยำที่สุด
         
-        target_y = center_y
-        offset = 45 # ระยะห่างจากขอบ
+        # คำนวณจุดเริ่มต้น (Start) และจุดสิ้นสุด (End) สำหรับการลาก
+        # ใช้ margin 10% จากขอบ เพื่อให้ลากได้ระยะทางยาวที่สุด (80% ของความกว้าง) -> เลื่อนไวขึ้น
+        width = rect.width()
+        margin = int(width * 0.10) 
+
+        start_x = 0
+        end_x = 0
 
         if direction == 'right':
-            # กดปุ่มขวา (อยู่ด้านขวาสุดของกล่อง)
-            target_x = rect.right - offset
-            # log(f"   [Action] คลิกปุ่มขวา ({target_x}, {target_y})")
+            # ต้องการดูข้อมูลทางขวา -> ต้องลากเนื้อหาจาก "ขวา" ไป "ซ้าย"
+            start_x = rect.right - margin
+            end_x = rect.left + margin
         else:
-            # กดปุ่มซ้าย (อยู่ด้านซ้ายสุดของกล่อง)
-            target_x = rect.left + offset
-            # log(f"   [Action] คลิกปุ่มซ้าย ({target_x}, {target_y})")
+            # ต้องการดูข้อมูลทางซ้าย -> ต้องลากเนื้อหาจาก "ซ้าย" ไป "ขวา"
+            start_x = rect.left + margin
+            end_x = rect.right - margin
 
-        # ใช้ Loop เพื่อกดรัวๆ (แทนการลาก)
+        # เริ่มทำการลาก (Loop ตามจำนวน repeat)
         for i in range(repeat):
-            window.click_input(button='left', coords=(target_x, target_y), double=False)
+            # drag_mouse_input: ลากจาก src ไป dst
+            # วิธีนี้จะทำการกดคลิกซ้ายค้างแล้วลาก (ทำให้เกิดแถบสีน้ำเงิน/คลุมดำ)
+            window.drag_mouse_input(dst=(end_x, center_y), src=(start_x, center_y))
             
-            # หน่วงเวลาสั้นๆ (ถ้าไม่หน่วง โปรแกรมอาจรับ input ไม่ทัน)
+            # ใส่ delay น้อยมากๆ (0.05) เพื่อให้ต่อเนื่องและไวขึ้น แต่ไม่เร็ว จนโปรแกรมแฮงค์
             if repeat > 1:
-                time.sleep(0.1) 
+                time.sleep(0.05)
 
         return True
 
     except Exception as e:
-        # log(f"   [Error] Scroll {direction} Failed: {e}")
-        print(e)
+        print(f"Scroll Error: {e}")
         return False
 
 def find_and_click_with_rotate_logic(window, target_id, max_rotations=10):
