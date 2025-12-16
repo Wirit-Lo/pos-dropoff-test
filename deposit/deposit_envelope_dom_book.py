@@ -20,7 +20,7 @@ def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
 # ================= 2. Helper Functions =================
-def click_scroll_arrow_smart(window, direction='right', repeat=10):
+def click_scroll_arrow_smart(window, direction='right', repeat=5):
     """
     ฟังก์ชันเลื่อนหน้าจอโดยใช้ "แป้นพิมพ์" (Keyboard Arrow Keys) ล้วน 100%
     """
@@ -94,7 +94,7 @@ def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
         
         # 2. สั่งเลื่อนหน้าจอ
         if should_scroll:
-            if not click_scroll_arrow_smart(window, repeat=10):
+            if not click_scroll_arrow_smart(window, repeat=5):
                 log("   [Fallback] ใช้ปุ่มลูกศรขวาบนคีย์บอร์ด (สำรอง)")
                 window.type_keys("{RIGHT}")
             
