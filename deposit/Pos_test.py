@@ -43,7 +43,7 @@ def click_scroll_arrow_smart(window, direction='right', repeat=5):
         keys_string = key_code * repeat
         
         # 4. ส่งคำสั่งคีย์บอร์ด (ปรับความเร็วตรง pause=0.02)
-        window.type_keys(keys_string, pause=0.02, set_foreground=False)
+        window.type_keys(keys_string, pause=0.2, set_foreground=False)
 
         return True
 
@@ -93,7 +93,7 @@ def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
         
         # 2. สั่งเลื่อนหน้าจอ (เรียกใช้ฟังก์ชันข้อ 1)
         if should_scroll:
-            if not click_scroll_arrow_smart(window, repeat=10):
+            if not click_scroll_arrow_smart(window, repeat=5):
                 window.type_keys("{RIGHT}") # สำรอง
             time.sleep(1.0) # รอเลื่อน
         
