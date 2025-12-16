@@ -71,7 +71,7 @@ def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
         found_elements = [c for c in window.descendants() if str(c.element_info.automation_id) == target_id and c.is_visible()]
         
         should_scroll = False # ตัวแปรควบคุมการเลื่อน
-        scroll_speed = 5      # ความเร็วปกติ (หาไม่เจอ ให้เลื่อนไว)
+        scroll_speed = 3      # [แก้ไข] ปรับลดจาก 5 เหลือ 3 เพื่อป้องกันการเลื่อนเลย (Overshoot)
 
         if found_elements:
             target = found_elements[0]
@@ -101,7 +101,7 @@ def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
             # ไม่เจอปุ่มเลย -> เลื่อนหาปกติ
             log(f"   [{i}] ไม่เจอปุ่มในหน้านี้ -> เลื่อนขวาค้นหา...")
             should_scroll = True
-            scroll_speed = 5 # หาไม่เจอ ให้เลื่อนไปเร็วๆ
+            # scroll_speed ใช้ค่า default (3) ที่ตั้งไว้ข้างบน
         
         # 2. สั่งเลื่อนหน้าจอ
         if should_scroll:
