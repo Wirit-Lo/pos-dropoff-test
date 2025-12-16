@@ -513,6 +513,7 @@ def run_smart_scenario(main_window, config):
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
         postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
+        register_flag = config['DEPOSIT_ENVELOPE'].get('RegisterOption', 'False')
         special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
         add_insurance_flag = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
         insurance_amt = config['DEPOSIT_ENVELOPE'].get('Insurance', '1000')
@@ -574,20 +575,17 @@ def run_smart_scenario(main_window, config):
     if not find_and_click_with_rotate_logic(main_window, "ShippingService_2583"):
         log("[Error] หาปุ่มบริการไม่เจอ (ShippingService_2583)")
         return
-
+    # เช็คค่าจาก Config ที่อ่านมาข้างบน
+    if str(register_flag).lower() in ['true', 'yes', 'on', '1']:
+        log("...Config สั่งให้เลือก: ลงทะเบียน (Register)...")
+        
+        # ใช้ ID ตามที่คุณแจ้งมา: 'RegisteredToggleIcon'
+        if not click_element_by_id(main_window, "RegisteredToggleIcon", timeout=3):
+             log("[Warning] หาปุ่ม ID: 'RegisteredToggleIcon' ไม่เจอ")
+             
+        time.sleep(0.5)
         main_window.type_keys("{ENTER}")
     
-    time.sleep(1)
-    smart_next(main_window) 
-    time.sleep(step_delay)
-    process_special_services(main_window, special_services)
-    time.sleep(step_delay)
-    process_sender_info_page(main_window)
-    time.sleep(step_delay)
-    process_receiver_address_selection(main_window, addr_keyword, manual_data)
-    time.sleep(step_delay)
-    process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone)
-    time.sleep(step_delay)
     
     # ทำรายการซ้ำ (กด ใช่/ไม่)
     process_repeat_transaction(main_window, repeat_flag)
