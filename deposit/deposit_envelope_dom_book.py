@@ -597,10 +597,9 @@ def run_smart_scenario(main_window, config):
     if str(register_flag).lower() in ['true', 'yes', 'on', '1']:
         log("...Config สั่งให้เลือก: ลงทะเบียน (Register)...")
         
-        # [แก้ไข] ใช้ click_element_by_id แทน smart_click
-        # เป้าหมาย: ID 'RegisteredToggleIcon'
+        # ใช้ ID ตามที่คุณแจ้งมา: 'RegisteredToggleIcon'
         if not click_element_by_id(main_window, "RegisteredToggleIcon", timeout=3):
-             log("[Warning] หาปุ่ม ID: 'RegisteredToggleIcon' ไม่เจอ (อาจจะไม่มีให้เลือก หรือ ID ผิด)")
+             log("[Warning] หาปุ่ม ID: 'RegisteredToggleIcon' ไม่เจอ")
              
     time.sleep(0.5)
 
