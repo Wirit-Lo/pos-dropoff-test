@@ -534,6 +534,10 @@ def run_smart_scenario(main_window, config):
     except: log("[Error] อ่าน Config ไม่สำเร็จ"); return
 
     log(f"--- เริ่มต้นการทำงาน ---")
+    
+    # [NEW LOG] Check what is read
+    log(f"DEBUG Check Config Repeat: {repeat_flag}")
+
     time.sleep(0.5)
 
     if not smart_click(main_window, "รับฝากสิ่งของ"): return
@@ -705,6 +709,12 @@ def run_smart_scenario(main_window, config):
 
     # ทำรายการซ้ำ (กด ใช่/ไม่)
     process_repeat_transaction(main_window, repeat_flag)
+
+    # [NEW] Stop if Repeat is True
+    if str(repeat_flag).lower() in ['true', 'yes', 'on', '1']:
+         log("...Config สั่งทำรายการซ้ำ -> จบการทำงานตรงนี้ (ไม่ไปชำระเงิน)")
+         log("\n[SUCCESS] จบการทำงาน (Repeat Mode)")
+         return
     
     # ชำระเงิน (ต่อจากทำรายการซ้ำ)
     process_payment(main_window, pay_method, pay_amount)
