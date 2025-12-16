@@ -56,7 +56,7 @@ def click_scroll_arrow_smart(window, direction='right', repeat=5):
         except:
             return False
 
-def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
+def find_and_click_with_rotate_logic(window, target_id, max_rotations=5):
     """
     ค้นหาปุ่มบริการแบบวนลูป (Search -> Click -> If Not Found -> Scroll)
     """
@@ -513,6 +513,7 @@ def run_smart_scenario(main_window, config):
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
         postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
+        register_flag = config['DEPOSIT_ENVELOPE'].get('RegisterOption', 'False')
         max_search_rotations = int(config['SETTINGS'].get('MaxSearchRotations', 5))
         special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
         add_insurance_flag = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
@@ -575,6 +576,19 @@ def run_smart_scenario(main_window, config):
     if not find_and_click_with_rotate_logic(main_window, "ShippingService_2583", max_rotations= max_search_rotations):
         log("[Error] หาปุ่มบริการไม่เจอ (ShippingService_2583)")
         return
+        time.sleep(1.0) # รอให้ปุ่มเด้งขึ้นมา
+    
+    # เช็คค่าจาก Config ที่อ่านมาข้างบน
+    if str(register_flag).lower() in ['true', 'yes', 'on', '1']:
+        log("...Config สั่งให้เลือก: ลงทะเบียน (Register)...")
+        
+        # ใช้ ID ตามที่คุณแจ้งมา: 'RegisteredToggleIcon'
+        if not click_element_by_id(main_window, "RegisteredToggleIcon", timeout=3):
+             log("[Warning] หาปุ่ม ID: 'RegisteredToggleIcon' ไม่เจอ")
+             
+        time.sleep(0.5)
+    
+
         main_window.type_keys("{ENTER}")
     
     time.sleep(1)
