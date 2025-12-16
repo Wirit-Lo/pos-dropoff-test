@@ -515,6 +515,7 @@ def run_smart_scenario(main_window, config):
         postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
         register_flag = config['DEPOSIT_ENVELOPE'].get('RegisterOption', 'False')
+        max_search_rotations = int(config['SETTINGS'].get('MaxSearchRotations', 5))
         special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
         add_insurance_flag = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
         insurance_amt = config['DEPOSIT_ENVELOPE'].get('Insurance', '1000')
@@ -568,12 +569,12 @@ def run_smart_scenario(main_window, config):
             if "ทับซ้อน" in child.window_text() or "พื้นที่" in child.window_text():
                 smart_click(main_window, "ดำเนินการ"); found = True; break
         if found: break
-        time.sleep(0.5)
+        time.sleep(0.5) 
 
     log("...รอหน้าบริการหลัก...")
     wait_until_id_appears(main_window, "ShippingService_2583", timeout=wait_timeout)
      # คลิก 1 ครั้ง
-    if not find_and_click_with_rotate_logic(main_window, "ShippingService_2583"):
+    if not find_and_click_with_rotate_logic(main_window, "ShippingService_2583", max_rotations= max_search_rotations):
         log("[Error] หาปุ่มบริการไม่เจอ (ShippingService_2583)")
         return
     
