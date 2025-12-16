@@ -20,7 +20,7 @@ def log(message):
 
 # ================= 2. Core Functions (แก้ไขใหม่) =================
 
-def click_scroll_arrow_smart(window, direction='right', repeat=5):
+def click_scroll_arrow_smart(window, direction='right', repeat=15):
     """
     ฟังก์ชันเลื่อนหน้าจอแบบ Drag (ลาก/ปัดหน้าจอ) แบบ Speed
     - repeat: ค่าเริ่มต้นปรับเป็น 5 รอบ เพื่อให้เลื่อนไปได้ไกลขึ้นมาก
