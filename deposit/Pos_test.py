@@ -20,7 +20,7 @@ def log(message):
 
 # ================= 2. Core Functions (แก้ไขใหม่) =================
 
-def click_scroll_arrow_smart(window, direction='right', repeat=10):
+def click_scroll_arrow_smart(window, direction='right', repeat=5):
     """
     ฟังก์ชันเลื่อนหน้าจอโดยใช้ "แป้นพิมพ์" (Keyboard Arrow Keys) ล้วน 100%
     - ตัดระบบ Mouse/Drag ออกทั้งหมด เพื่อความเสถียรสูงสุด
