@@ -517,6 +517,7 @@ def run_smart_scenario(main_window, config):
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
         postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
+        register_flag = config['DEPOSIT_ENVELOPE'].get('RegisterOption', 'False')
         special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
         special_services = config['SPECIAL_SERVICES'].get('Services', '')
         addr_keyword = config['RECEIVER'].get('AddressKeyword', '99/99')
@@ -590,6 +591,18 @@ def run_smart_scenario(main_window, config):
     if not find_and_click_with_rotate_logic(main_window, "ShippingService_2583", max_rotations=max_search_rotations):
         log("[Error] หาปุ่มบริการไม่เจอ (ShippingService_2583) แม้จะเลื่อนหาแล้ว")
         return
+    
+    time.sleep(1.0) # สำคัญ: รอให้เมนูย่อย (ปุ่มวงกลม) เด้งขึ้นมาหลังจากกดปุ่มหลัก
+    
+    # ตรวจสอบค่า Config (อย่าลืมประกาศตัวแปร register_flag ด้านบนตอนอ่าน Config ด้วยนะครับ)
+    if str(register_flag).lower() in ['true', 'yes', 'on', '1']:
+        log("...Config สั่งให้เลือก: ลงทะเบียน (Register)...")
+        
+        # สั่งกดปุ่มที่มีคำว่า "ลงทะเบียน" (ปรับคำได้ตามหน้าจอจริง เช่น "ลงทะเบียน", "EMS")
+        if not smart_click(main_window, "ลงทะเบียน", timeout=3):
+             log("[Warning] หาปุ่ม 'ลงทะเบียน' ไม่เจอ (อาจจะไม่มีให้เลือก)")
+             
+    time.sleep(0.5) # พักนิดนึงเพื่อให้แน่ใจว่าติ๊กแล้ว
 
     # ================================================
 
