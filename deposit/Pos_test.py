@@ -20,58 +20,48 @@ def log(message):
 
 # ================= 2. Core Functions (แก้ไขใหม่) =================
 
-import time
-
-def click_scroll_arrow_smart(window, direction='right', repeat=1):
+def click_scroll_arrow_smart(window, direction='right'):
     """
-    ฟังก์ชันเลื่อนหน้าจอแบบ Drag (ปัดหน้าจอ)
-    วิธีนี้แก้ปัญหาการ Click แล้วไม่เลื่อน โดยการจำลองการลากเมาส์แทน
+    ฟังก์ชันกดปุ่มเลื่อนหน้าจอ (Smart Click)
+    รองรับ:
+     - direction='right' : เลื่อนไปทางขวา (ค่าเริ่มต้น)
+     - direction='left'  : เลื่อนไปทางซ้าย (เลื่อนกลับ)
     """
     try:
         # 1. ค้นหากล่องรายการสินค้า
         target_group = window.descendants(automation_id="ShippingServiceList")
         
-        # กำหนดพื้นที่ที่จะทำการลาก (Rect)
-        if target_group:
-            # กรณีเจอ ID: ใช้ขนาดจริงของกล่อง
-            rect = target_group[0].rectangle()
-            log(f"   [Smart Scroll] พบกล่องรายการ: {rect}")
-        else:
-            # กรณีไม่เจอ ID (Fallback): ใช้ขนาดหน้าต่างโปรแกรม
-            rect = window.rectangle()
-            log("   [Warning] ไม่พบ ID -> ใช้ขนาดหน้าต่างโปรแกรมแทน")
+        # --- กรณีหา ID กล่องไม่เจอ (Fallback) ---
+        if not target_group:
+            win_rect = window.rectangle()
+            fallback_y = win_rect.top + int(win_rect.height() * 0.50) # กึ่งกลางแนวตั้ง
+            
+            if direction == 'right':
+                log("   [Warning] หา ID ไม่เจอ -> กดขอบจอขวา")
+                fallback_x = win_rect.left + int(win_rect.width() * 0.95) # 95% ขวา
+            else: 
+                log("   [Warning] หา ID ไม่เจอ -> กดขอบจอซ้าย")
+                fallback_x = win_rect.left + int(win_rect.width() * 0.05) # 5% ซ้าย
+                
+            window.click_input(coords=(fallback_x, fallback_y))
+            return True
 
-        # คำนวณจุดกึ่งกลางแนวตั้ง (แกน Y)
-        center_y = (rect.top + rect.bottom) // 2
-        
-        # คำนวณจุดเริ่มต้น (Start) และจุดสิ้นสุด (End) สำหรับการลาก
-        # margin: ระยะเว้นจากขอบเข้ามา เพื่อให้มั่นใจว่ากดโดนเนื้อหาที่จะลาก (20% จากขอบ)
-        width = rect.width()
-        margin = int(width * 0.2) 
-
-        start_x = 0
-        end_x = 0
+        # --- กรณีเจอกล่อง (คำนวณแม่นยำ) ---
+        container = target_group[0]
+        rect = container.rectangle()
+        target_y = (rect.top + rect.bottom) // 2 # กึ่งกลางแนวตั้ง
 
         if direction == 'right':
-            # ต้องการดูข้อมูลทางขวา -> ต้องลากเนื้อหาจาก "ขวา" ไป "ซ้าย"
-            start_x = rect.right - margin
-            end_x = rect.left + margin
-            log(f"   [Action] กำลังปัดหน้าจอไปทางขวา (Drag Right->Left) x {repeat} รอบ")
+            # เลื่อนขวา: ขอบขวาสุด - 45 pixel
+            target_x = rect.right - 45
+            log(f"   [Scroll Right] คลิกขอบขวา ({target_x}, {target_y})")
         else:
-            # ต้องการดูข้อมูลทางซ้าย -> ต้องลากเนื้อหาจาก "ซ้าย" ไป "ขวา"
-            start_x = rect.left + margin
-            end_x = rect.right - margin
-            log(f"   [Action] กำลังปัดหน้าจอไปทางซ้าย (Drag Left->Right) x {repeat} รอบ")
-
-        # เริ่มทำการลาก (Loop ตามจำนวน repeat)
-        for i in range(repeat):
-            # drag_mouse_input(dst, src) -> ลากจาก src ไป dst
-            window.drag_mouse_input(dst=(end_x, center_y), src=(start_x, center_y))
-            
-            # พักเล็กน้อยเพื่อให้ UI ขยับตามทัน
-            if repeat > 1:
-                time.sleep(0.5)
-
+            # เลื่อนซ้าย: ขอบซ้ายสุด + 45 pixel
+            target_x = rect.left + 45
+            log(f"   [Scroll Left] คลิกขอบซ้าย ({target_x}, {target_y})")
+        
+        # สั่งคลิก
+        window.click_input(button='left', coords=(target_x, target_y), double=False)
         return True
 
     except Exception as e:
