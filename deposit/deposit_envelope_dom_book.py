@@ -592,6 +592,11 @@ def run_smart_scenario(main_window, config):
     # เปลี่ยนจากการรอและกดเฉยๆ เป็นการใช้ find_and_click_with_rotate_logic
     # เพื่อให้มีการวนลูปเช็ค -> ถ้าไม่เจอ -> กดเลื่อน (Scroll) -> หาใหม่
     
+    log("...รอโหลดหน้าบริการหลัก (System Wait)...")
+    # รอให้ Container ของรายการสินค้าโหลดขึ้นมาก่อน (เพื่อให้แน่ใจว่าเข้าหน้าหลักแล้ว)
+    wait_until_id_appears(main_window, "ShippingServiceList", timeout=wait_timeout)
+    time.sleep(1.5) # รอเพิ่มเติมให้ UI นิ่งจริงๆ
+    
     log("...กำลังค้นหาและกดปุ่ม ShippingService_2583 (รองรับการเลื่อน)...")
     
     # ใช้ฟังก์ชันนี้จะช่วยเลื่อนหาปุ่มให้อัตโนมัติถ้าปุ่มยังไม่โผล่หรือโดนบัง
