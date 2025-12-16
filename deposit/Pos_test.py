@@ -573,7 +573,7 @@ def run_smart_scenario(main_window, config):
     log("...รอหน้าบริการหลัก...")
     wait_until_id_appears(main_window, "ShippingService_2583", timeout=wait_timeout)
      # คลิก 1 ครั้ง
-    if not click_element_by_id(main_window, "ShippingService_2583"):
+    if not find_and_click_with_rotate_logic(main_window, "ShippingService_2583"):
         log("[Error] หาปุ่มบริการไม่เจอ (ShippingService_2583)")
         return
     
