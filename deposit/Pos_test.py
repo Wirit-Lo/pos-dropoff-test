@@ -56,7 +56,7 @@ def click_scroll_arrow_smart(window, direction='right', repeat=5):
         except:
             return False
 
-def find_and_click_with_rotate_logic(window, target_id, max_rotations=5):
+def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
     """
     ค้นหาปุ่มบริการแบบวนลูป (Search -> Click -> If Not Found -> Scroll)
     """
@@ -67,7 +67,6 @@ def find_and_click_with_rotate_logic(window, target_id, max_rotations=5):
         found_elements = [c for c in window.descendants() if str(c.element_info.automation_id) == target_id and c.is_visible()]
         
         should_scroll = False # ตัวแปรควบคุมการเลื่อน
-        scroll_steps = 10     # [FIX] ตัวแปรสำหรับกำหนดจำนวนครั้งการเลื่อน
 
         if found_elements:
             target = found_elements[0]
@@ -78,29 +77,26 @@ def find_and_click_with_rotate_logic(window, target_id, max_rotations=5):
             safe_limit = win_rect.left + (win_rect.width() * 0.70) 
             
             if rect.right < safe_limit:
-                 # กรณี: อยู่ในระยะปลอดภัย ให้กดเลย
+                 # ถ้าอยู่ในระยะปลอดภัย ให้กดเลย
                  log(f"   [{i}] ✅ เจอปุ่มใน Safe Zone -> กำลังกด...")
                  try: target.click_input()
                  except: target.set_focus(); window.type_keys("{ENTER}")
                  return True
             else:
-                 # กรณี: เจอแต่ตกขอบ ให้สั่งเลื่อน "นิดเดียว" พอ
-                 log(f"   [{i}] ⚠️ เจอปุ่มแต่โดนบัง/อยู่ขวาสุด -> ขยับจอเล็กน้อย (2 ครั้ง)")
+                 # ถ้าตกขอบ ให้สั่งเลื่อน
+                 log(f"   [{i}] ⚠️ เจอปุ่มแต่โดนบัง/อยู่ขวาสุด -> ต้องเลื่อน")
                  should_scroll = True
-                 scroll_steps = 2 # [FIX] ลดจำนวนครั้งลงถ้าเจอตัวแล้ว เพื่อป้องกันการเลย
         else:
-            # ถ้าหาไม่เจอเลย ให้สั่งเลื่อนเยอะหน่อยเพื่อหา
-            log(f"   [{i}] ไม่เจอปุ่มในหน้านี้ -> เลื่อนขวาค้นหา (10 ครั้ง)...")
+            # ถ้าหาไม่เจอเลย ให้สั่งเลื่อน
+            log(f"   [{i}] ไม่เจอปุ่มในหน้านี้ -> เลื่อนขวา...")
             should_scroll = True
-            scroll_steps = 10 # [FIX] หาไม่เจอให้เลื่อนเร็วๆ
         
-        # 2. สั่งเลื่อนหน้าจอ
+        # 2. สั่งเลื่อนหน้าจอ (เรียกใช้ฟังก์ชันข้อ 1)
         if should_scroll:
-            # เรียกใช้ฟังก์ชันกดลูกศรขวา ตามจำนวน scroll_steps ที่คำนวณไว้
-            if not click_scroll_arrow_smart(window, repeat=scroll_steps):
+            if not click_scroll_arrow_smart(window, repeat=10):
                 window.type_keys("{RIGHT}") # สำรอง
             time.sleep(1.0) # รอเลื่อน
-    
+        
     log(f"[X] หมดความพยายามในการหาปุ่ม '{target_id}'")
     return False
 
@@ -517,9 +513,8 @@ def run_smart_scenario(main_window, config):
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
         postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
-        register_flag = config['DEPOSIT_ENVELOPE'].get('RegisterOption', 'False')
-        max_search_rotations = int(config['SETTINGS'].get('MaxSearchRotations', 5))
         special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
+        register_flag = config['DEPOSIT_ENVELOPE'].get('RegisterOption', 'False')
         add_insurance_flag = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
         insurance_amt = config['DEPOSIT_ENVELOPE'].get('Insurance', '1000')
         special_services = config['SPECIAL_SERVICES'].get('Services', '')
@@ -575,12 +570,13 @@ def run_smart_scenario(main_window, config):
         time.sleep(0.5)
 
     log("...รอหน้าบริการหลัก...")
-    wait_until_id_appears(main_window, "ShippingService_2583", timeout=wait_timeout)
+    wait_until_id_appears(main_window, "ShippingService_2580", timeout=wait_timeout)
      # คลิก 1 ครั้ง
-    if not find_and_click_with_rotate_logic(main_window, "ShippingService_2583", max_rotations= max_search_rotations):
-        log("[Error] หาปุ่มบริการไม่เจอ (ShippingService_2583)")
+    if not click_element_by_id(main_window, "ShippingService_2580"):
+        log("[Error] หาปุ่มบริการไม่เจอ (ShippingService_2580)")
         return
-        
+        time.sleep(1.0) # รอให้ปุ่มเด้งขึ้นมา
+    
     # เช็คค่าจาก Config ที่อ่านมาข้างบน
     if str(register_flag).lower() in ['true', 'yes', 'on', '1']:
         log("...Config สั่งให้เลือก: ลงทะเบียน (Register)...")
@@ -591,7 +587,7 @@ def run_smart_scenario(main_window, config):
              
         time.sleep(0.5)
 
-    main_window.type_keys("{ENTER}")
+        main_window.type_keys("{ENTER}")
     
     time.sleep(1)
     smart_next(main_window) 
