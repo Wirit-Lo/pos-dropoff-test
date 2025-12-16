@@ -595,23 +595,28 @@ def run_smart_scenario(main_window, config):
         log("[Error] หาปุ่มบริการไม่เจอ (ShippingService_2583)")
         return
 
-    # [FIXED SECTION: Register Toggle & Next]
+    # [FIXED LOGIC] แยก Flow ตามการลงทะเบียน (Register)
     # -------------------------------------------------------------------------
-    # เช็คค่าจาก Config ว่าจะติ๊กหรือไม่
-    if str(register_flag).lower() in ['true', 'yes', 'on', '1']:
+    is_registered = str(register_flag).lower() in ['true', 'yes', 'on', '1']
+
+    if is_registered:
         log("...Config สั่งให้เลือก: ลงทะเบียน (Register)...")
         if not click_element_by_id(main_window, "RegisteredToggleIcon", timeout=3):
              log("[Warning] หาปุ่ม ID: 'RegisteredToggleIcon' ไม่เจอ")
     
     time.sleep(0.5)
     
-    # [สำคัญ] เอาคำสั่งกด ENTER (ถัดไป) ออกมาอยู่นอก if
-    # เพื่อให้มันทำงานเสมอ แม้ว่า register_flag จะเป็น False
-    log("...กดถัดไป (Enter) เพื่อเข้าสู่หน้าบริการเสริม...")
+    # [สำคัญ] กด Enter เพื่อไปขั้นตอนถัดไป
+    log("...กดถัดไป (Enter) เพื่อเข้าสู่ขั้นตอนต่อไป...")
     main_window.type_keys("{ENTER}")
     
-    # [NEW] จัดการ Popup จำนวน (ทำงานเฉพาะกรณีไม่ได้ติ๊ก Register ตามที่แจ้ง)
-    if str(register_flag).lower() not in ['true', 'yes', 'on', '1']:
+    # -------------------------------------------------------------------------
+    # Flow แยก:
+    # 1. ไม่ลงทะเบียน -> กรอกจำนวน -> ข้ามรายละเอียด -> ทำรายการซ้ำ
+    # 2. ลงทะเบียน -> กรอกรายละเอียดครบ -> ทำรายการซ้ำ
+    # -------------------------------------------------------------------------
+    
+    if not is_registered:
         log("...Config ไม่ได้เลือกลงทะเบียน -> เข้าสู่กระบวนการจัดการ Popup จำนวน...")
 
         # ดึงค่าจาก Config ตามที่ต้องการ
@@ -704,31 +709,34 @@ def run_smart_scenario(main_window, config):
 
         else:
             log("[Error] หา Popup Window ไม่เจอเลย (อาจจะเด้งช้าหรือจับผิดตัว)")
-        # --- จบส่วน Popup ---
+        
+        # --- จบส่วน Popup จำนวน ---
+        
+        log("...ข้ามขั้นตอนกรอกรายละเอียด (เนื่องจากไม่ได้ลงทะเบียน) -> ไปจัดการหน้าทำรายการซ้ำทันที...")
+
+    else:
+        # กรณีลงทะเบียน (Register = True) -> ทำตามขั้นตอนปกติ
+        time.sleep(step_delay)
+        
+        # 1. บริการพิเศษ (EMS, ประกัน ฯลฯ)
+        process_special_services(main_window, special_services)
+        time.sleep(step_delay)
+        
+        # 2. ข้อมูลผู้ส่ง (มักจะข้าม)
+        process_sender_info_page(main_window)
+        time.sleep(step_delay)
+        
+        # 3. เลือกที่อยู่ผู้รับ
+        process_receiver_address_selection(main_window, addr_keyword, manual_data)
+        time.sleep(step_delay)
+        
+        # 4. กรอกชื่อผู้รับและเบอร์โทร
+        process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone)
+        time.sleep(step_delay)
+    
     # -------------------------------------------------------------------------
 
-    time.sleep(step_delay)
-    
-    # [RESTORED SECTIONS: เติมส่วนที่หายไปกลับเข้ามา]
-    # -------------------------------------------------------------------------
-    # 1. บริการพิเศษ (EMS, ประกัน ฯลฯ)
-    process_special_services(main_window, special_services)
-    time.sleep(step_delay)
-    
-    # 2. ข้อมูลผู้ส่ง (มักจะข้าม)
-    process_sender_info_page(main_window)
-    time.sleep(step_delay)
-    
-    # 3. เลือกที่อยู่ผู้รับ
-    process_receiver_address_selection(main_window, addr_keyword, manual_data)
-    time.sleep(step_delay)
-    
-    # 4. กรอกชื่อผู้รับและเบอร์โทร
-    process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone)
-    time.sleep(step_delay)
-    # -------------------------------------------------------------------------
-
-    # ทำรายการซ้ำ (กด ใช่/ไม่)
+    # ทำรายการซ้ำ (กด ใช่/ไม่) -> ทั้งสองกรณี (ลงทะเบียน/ไม่ลงทะเบียน) จะมาจบที่นี่
     process_repeat_transaction(main_window, repeat_flag)
 
     # [NEW] Stop if Repeat is True
@@ -737,7 +745,7 @@ def run_smart_scenario(main_window, config):
          log("\n[SUCCESS] จบการทำงาน (Repeat Mode)")
          return
     
-    # ชำระเงิน (ต่อจากทำรายการซ้ำ)
+    # ชำระเงิน (ต่อจากทำรายการซ้ำ ถ้าเลือก "ไม่")
     process_payment(main_window, pay_method, pay_amount)
 
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
