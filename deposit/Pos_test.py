@@ -212,64 +212,73 @@ def process_sender_info_page(window):
     wait_for_text(window, "ข้อมูลผู้ส่ง", timeout=5)
     smart_next(window)
 
+# ฟังก์ชันใหม่: ค้นหา Element แบบ Smart (Text หรือ ID)
+def find_and_fill_smart(window, target_name, target_id_keyword, value):
+    try:
+        target_elem = None
+        # วนลูปหาแค่รอบเดียวเพื่อประสิทธิภาพ
+        for child in window.descendants():
+            # ข้าม Element ที่มองไม่เห็น
+            if not child.is_visible(): continue
+            
+            # ดึงค่า ID และ Name
+            aid = child.element_info.automation_id
+            name = child.element_info.name
+            
+            # 1. เช็คจากชื่อ (Name) - แม่นยำสุดสำหรับภาษาไทย
+            if target_name and name and target_name in name:
+                target_elem = child
+                break
+                
+            # 2. เช็คจาก ID (Automation ID) - ถ้าชื่อไม่เจอ
+            if target_id_keyword and aid and target_id_keyword in aid:
+                target_elem = child
+                break
+        
+        if target_elem:
+            # ถ้าเจอแล้วว่าเป็น Container หรืออะไรก็ตาม พยายามหา Edit ข้างใน หรือคลิกเลย
+            log(f"   -> เจอช่อง '{target_name}/{target_id_keyword}' -> กรอก: {value}")
+            
+            # พยายามหา Edit box ข้างในก่อน (เผื่อเป็น Container)
+            try:
+                edits = target_elem.descendants(control_type="Edit")
+                if edits:
+                    target_elem = edits[0]
+            except: pass
+
+            target_elem.set_focus()
+            target_elem.click_input()
+            target_elem.type_keys(str(value), with_spaces=True)
+            return True
+        else:
+            log(f"[WARN] หาช่อง '{target_name}' ไม่เจอ")
+            return False
+            
+    except Exception as e:
+        log(f"[!] Error find_and_fill: {e}")
+        return False
+
 def fill_manual_address(window, manual_data):
     """
-    กรอกที่อยู่เองเมื่อเกิด Error/Popup (ดึงค่าจาก Config)
-    [Update] ใช้ ID เจาะจงช่อง Province, District, SubDistrict
+    กรอกที่อยู่เองเมื่อเกิด Error/Popup (ใช้การค้นหา Text ภาษาไทยเป็นหลัก)
     """
-    log("...เข้าสู่โหมดกรอกที่อยู่ด้วยตนเอง (Manual Fallback: ID Mode)...")
+    log("...เข้าสู่โหมดกรอกที่อยู่ด้วยตนเอง (Manual Fallback: Smart Search)...")
     province = manual_data.get('Province', '')
     district = manual_data.get('District', '')
     subdistrict = manual_data.get('SubDistrict', '')
     log(f"   -> ข้อมูล: {province} > {district} > {subdistrict}")
 
-    def fill_by_id(target_id, value, name):
-        try:
-            # หา Container ตาม ID
-            containers = window.descendants(automation_id=target_id)
-            if not containers: 
-                log(f"[WARN] ไม่พบ ID: {target_id}")
-                return False
-            
-            target_container = containers[0]
-            # หา Edit ข้างใน
-            edits = target_container.descendants(control_type="Edit")
-            if not edits: target_edit = target_container
-            else: target_edit = edits[0]
+    # 1. จังหวัด (Name: จังหวัด, ID: AdministrativeArea)
+    if not find_and_fill_smart(window, "จังหวัด", "AdministrativeArea", province):
+        window.type_keys("{TAB}"); window.type_keys(province, with_spaces=True)
 
-            # ตรวจสอบค่าเดิม
-            try:
-                curr_val = target_edit.get_value()
-                if curr_val and str(curr_val).strip():
-                    log(f"...ช่อง '{name}' มีข้อมูลแล้ว ({curr_val}) -> ข้าม")
-                    return True
-            except: pass
-            
-            # กรอกค่า
-            log(f"...ช่อง '{name}' ว่าง -> กรอก: {value}")
-            target_edit.set_focus()
-            target_edit.click_input()
-            target_edit.type_keys(str(value), with_spaces=True)
-            return True
-        except Exception as e:
-            log(f"[!] Error fill_by_id {name}: {e}")
-            return False
+    # 2. เขต/อำเภอ (Name: เขต/อำเภอ, ID: Locality)
+    if not find_and_fill_smart(window, "เขต/อำเภอ", "Locality", district):
+        window.type_keys("{TAB}"); window.type_keys(district, with_spaces=True)
 
-    # 1. จังหวัด (AdministrativeArea)
-    if not fill_by_id("AdministrativeArea_UserControlBase", province, "จังหวัด"):
-        log("[!] กรอกจังหวัดด้วย ID ไม่สำเร็จ -> ใช้ Fallback Tab")
-        window.type_keys("{TAB}")
-        window.type_keys(province, with_spaces=True)
-
-    # 2. เขต/อำเภอ (Locality)
-    if not fill_by_id("Locality_UserControlBase", district, "เขต/อำเภอ"):
-        window.type_keys("{TAB}")
-        window.type_keys(district, with_spaces=True)
-
-    # 3. แขวง/ตำบล (DependentLocality)
-    if not fill_by_id("DependentLocality_UserControlBase", subdistrict, "แขวง/ตำบล"):
-        window.type_keys("{TAB}")
-        window.type_keys(subdistrict, with_spaces=True)
+    # 3. แขวง/ตำบล (Name: แขวง/ตำบล, ID: DependentLocality)
+    if not find_and_fill_smart(window, "แขวง/ตำบล", "DependentLocality", subdistrict):
+        window.type_keys("{TAB}"); window.type_keys(subdistrict, with_spaces=True)
 
 def process_receiver_address_selection(window, address_keyword, manual_data):
     log(f"--- หน้า: ค้นหาที่อยู่ ({address_keyword}) ---")
@@ -336,77 +345,39 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
 
 def process_receiver_details_form(window, fname, lname, phone):
     """
-    [Update] ใช้ ID ในการระบุช่อง ชื่อ, นามสกุล, เบอร์โทร
-    และจัดการ Error Popup ที่อาจบังหน้าจออยู่ก่อนเริ่มหา ID
+    [Update] ใช้ Smart Search หาจาก Name หรือ ID
     """
     log("--- หน้า: รายละเอียดผู้รับ ---")
     log("...รอหน้าจอโหลด (พร้อมตรวจสอบ Popup Error)...")
     
-    # [FIX] ลูปเพื่อรอให้ ID ปรากฏ โดยเช็ค Popup Error ไปด้วยตลอดเวลา
-    # เพื่อแก้ปัญหา Popup บังจน Timeout
-    target_id = "CustomerFirstName_UserControlBase"
-    found_id = False
-    
-    for _ in range(30): # รอประมาณ 15-30 วินาที
-        # 1. เช็ค Popup Error ก่อนเลย
+    # วนลูปเช็ค Popup และรอหน้าจอ
+    for _ in range(30):
         if check_error_popup(window, delay=0):
             log("...ปิด Popup แล้ว -> รอโหลดฟอร์มต่อ...")
-            time.sleep(1.0) # ให้เวลาฟอร์มโหลดหลังปิด Popup
-            
-        # 2. ลองหา ID เป้าหมาย
-        try:
-            containers = window.descendants(automation_id=target_id)
-            if containers and containers[0].is_visible():
-                found_id = True
-                log(f"[/] พบ ID: {target_id}")
-                break
-        except: pass
+            time.sleep(1.0)
+        
+        # ลองเช็คว่ามีช่องชื่อโผล่มาหรือยัง
+        found = False
+        for child in window.descendants():
+            if "ชื่อ" in child.window_text() or "CustomerFirstName" in str(child.element_info.automation_id):
+                found = True; break
+        if found: break
         time.sleep(0.5)
 
-    if not found_id:
-        log(f"[WARN] หมดเวลา! ไม่พบ ID: {target_id} -> จะพยายามกรอกต่อแบบ Fallback")
-
+    # เริ่มกรอกข้อมูล
     try:
-        def fill_by_id(target_id, value, name):
-            try:
-                containers = window.descendants(automation_id=target_id)
-                if not containers: return False
-                
-                target_container = containers[0]
-                edits = target_container.descendants(control_type="Edit")
-                if not edits: target_edit = target_container
-                else: target_edit = edits[0]
-
-                try:
-                    curr_val = target_edit.get_value()
-                    if curr_val and str(curr_val).strip():
-                        log(f"...ช่อง '{name}' มีข้อมูลแล้ว ({curr_val}) -> ข้าม")
-                        return True
-                except: pass
-                
-                log(f"...ช่อง '{name}' ว่าง -> กรอก: {value}")
-                target_edit.set_focus()
-                target_edit.click_input()
-                target_edit.type_keys(str(value), with_spaces=True)
-                return True
-            except: return False
-
-        # 1. ชื่อ (First Name)
-        if not fill_by_id("CustomerFirstName_UserControlBase", fname, "ชื่อ"):
-            log("[WARN] ไม่พบ ID ชื่อ -> ลองกด Tab")
+        # 1. ชื่อ (Name: ชื่อ, ID: CustomerFirstName)
+        find_and_fill_smart(window, "ชื่อ", "CustomerFirstName", fname)
         
-        # 2. นามสกุล (Last Name)
-        fill_by_id("CustomerLastName_UserControlBase", lname, "นามสกุล")
+        # 2. นามสกุล (Name: นามสกุล, ID: CustomerLastName)
+        find_and_fill_smart(window, "นามสกุล", "CustomerLastName", lname)
 
-        # 3. เบอร์โทร (Phone) - เลื่อนลงก่อนหา
+        # 3. เบอร์โทร (Name: หมายเลขโทรศัพท์/โทร, ID: PhoneNumber)
         force_scroll_down(window, -5)
-        if not fill_by_id("PhoneNumber_UserControlBase", phone, "เบอร์โทร"):
-             # Fallback กรณีหา ID เบอร์ไม่เจอ
-             log("[WARN] ไม่พบ ID เบอร์โทร -> ลองหาด้วยคำว่า Phone/โทร")
-             visible_edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
-             for edit in visible_edits:
-                if "โทร" in edit.element_info.name or "Phone" in edit.element_info.automation_id:
-                    edit.click_input(); edit.type_keys(str(phone), with_spaces=True); break
+        # ลองหาคำว่า "หมายเลขโทรศัพท์" ก่อน
+        if not find_and_fill_smart(window, "หมายเลขโทรศัพท์", "PhoneNumber", phone):
+             # ถ้าไม่เจอ ลองคำว่า "โทร"
+             find_and_fill_smart(window, "โทร", "Phone", phone)
 
     except Exception as e: log(f"[!] Error Details: {e}")
 
