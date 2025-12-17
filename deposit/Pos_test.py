@@ -215,6 +215,10 @@ def process_sender_info_page(window):
 # ฟังก์ชันใหม่: ค้นหา Element แบบ Smart (Text หรือ ID)
 def find_and_fill_smart(window, target_name, target_id_keyword, value):
     try:
+        # [แก้ไข] ถ้าค่าว่าง ให้ข้ามเลย ไม่ต้องหาและไม่ต้องคลิก (เพื่อความเร็ว)
+        if not value or str(value).strip() == "":
+            return False
+
         target_elem = None
         # วนลูปหาแค่รอบเดียวเพื่อประสิทธิภาพ
         for child in window.descendants():
@@ -298,13 +302,9 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
 
         if found_popup:
             # เจอ Popup -> เข้า Manual Mode
-            # [แก้] ไม่ต้องกรอกอะไรที่นี่ ให้ไปกรอกที่หน้า Details ทีเดียว (เรียงจากบนลงล่าง)
             log("...เข้าสู่โหมดกรอกเอง (Manual Mode) -> รอส่งข้อมูลหน้าถัดไป...")
             is_manual_mode = True
             time.sleep(1.0)
-            # ไม่กด Next เพราะการปิด Popup มักจะเผยหน้าจอให้กรอกอยู่แล้ว
-            # หรือถ้าต้องกดจริงๆ ค่อยเปิดบรรทัดล่างนี้
-            # smart_next(window)
             
         elif found_list:
             log("...เจอรายการที่อยู่ -> เลือกรายการแรกสุด...")
@@ -333,7 +333,7 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
 
 def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, manual_data):
     """
-    หน้ากรอกรายละเอียด: กรอก ชื่อ -> [ที่อยู่] -> เบอร์โทร
+    หน้ากรอกรายละเอียด: กรอกข้อมูลตามลำดับ 1-8 ที่ระบุมา
     """
     log("--- หน้า: รายละเอียดผู้รับ ---")
     log("...รอหน้าจอโหลด (พร้อมตรวจสอบ Popup Error)...")
@@ -352,7 +352,7 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
         if found: break
         time.sleep(0.5)
 
-    # เริ่มกรอกข้อมูลเรียงลำดับจาก บน -> ล่าง
+    # เริ่มกรอกข้อมูลตามลำดับที่ขอ
     try:
         # 1. ชื่อ (Name: ชื่อ, ID: CustomerFirstName)
         find_and_fill_smart(window, "ชื่อ", "CustomerFirstName", fname)
@@ -360,37 +360,35 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
         # 2. นามสกุล (Name: นามสกุล, ID: CustomerLastName)
         find_and_fill_smart(window, "นามสกุล", "CustomerLastName", lname)
 
-        # 3. [Manual Mode] กรอกที่อยู่ต่อจากนามสกุล
+        # 3-7. กรอกที่อยู่ (เฉพาะ Manual Mode)
         if is_manual_mode:
-            log("...[Manual Mode] เริ่มกรอกที่อยู่ (ไล่ลำดับ)...")
+            log("...[Manual Mode] เริ่มกรอกที่อยู่ (ตามลำดับ 3-7)...")
             addr1 = manual_data.get('Address1', '')
             addr2 = manual_data.get('Address2', '')
             province = manual_data.get('Province', '')
             district = manual_data.get('District', '')
             subdistrict = manual_data.get('SubDistrict', '')
 
-            # ที่อยู่ 1 (ID: StreetAddress1)
-            if not find_and_fill_smart(window, "ที่อยู่ 1", "StreetAddress1", addr1):
-                # ถ้าหาไม่เจอ ลองกด Tab จากนามสกุล
-                window.type_keys("{TAB}"); window.type_keys(addr1, with_spaces=True)
-            
-            # ที่อยู่ 2 (ID: StreetAddress2)
-            if not find_and_fill_smart(window, "ที่อยู่ 2", "StreetAddress2", addr2):
-                window.type_keys("{TAB}"); window.type_keys(addr2, with_spaces=True)
-
-            # จังหวัด (ID: AdministrativeArea)
+            # 3. จังหวัด (ID: AdministrativeArea)
             if not find_and_fill_smart(window, "จังหวัด", "AdministrativeArea", province):
                 window.type_keys("{TAB}"); window.type_keys(province, with_spaces=True)
 
-            # เขต/อำเภอ (ID: Locality)
+            # 4. เขต/อำเภอ (ID: Locality)
             if not find_and_fill_smart(window, "เขต/อำเภอ", "Locality", district):
                 window.type_keys("{TAB}"); window.type_keys(district, with_spaces=True)
 
-            # แขวง/ตำบล (ID: DependentLocality)
+            # 5. แขวง/ตำบล (ID: DependentLocality)
             if not find_and_fill_smart(window, "แขวง/ตำบล", "DependentLocality", subdistrict):
                 window.type_keys("{TAB}"); window.type_keys(subdistrict, with_spaces=True)
 
-        # 4. เบอร์โทร (Name: หมายเลขโทรศัพท์/โทร, ID: PhoneNumber)
+            # 6. ที่อยู่ 1 (ID: StreetAddress1)
+            # ถ้าค่าว่าง ระบบจะข้ามไปเลย ไม่คลิกให้เสียเวลา
+            find_and_fill_smart(window, "ที่อยู่ 1", "StreetAddress1", addr1)
+            
+            # 7. ที่อยู่ 2 (ID: StreetAddress2)
+            find_and_fill_smart(window, "ที่อยู่ 2", "StreetAddress2", addr2)
+
+        # 8. เบอร์โทรศัพท์ (Name: หมายเลขโทรศัพท์/โทร, ID: PhoneNumber)
         force_scroll_down(window, -5)
         if not find_and_fill_smart(window, "หมายเลขโทรศัพท์", "PhoneNumber", phone):
              find_and_fill_smart(window, "โทร", "Phone", phone)
