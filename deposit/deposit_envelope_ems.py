@@ -152,7 +152,10 @@ def check_error_popup(window, delay=0.5):
 
 # ================= 3. Business Logic Functions =================
 
-def process_sender_info_popup(window, phone, postal):
+def process_sender_info_popup(window, phone, sender_postal):
+    """
+    Popup ข้อมูลผู้ส่ง: ใช้เบอร์ผู้ส่ง และ รหัสไปรษณีย์ต้นทาง (Sender Postal)
+    """
     if smart_click(window, "อ่านบัตรประชาชน", timeout=3): 
         time.sleep(1.5) 
         try:
@@ -160,9 +163,11 @@ def process_sender_info_popup(window, phone, postal):
             for edit in edits:
                 if "รหัสไปรษณีย์" in edit.element_info.name:
                     if not edit.get_value():
-                        edit.click_input(); edit.type_keys(str(postal), with_spaces=True)
+                        log(f"...กรอก ปณ. ต้นทาง: {sender_postal}")
+                        edit.click_input(); edit.type_keys(str(sender_postal), with_spaces=True)
                     break 
         except: pass
+        
         found_phone = False
         for _ in range(3):
             try:
@@ -369,14 +374,6 @@ def process_receiver_details_form(window, fname, lname, phone):
         smart_next(window); time.sleep(1.8)
 
 def process_repeat_transaction(window, should_repeat):
-    log("--- หน้า: ทำรายการซ้ำ (รอ Popup) ---")
-    found_popup = False
-    for i in range(30):
-        if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=0.5):
-            found_popup = True; break
-        time.sleep(0.5)
-        
-def process_repeat_transaction(window, should_repeat):
     """
     จัดการ popup และส่งค่ากลับ (Return) ว่าสรุปแล้วคือการทำรายการซ้ำหรือไม่
     """
@@ -452,8 +449,11 @@ def process_payment(window, payment_method, received_amount):
 # ================= 4. Workflow Main =================
 def run_smart_scenario(main_window, config):
     try:
+        # แยกตัวแปร PostalCode ให้ชัดเจน
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
-        postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
+        receiver_postal = config['DEPOSIT_ENVELOPE'].get('ReceiverPostalCode', '10110') # ปลายทาง
+        sender_postal = config['TEST_DATA'].get('SenderPostalCode', '10110') # ต้นทาง (อ่านจาก [TEST_DATA])
+        
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
         special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
         add_insurance_flag = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
@@ -481,11 +481,15 @@ def run_smart_scenario(main_window, config):
     except: log("[Error] อ่าน Config ไม่สำเร็จ"); return
 
     log(f"--- เริ่มต้นการทำงาน ---")
+    log(f"--- ปณ.ต้นทาง: {sender_postal} | ปณ.ปลายทาง: {receiver_postal} ---")
     time.sleep(0.5)
 
     if not smart_click(main_window, "รับฝากสิ่งของ"): return
     time.sleep(step_delay)
-    process_sender_info_popup(main_window, phone, postal) 
+    
+    # ส่ง sender_postal ไปใช้ใน popup ข้อมูลผู้ส่ง (หน้าแรก)
+    process_sender_info_popup(main_window, phone, sender_postal) 
+    
     time.sleep(step_delay)
     if not smart_click_with_scroll(main_window, "ซองจดหมาย", scroll_dist=scroll_dist): return
     time.sleep(step_delay)
@@ -498,8 +502,13 @@ def run_smart_scenario(main_window, config):
     smart_input_weight(main_window, weight)
     smart_next(main_window)
     time.sleep(1)
-    try: main_window.type_keys(str(postal), with_spaces=True)
+    
+    # ตรงนี้ใช้ receiver_postal (ปลายทาง)
+    try: 
+        log(f"...กรอก ปณ. ปลายทาง: {receiver_postal}")
+        main_window.type_keys(str(receiver_postal), with_spaces=True)
     except: pass
+    
     smart_next(main_window)
     time.sleep(step_delay)
     for _ in range(3):
