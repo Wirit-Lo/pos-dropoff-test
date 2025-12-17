@@ -449,7 +449,15 @@ def process_receiver_details_form(window, fname, lname, phone):
         smart_next(window); time.sleep(1.8)
 
 def process_repeat_transaction(window, should_repeat):
+    """
+    จัดการ popup และส่งค่ากลับ (Return) ว่าสรุปแล้วคือการทำรายการซ้ำหรือไม่
+    """
     log("--- หน้า: ทำรายการซ้ำ (รอ Popup) ---")
+    
+    # 1. ตีความค่า Config ให้ชัดเจน (ลบ Space, ลบ Quote, ตัวเล็ก)
+    clean_flag = str(should_repeat).strip().lower().replace("'", "").replace('"', "")
+    is_repeat_intent = clean_flag in ['true', 'yes', 'on', '1']
+    
     found_popup = False
     for i in range(30):
         if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=0.5):
@@ -459,12 +467,19 @@ def process_repeat_transaction(window, should_repeat):
     if found_popup:
         log("...เจอ Popup ทำรายการซ้ำ...")
         time.sleep(1.0)
-        target = "ใช่" if str(should_repeat).lower() in ['true', 'yes', 'on', '1'] else "ไม่"
-        log(f"...Config: {should_repeat} -> เลือก: '{target}'")
+        
+        target = "ใช่" if is_repeat_intent else "ไม่"
+        log(f"...Config: {should_repeat} -> Intent: {is_repeat_intent} -> เลือก: '{target}'")
+        
         if not smart_click(window, target, timeout=3):
             if target == "ไม่": window.type_keys("{ESC}")
             else: window.type_keys("{ENTER}")
-    else: log("[WARN] ไม่พบ Popup ทำรายการซ้ำ (Timeout)")
+    else: 
+        log("[WARN] ไม่พบ Popup ทำรายการซ้ำ (Timeout)")
+
+    # สำคัญ: ส่งค่าความตั้งใจกลับไปบอกฟังก์ชันหลัก
+    return is_repeat_intent
+
 
 def process_payment(window, payment_method, received_amount):
     log("--- ขั้นตอนการชำระเงิน ---")
