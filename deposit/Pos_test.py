@@ -379,7 +379,9 @@ def process_repeat_transaction(window, should_repeat):
     if found_popup:
         log("...เจอ Popup ทำรายการซ้ำ...")
         time.sleep(1.0)
-        target = "ใช่" if str(should_repeat).lower() in ['true', 'yes', 'on', '1'] else "ไม่"
+        # Robust check inside function too
+        is_repeat = str(should_repeat).strip().lower() in ['true', 'yes', 'on', '1']
+        target = "ใช่" if is_repeat else "ไม่"
         log(f"...Config: {should_repeat} -> เลือก: '{target}'")
         if not smart_click(window, target, timeout=3):
             if target == "ไม่": window.type_keys("{ESC}")
@@ -458,7 +460,7 @@ def run_smart_scenario(main_window, config):
         }
     except: log("[Error] อ่าน Config ไม่สำเร็จ"); return
 
-    log(f"--- เริ่มต้นการทำงาน ---")
+    log(f"--- เริ่มต้นการทำงาน (Fixed Version) ---")
     time.sleep(0.5)
 
     if not smart_click(main_window, "รับฝากสิ่งของ"): return
@@ -510,13 +512,15 @@ def run_smart_scenario(main_window, config):
     # ทำรายการซ้ำ (กด ใช่/ไม่)
     process_repeat_transaction(main_window, repeat_flag)
     
-     # --- [ส่วนที่เพิ่ม: Pattern สำหรับเช็ค Repeat Flag] ---
-    # เช็คว่าถ้าเมื่อกี้คือการทำรายการซ้ำ (กด Yes) ให้จบงานตรงนี้เลย
-    if str(repeat_flag).lower() in ['true', 'yes', 'on', '1']:
+    # --- [FIXED SECTION] ---
+    # เพิ่ม .strip() เพื่อความชัวร์ และ Debug Log
+    log(f"[DEBUG] ตรวจสอบค่า Repeat Flag: '{repeat_flag}'")
+    
+    if str(repeat_flag).strip().lower() in ['true', 'yes', 'on', '1']:
         log("...Config สั่งทำรายการซ้ำ -> จบการทำงานตรงนี้ (ไม่ไปชำระเงิน)")
         log("\n[SUCCESS] จบการทำงาน (Repeat Mode)")
-        return # <--- **สำคัญมาก** คำสั่งนี้จะดีดออกจากฟังก์ชันทันที
-    # ----------------------------------------------------
+        return # *** จบการทำงานทันที ***
+    # -----------------------
 
     # 2. ชำระเงิน (จะทำงานก็ต่อเมื่อเงื่อนไขข้างบนไม่เป็นจริง)
     # ถ้ากด "ไม่" หรือไม่ได้สั่ง repeat โค้ดจะไหลลงมาทำบรรทัดนี้
@@ -528,7 +532,7 @@ def run_smart_scenario(main_window, config):
 if __name__ == "__main__":
     conf = load_config()
     if conf:
-        log("Connecting...")
+        log("Connecting... (Version: Repeat Fix)")
         try:
             wait = int(conf['SETTINGS'].get('ConnectTimeout', 10))
             app_title = conf['APP']['WindowTitle']
