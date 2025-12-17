@@ -260,8 +260,6 @@ def process_receiver_address_selection(window, address_keyword):
             time.sleep(0.25)
 
         if found_popup:
-            # Popup ปิดไปแล้วใน check_error_popup
-            # ตอนนี้ระบบน่าจะพาไปหน้ากรอกเอง หรือต้องกด Next อีกที
             time.sleep(1.0)
             
         elif found_list:
@@ -281,7 +279,6 @@ def process_receiver_address_selection(window, address_keyword):
             except: pass
         else:
             log("[!] ไม่เจอทั้ง Popup และ รายการ -> สันนิษฐานว่าเข้าหน้ากรอกเอง")
-            # อาจจะเด้งไปหน้ากรอกเองเลยก็ได้
             
     return is_manual_mode
 
@@ -296,85 +293,92 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
     check_error_popup(window); time.sleep(1.0)
 
     try:
-        # ================= ส่วนที่ 1: ชื่อ - นามสกุล =================
-        log("...กรอกชื่อ/นามสกุล...")
-        edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
-        # กรองเฉพาะส่วนบนๆ (ชื่อ นามสกุล มักอยู่บน)
-        top_edits = [e for e in edits if e.rectangle().top < 400]
-        top_edits.sort(key=lambda x: (x.rectangle().top, x.rectangle().left))
-        
-        # Helper ในการหาช่อง
-        def fill_if_empty(edit_ui, value, field_name):
-            if edit_ui:
-                val = edit_ui.get_value()
-                # ถ้าเป็น Manual Mode เราอาจจะอยากทับค่าไปเลย หรือถ้าว่างค่อยกรอก
-                if val and len(str(val).strip()) > 0:
-                    log(f"...ช่อง '{field_name}' มีข้อมูล ({val}) -> ข้าม")
+        # ฟังก์ชันช่วยหา Control ตาม ID แล้วเจาะเข้าไปหา Edit ข้างใน
+        def fill_by_container_id(container_id, value, field_name):
+            try:
+                # 1. หา Container หลักตาม ID (เช่น CustomerFirstName_UserControlBase)
+                containers = window.descendants(automation_id=container_id)
+                if not containers: 
+                    # log(f"[DEBUG] ไม่พบ Container ID: {container_id}")
+                    return False
+                
+                target_container = containers[0]
+                
+                # 2. หาช่อง Edit ข้างใน Container นั้น
+                edits = target_container.descendants(control_type="Edit")
+                if not edits:
+                    # บางทีอาจจะเป็น ComboBox หรือ Custom อื่นๆ ให้ลองหาลูกตัวแรกที่ Click ได้
+                    # log(f"[DEBUG] พบ Container {container_id} แต่ไม่พบ Edit ข้างใน")
+                    return False
+                
+                target_edit = edits[0] # เอาอันแรกที่เจอในกล่องนั้น
+                
+                # 3. ตรวจสอบค่าและกรอก
+                curr_val = target_edit.get_value()
+                if curr_val and str(curr_val).strip():
+                    log(f"   -> {field_name} (ID) มีข้อมูลแล้ว ({curr_val}) -> ข้าม")
                 else:
-                    log(f"...ช่อง '{field_name}' ว่าง -> กรอก: {value}")
-                    edit_ui.click_input(); edit_ui.type_keys(value, with_spaces=True)
+                    log(f"   -> {field_name} (ID) ว่าง -> กรอก: {value}")
+                    try: target_edit.set_focus()
+                    except: pass
+                    target_edit.click_input()
+                    target_edit.type_keys(str(value), with_spaces=True)
+                return True
+            except Exception as e:
+                # log(f"[!] Error fill_by_id {container_id}: {e}")
+                return False
 
-        # Logic หาช่องชื่อ นามสกุล แบบง่าย (ช่องแรกๆ คือ ชื่อ, ช่องถัดไปคือ นามสกุล)
-        if len(top_edits) >= 2:
-            # สมมติช่องแรกซ้ายบนสุดคือชื่อ
-            fill_if_empty(top_edits[0], fname, "ชื่อ")
-            fill_if_empty(top_edits[1], lname, "นามสกุล")
-        else:
-            log("[WARN] หาช่องชื่อ/นามสกุลไม่ชัดเจน -> ลองกด Tab กรอก")
-            window.type_keys("{TAB}"); window.type_keys(fname, with_spaces=True)
-            window.type_keys("{TAB}"); window.type_keys(lname, with_spaces=True)
+        # ================== เริ่มการกรอกโดยใช้ ID เป็นหลัก ==================
+        
+        # 1. ชื่อ (First Name)
+        if not fill_by_container_id("CustomerFirstName_UserControlBase", fname, "ชื่อ"):
+             log("[WARN] ไม่พบ ID ชื่อ -> จะลองใช้วิธีเดิม(ตำแหน่ง)")
 
-        # ================= ส่วนที่ 2: ที่อยู่ (เฉพาะ Manual Mode) =================
+        # 2. นามสกุล (Last Name)
+        fill_by_container_id("CustomerLastName_UserControlBase", lname, "นามสกุล")
+
+        # 3. ส่วนที่อยู่ (เฉพาะ Manual Mode)
         if is_manual_mode:
-            log("...[Manual Mode] กำลังกรอกข้อมูลที่อยู่ (จังหวัด/เขต/แขวง)...")
+            log("...[Manual Mode] กรอกที่อยู่ผ่าน ID...")
             province = manual_data.get('Province', '')
             district = manual_data.get('District', '')
             subdistrict = manual_data.get('SubDistrict', '')
-            
-            # หาช่องที่อยู่: มักจะอยู่ถัดจากชื่อ นามสกุล ลงมา
-            # เราใช้ Edits ชุดเดิม แต่ตัดตัวบนๆ ออก
-            addr_edits = [e for e in edits if e.rectangle().top > 200 and e.rectangle().top < 600]
-            addr_edits.sort(key=lambda x: (x.rectangle().top, x.rectangle().left))
-            
-            # ปกติเรียง: จังหวัด -> เขต/อำเภอ -> แขวง/ตำบล (3 ช่องเรียงกัน)
-            # หรืออาจจะเรียง: บ้านเลขที่... -> จังหวัด -> ...
-            # ใช้ Logic ง่าย: หาช่องว่างๆ 3 ช่องแล้วยัดข้อมูล
-            
-            empty_addr_edits = [e for e in addr_edits if not e.get_value()]
-            
-            if len(empty_addr_edits) >= 3:
-                log(f"...พบช่องว่างสำหรับที่อยู่ {len(empty_addr_edits)} ช่อง -> กรอกตามลำดับ")
-                fill_if_empty(empty_addr_edits[0], province, "จังหวัด")
-                fill_if_empty(empty_addr_edits[1], district, "เขต/อำเภอ")
-                fill_if_empty(empty_addr_edits[2], subdistrict, "แขวง/ตำบล")
-            else:
-                log("[WARN] หาช่องที่อยู่ไม่ครบ -> ใช้การส่ง Keys (Tab) แทน")
-                # สมมติ Focus อยู่ที่นามสกุล -> Tab ลงมาเรื่อยๆ
-                # Tab 1-2 ครั้งอาจจะเจอที่อยู่
-                window.type_keys("{TAB}") 
-                window.type_keys(province, with_spaces=True); window.type_keys("{TAB}")
-                window.type_keys(district, with_spaces=True); window.type_keys("{TAB}")
-                window.type_keys(subdistrict, with_spaces=True)
 
-        # ================= ส่วนที่ 3: เบอร์โทร (อยู่ล่างสุด) =================
-        log("...เลื่อนลงเพื่อตรวจสอบเบอร์โทร...")
-        force_scroll_down(window, -10); time.sleep(1)
-        
-        found_phone = False
-        visible_edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
-        # กรองเอาเฉพาะอันที่อยู่ล่างๆ หรือมีชื่อว่า Phone
-        for edit in visible_edits:
-            aid = edit.element_info.automation_id
-            name = edit.element_info.name
-            if "โทร" in name or "Phone" in aid or (edit.rectangle().top > 500):
-                # ตรวจสอบว่าเป็นช่องเบอร์ไหม (ถ้ามีข้อมูลแล้วข้าม หรือถ้าว่างกรอก)
-                fill_if_empty(edit, phone, "เบอร์โทร")
-                found_phone = True; break
-        
-        if not found_phone:
-            log("[!] หาช่องเบอร์ไม่เจอ -> ลองกด Tab ยัดข้อมูล")
-            window.type_keys("{TAB}"*2); window.type_keys(phone, with_spaces=True)
+            # จังหวัด -> AdministrativeArea
+            fill_by_container_id("AdministrativeArea_UserControlBase", province, "จังหวัด")
+            
+            # เขต/อำเภอ -> Locality (จาก Log ที่ให้มา)
+            fill_by_container_id("Locality_UserControlBase", district, "เขต/อำเภอ")
+            
+            # แขวง/ตำบล -> DependentLocality (ตามมาตรฐานมักจะเป็นตัวนี้)
+            fill_by_container_id("DependentLocality_UserControlBase", subdistrict, "แขวง/ตำบล")
 
+        # 4. เบอร์โทร (Phone)
+        force_scroll_down(window, -5) # เลื่อนลงหน่อยเผื่อมันซ่อนอยู่
+        if not fill_by_container_id("PhoneNumber_UserControlBase", phone, "เบอร์โทร"):
+             log("[WARN] ไม่พบ ID เบอร์โทร -> ลองหาด้วยคำว่า Phone/โทร")
+
+        # ================== Fallback (กรณี ID ใช้ไม่ได้) ==================
+        # โค้ดส่วนนี้จะทำงานเก็บตก ถ้าวิธีข้างบนพลาด (เช่น หา ID ไม่เจอเลย)
+        # แต่ถ้าข้างบนทำงานแล้ว มันจะเช็คว่ามีค่าแล้วก็ข้ามไปเอง
+        
+        # (เก็บตก) ดึงช่องกรอกทั้งหมดที่มีในหน้าจอ แล้วเรียงลำดับจาก บน->ล่าง
+        all_edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
+        all_edits.sort(key=lambda x: (x.rectangle().top, x.rectangle().left))
+        
+        def safe_fill(edit_ui, value, field_name):
+            if edit_ui:
+                val = edit_ui.get_value()
+                if not (val and len(str(val).strip()) > 0):
+                    # log(f"   [Fallback] กรอก {field_name}: {value}")
+                    edit_ui.set_focus(); edit_ui.click_input(); edit_ui.type_keys(value, with_spaces=True)
+
+        # ถ้าวิธี ID ไม่ได้ผลเลย (เช่น all_edits ว่างเปล่า หรือยังไม่ได้กรอก)
+        # เช็คชื่ออีกรอบ
+        if all_edits and len(all_edits) >= 2:
+             # เช็คว่าชื่อถูกกรอกหรือยัง ถ้ายังให้กรอก (เป็นการ Double Check)
+             safe_fill(all_edits[0], fname, "ชื่อ(Fallback)")
+        
     except Exception as e: log(f"[!] Error Details: {e}")
 
     log("...จบขั้นตอนข้อมูลผู้รับ -> กด 'ถัดไป' 3 ครั้ง...")
