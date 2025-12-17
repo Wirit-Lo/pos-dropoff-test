@@ -337,12 +337,34 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
 def process_receiver_details_form(window, fname, lname, phone):
     """
     [Update] ใช้ ID ในการระบุช่อง ชื่อ, นามสกุล, เบอร์โทร
+    และจัดการ Error Popup ที่อาจบังหน้าจออยู่ก่อนเริ่มหา ID
     """
     log("--- หน้า: รายละเอียดผู้รับ ---")
-    log("...รอหน้าจอโหลด...")
-    # รอให้ ID ชื่อโผล่มา เพื่อความชัวร์
-    wait_until_id_appears(window, "CustomerFirstName_UserControlBase", timeout=10)
-    check_error_popup(window); time.sleep(1.0)
+    log("...รอหน้าจอโหลด (พร้อมตรวจสอบ Popup Error)...")
+    
+    # [FIX] ลูปเพื่อรอให้ ID ปรากฏ โดยเช็ค Popup Error ไปด้วยตลอดเวลา
+    # เพื่อแก้ปัญหา Popup บังจน Timeout
+    target_id = "CustomerFirstName_UserControlBase"
+    found_id = False
+    
+    for _ in range(30): # รอประมาณ 15-30 วินาที
+        # 1. เช็ค Popup Error ก่อนเลย
+        if check_error_popup(window, delay=0):
+            log("...ปิด Popup แล้ว -> รอโหลดฟอร์มต่อ...")
+            time.sleep(1.0) # ให้เวลาฟอร์มโหลดหลังปิด Popup
+            
+        # 2. ลองหา ID เป้าหมาย
+        try:
+            containers = window.descendants(automation_id=target_id)
+            if containers and containers[0].is_visible():
+                found_id = True
+                log(f"[/] พบ ID: {target_id}")
+                break
+        except: pass
+        time.sleep(0.5)
+
+    if not found_id:
+        log(f"[WARN] หมดเวลา! ไม่พบ ID: {target_id} -> จะพยายามกรอกต่อแบบ Fallback")
 
     try:
         def fill_by_id(target_id, value, name):
