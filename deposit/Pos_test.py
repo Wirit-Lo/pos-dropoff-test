@@ -101,8 +101,9 @@ def wait_until_id_appears(window, exact_id, timeout=10):
     start = time.time()
     while time.time() - start < timeout:
         try:
-            for child in window.descendants():
-                if child.element_info.automation_id == exact_id and child.is_visible(): return True
+            # ค้นหาแบบเร็วๆ ก่อน
+            found = window.descendants(automation_id=exact_id)
+            if found and found[0].is_visible(): return True
         except: pass
         time.sleep(1)
     return False
@@ -279,6 +280,8 @@ def process_receiver_address_selection(window, address_keyword):
             except: pass
         else:
             log("[!] ไม่เจอทั้ง Popup และ รายการ -> สันนิษฐานว่าเข้าหน้ากรอกเอง")
+            # ถ้าไม่เจอ list แต่อาจจะหลุดมาหน้า manual เลยก็ได้ ให้ลอง return true ไป
+            is_manual_mode = True
             
     return is_manual_mode
 
@@ -286,17 +289,16 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
     log("--- หน้า: รายละเอียดผู้รับ ---")
     log(f"...Mode: {'กรอกเองทั้งหมด (Manual)' if is_manual_mode else 'อัตโนมัติ (Auto)'}...")
     
-    # รอหน้าจอโหลด
-    for i in range(15):
-        if wait_for_text(window, ["ชื่อ", "นามสกุล", "คำนำหน้า"], timeout=1): break
-        time.sleep(0.5)
-    check_error_popup(window); time.sleep(1.0)
+    # 1. รอให้ ID ช่องชื่อปรากฏขึ้นมาเพื่อความชัวร์ (สำคัญ!)
+    log("...รอโหลดฟอร์ม (CustomerFirstName_UserControlBase)...")
+    wait_until_id_appears(window, "CustomerFirstName_UserControlBase", timeout=10)
+    check_error_popup(window); time.sleep(0.5)
 
     try:
-        # ฟังก์ชันช่วยหา Control ตาม ID แล้วเจาะเข้าไปหา Edit ข้างใน
+        # ฟังก์ชันช่วยหา Control ตาม ID แล้วเจาะเข้าไปหา Edit หรือคลิกที่ Container
         def fill_by_container_id(container_id, value, field_name):
             try:
-                # 1. หา Container หลักตาม ID (เช่น CustomerFirstName_UserControlBase)
+                # 1. หา Container หลักตาม ID
                 containers = window.descendants(automation_id=container_id)
                 if not containers: 
                     # log(f"[DEBUG] ไม่พบ Container ID: {container_id}")
@@ -304,26 +306,32 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
                 
                 target_container = containers[0]
                 
-                # 2. หาช่อง Edit ข้างใน Container นั้น
+                # 2. พยายามหาช่อง Edit ข้างใน
                 edits = target_container.descendants(control_type="Edit")
-                if not edits:
-                    # บางทีอาจจะเป็น ComboBox หรือ Custom อื่นๆ ให้ลองหาลูกตัวแรกที่ Click ได้
-                    # log(f"[DEBUG] พบ Container {container_id} แต่ไม่พบ Edit ข้างใน")
-                    return False
+                target_edit = None
                 
-                target_edit = edits[0] # เอาอันแรกที่เจอในกล่องนั้น
-                
-                # 3. ตรวจสอบค่าและกรอก
-                curr_val = target_edit.get_value()
-                if curr_val and str(curr_val).strip():
-                    log(f"   -> {field_name} (ID) มีข้อมูลแล้ว ({curr_val}) -> ข้าม")
+                if edits:
+                    target_edit = edits[0]
                 else:
-                    log(f"   -> {field_name} (ID) ว่าง -> กรอก: {value}")
-                    try: target_edit.set_focus()
-                    except: pass
-                    target_edit.click_input()
-                    target_edit.type_keys(str(value), with_spaces=True)
+                    # ถ้าหา Edit ไม่เจอ ให้ถือว่า Container นั่นแหละคือตัวรับ Input
+                    # log(f"[DEBUG] ไม่พบ Edit ใน {container_id} -> จะคลิกที่ Container แทน")
+                    target_edit = target_container
+
+                # 3. ตรวจสอบค่าและกรอก
+                try:
+                    # ถ้าเป็น Custom Control อาจจะ get_value ไม่ได้ ก็ข้ามไปกรอกเลย
+                    curr_val = target_edit.get_value()
+                    if curr_val and str(curr_val).strip():
+                        log(f"   -> {field_name} (ID) มีข้อมูลแล้ว ({curr_val}) -> ข้าม")
+                        return True
+                except: pass
+
+                log(f"   -> {field_name} (ID) -> กรอก: {value}")
+                target_edit.set_focus()
+                target_edit.click_input()
+                target_edit.type_keys(str(value), with_spaces=True)
                 return True
+
             except Exception as e:
                 # log(f"[!] Error fill_by_id {container_id}: {e}")
                 return False
@@ -332,7 +340,7 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
         
         # 1. ชื่อ (First Name)
         if not fill_by_container_id("CustomerFirstName_UserControlBase", fname, "ชื่อ"):
-             log("[WARN] ไม่พบ ID ชื่อ -> จะลองใช้วิธีเดิม(ตำแหน่ง)")
+             log("[WARN] ไม่พบ ID ชื่อ -> จะลองใช้วิธี Fallback")
 
         # 2. นามสกุล (Last Name)
         fill_by_container_id("CustomerLastName_UserControlBase", lname, "นามสกุล")
@@ -346,23 +354,19 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
 
             # จังหวัด -> AdministrativeArea
             fill_by_container_id("AdministrativeArea_UserControlBase", province, "จังหวัด")
-            
-            # เขต/อำเภอ -> Locality (จาก Log ที่ให้มา)
+            # เขต/อำเภอ -> Locality
             fill_by_container_id("Locality_UserControlBase", district, "เขต/อำเภอ")
-            
-            # แขวง/ตำบล -> DependentLocality (ตามมาตรฐานมักจะเป็นตัวนี้)
+            # แขวง/ตำบล -> DependentLocality
             fill_by_container_id("DependentLocality_UserControlBase", subdistrict, "แขวง/ตำบล")
 
         # 4. เบอร์โทร (Phone)
-        force_scroll_down(window, -5) # เลื่อนลงหน่อยเผื่อมันซ่อนอยู่
+        force_scroll_down(window, -5) # เลื่อนลงหน่อย
         if not fill_by_container_id("PhoneNumber_UserControlBase", phone, "เบอร์โทร"):
              log("[WARN] ไม่พบ ID เบอร์โทร -> ลองหาด้วยคำว่า Phone/โทร")
 
         # ================== Fallback (กรณี ID ใช้ไม่ได้) ==================
-        # โค้ดส่วนนี้จะทำงานเก็บตก ถ้าวิธีข้างบนพลาด (เช่น หา ID ไม่เจอเลย)
-        # แต่ถ้าข้างบนทำงานแล้ว มันจะเช็คว่ามีค่าแล้วก็ข้ามไปเอง
+        # ถ้าวิธี ID ไม่ได้ผล (เช่น โปรแกรมเปลี่ยน ID หรือหาไม่เจอ)
         
-        # (เก็บตก) ดึงช่องกรอกทั้งหมดที่มีในหน้าจอ แล้วเรียงลำดับจาก บน->ล่าง
         all_edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
         all_edits.sort(key=lambda x: (x.rectangle().top, x.rectangle().left))
         
@@ -370,14 +374,15 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
             if edit_ui:
                 val = edit_ui.get_value()
                 if not (val and len(str(val).strip()) > 0):
-                    # log(f"   [Fallback] กรอก {field_name}: {value}")
+                    log(f"   [Fallback] กรอก {field_name}: {value}")
                     edit_ui.set_focus(); edit_ui.click_input(); edit_ui.type_keys(value, with_spaces=True)
 
-        # ถ้าวิธี ID ไม่ได้ผลเลย (เช่น all_edits ว่างเปล่า หรือยังไม่ได้กรอก)
-        # เช็คชื่ออีกรอบ
         if all_edits and len(all_edits) >= 2:
-             # เช็คว่าชื่อถูกกรอกหรือยัง ถ้ายังให้กรอก (เป็นการ Double Check)
-             safe_fill(all_edits[0], fname, "ชื่อ(Fallback)")
+             # เช็คว่าชื่อถูกกรอกหรือยัง (โดยดูจาก value) ถ้ายัง ให้ลองกรอกซ้ำ
+             try:
+                 if not all_edits[0].get_value():
+                    safe_fill(all_edits[0], fname, "ชื่อ(Fallback)")
+             except: pass
         
     except Exception as e: log(f"[!] Error Details: {e}")
 
