@@ -157,29 +157,58 @@ def process_sender_info_popup(window, phone, sender_postal):
     """
     Popup ข้อมูลผู้ส่ง: ใช้เบอร์ผู้ส่ง และ รหัสไปรษณีย์ต้นทาง (Sender Postal)
     """
-    if smart_click(window, "อ่านบัตรประชาชน", timeout=3): 
-        time.sleep(1.0) # ลดลงจาก 1.5
+    log("...รอตรวจสอบ Popup ข้อมูลผู้ส่ง...")
+    
+    # เปลี่ยนเงื่อนไข: ไม่ต้อง Click "อ่านบัตรประชาชน" เพื่อเช็ค
+    # แต่ให้รอตรวจว่ามีหน้าจอนี้ขึ้นมาไหม (เช็คจาก Text หรือ Edit)
+    is_sender_popup = False
+    for _ in range(5):
+        # เช็คว่ามีคำว่า "ข้อมูลผู้ฝากส่ง" หรือช่อง "หมายเลขโทรศัพท์" หรือปุ่ม "อ่านบัตรประชาชน" โผล่มาไหม
+        if wait_for_text(window, ["ข้อมูลผู้ฝากส่ง", "หมายเลขโทรศัพท์", "อ่านบัตรประชาชน"], timeout=1):
+            is_sender_popup = True
+            break
+        time.sleep(0.5)
+
+    if not is_sender_popup:
+        log("[WARN] ไม่พบ Popup ข้อมูลผู้ส่ง (ข้ามขั้นตอน)")
+        return
+
+    log("...พบ Popup -> เริ่มกรอกข้อมูล...")
+    time.sleep(1.0)
+
+    # 1. กรอกรหัสไปรษณีย์ต้นทาง (Sender Postal)
+    try:
+        edits = window.descendants(control_type="Edit")
+        for edit in edits:
+            if "รหัสไปรษณีย์" in edit.element_info.name:
+                if not edit.get_value():
+                    log(f"   -> กรอก ปณ. ต้นทาง: {sender_postal}")
+                    edit.click_input()
+                    edit.type_keys(str(sender_postal), with_spaces=True)
+                break 
+    except: pass
+    
+    # 2. กรอกเบอร์โทร (Phone)
+    found_phone = False
+    for _ in range(3):
         try:
             edits = window.descendants(control_type="Edit")
             for edit in edits:
-                if "รหัสไปรษณีย์" in edit.element_info.name:
-                    if not edit.get_value():
-                        log(f"...กรอก ปณ. ต้นทาง: {sender_postal}")
-                        edit.click_input(); edit.type_keys(str(sender_postal), with_spaces=True)
-                    break 
+                # เช็คชื่อ หรือ ID
+                nm = edit.element_info.name
+                aid = edit.element_info.automation_id
+                if "หมายเลขโทรศัพท์" in nm or "Phone" in aid:
+                    log(f"   -> กรอกเบอร์โทรผู้ส่ง: {phone}")
+                    edit.click_input()
+                    edit.type_keys(str(phone), with_spaces=True)
+                    found_phone = True; break
         except: pass
+        if found_phone: break
+        force_scroll_down(window, -5) # เลื่อนหา
+        time.sleep(0.5)
         
-        found_phone = False
-        for _ in range(3):
-            try:
-                for edit in window.descendants(control_type="Edit"):
-                    if "หมายเลขโทรศัพท์" in edit.element_info.name:
-                        edit.click_input(); edit.type_keys(str(phone), with_spaces=True)
-                        found_phone = True; break
-            except: pass
-            if found_phone: break
-            force_scroll_down(window, -5)
-        smart_next(window)
+    # กดถัดไปเสมอถ้าเจอ Popup
+    smart_next(window)
 
 def handle_prohibited_items(window):
     for _ in range(5):
