@@ -443,43 +443,36 @@ def process_receiver_details_form(window, fname, lname, phone):
         smart_next(window); time.sleep(1.8)
 
 def process_repeat_transaction(window, should_repeat):
+    """
+    จัดการ popup และส่งค่ากลับ (Return) ว่าสรุปแล้วคือการทำรายการซ้ำหรือไม่
+    """
     log("--- หน้า: ทำรายการซ้ำ (รอ Popup) ---")
+    
+    # 1. ตีความค่า Config ให้ชัดเจน (ลบ Space, ลบ Quote, ตัวเล็ก)
+    clean_flag = str(should_repeat).strip().lower().replace("'", "").replace('"', "")
+    is_repeat_intent = clean_flag in ['true', 'yes', 'on', '1']
+    
     found_popup = False
-    target_window = None # เก็บ Window ที่เจอ Popup
-
-    # 1. ลองหาใน Main Window ก่อน (เผื่อเป็น Child)
-    for i in range(10):
+    for i in range(30):
         if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=0.5):
-            found_popup = True
-            target_window = window 
-            break
+            found_popup = True; break
         time.sleep(0.5)
-
-    # 2. ถ้าไม่เจอ ลองหาใน Active Window (เผื่อเป็น Top Level Popup)
-    if not found_popup:
-         log("...ไม่เจอใน Main Window -> ตรวจสอบ Popup แยก (Top Window)...")
-         try:
-             # เชื่อมต่อกับ Top Window ที่ Active อยู่
-             app_top = Application(backend="uia").connect(active_only=True).top_window()
-             
-             # เช็คว่ามีข้อความที่ต้องการไหม
-             if wait_for_text(app_top, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=1):
-                  found_popup = True
-                  target_window = app_top
-         except: pass
-
-    if found_popup and target_window:
+        
+    if found_popup:
         log("...เจอ Popup ทำรายการซ้ำ...")
         time.sleep(1.0)
-        target = "ใช่" if str(should_repeat).lower() in ['true', 'yes', 'on', '1'] else "ไม่"
-        log(f"...Config: {should_repeat} -> เลือก: '{target}'")
         
-        # ใช้ smart_click กับ window ที่เจอ
-        if not smart_click(target_window, target, timeout=3):
-            if target == "ไม่": target_window.type_keys("{ESC}")
-            else: target_window.type_keys("{ENTER}")
+        target = "ใช่" if is_repeat_intent else "ไม่"
+        log(f"...Config: {should_repeat} -> Intent: {is_repeat_intent} -> เลือก: '{target}'")
+        
+        if not smart_click(window, target, timeout=3):
+            if target == "ไม่": window.type_keys("{ESC}")
+            else: window.type_keys("{ENTER}")
     else: 
-        log("[WARN] ไม่พบ Popup ทำรายการซ้ำ (Timeout) - หรือ Popup ไม่เด้ง")
+        log("[WARN] ไม่พบ Popup ทำรายการซ้ำ (Timeout)")
+
+    # สำคัญ: ส่งค่าความตั้งใจกลับไปบอกฟังก์ชันหลัก
+    return is_repeat_intent
 
 def process_payment(window, payment_method, received_amount):
     log("--- ขั้นตอนการชำระเงิน ---")
@@ -735,17 +728,15 @@ def run_smart_scenario(main_window, config):
         time.sleep(step_delay)
     
     # -------------------------------------------------------------------------
-
-    # ทำรายการซ้ำ (กด ใช่/ไม่) -> ทั้งสองกรณี (ลงทะเบียน/ไม่ลงทะเบียน) จะมาจบที่นี่
-    process_repeat_transaction(main_window, repeat_flag)
-
-    # [NEW] Stop if Repeat is True
-    if str(repeat_flag).lower() in ['true', 'yes', 'on', '1']:
-         log("...Config สั่งทำรายการซ้ำ -> จบการทำงานตรงนี้ (ไม่ไปชำระเงิน)")
-         log("\n[SUCCESS] จบการทำงาน (Repeat Mode)")
-         return
+    # 1. เรียกฟังก์ชัน และรับค่ากลับมา (ตัวแปรนี้จะได้ค่า True/False จากจุดที่ 1)
+    is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
     
-    # ชำระเงิน (ต่อจากทำรายการซ้ำ ถ้าเลือก "ไม่")
+    # 2. เช็คเลยว่า ถ้าเป็นจริง -> จบการทำงาน
+    if is_repeat_mode:
+        log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที")
+        return # ออกจากฟังก์ชันทันที
+    
+    # 3. ถ้าไม่เข้าเงื่อนไขบน ก็จะลงมาทำชำระเงินต่อ
     process_payment(main_window, pay_method, pay_amount)
 
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
