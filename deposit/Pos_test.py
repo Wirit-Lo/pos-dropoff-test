@@ -27,9 +27,9 @@ def force_scroll_down(window, scroll_dist=-5):
         center_x = rect.left + int(rect.width() * 0.5)
         center_y = rect.top + int(rect.height() * 0.5)
         mouse.click(coords=(center_x, center_y))
-        time.sleep(0.2)
+        time.sleep(0.1) # ลดเวลาลงเล็กน้อย
         mouse.scroll(coords=(center_x, center_y), wheel_dist=scroll_dist)
-        time.sleep(0.8)
+        time.sleep(0.5) # ลดเวลาลงเล็กน้อย
     except: pass
 
 def smart_click(window, criteria_list, timeout=5):
@@ -44,7 +44,7 @@ def smart_click(window, criteria_list, timeout=5):
                         log(f"[/] กดปุ่ม '{criteria}' สำเร็จ")
                         return True
             except: pass
-        time.sleep(0.3)
+        time.sleep(0.2) # เช็คถี่ขึ้น
     return False
 
 def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
@@ -61,7 +61,7 @@ def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
                 elem_rect = found.rectangle()
                 win_rect = window.rectangle()
                 if elem_rect.bottom >= win_rect.bottom - 70:
-                    force_scroll_down(window, -3); time.sleep(0.5); continue 
+                    force_scroll_down(window, -3); time.sleep(0.3); continue 
                 found.click_input()
                 log(f"   [/] เจอและกด '{criteria}' สำเร็จ")
                 return True
@@ -79,7 +79,7 @@ def click_element_by_id(window, exact_id, timeout=5, index=0):
                 log(f"[/] กดปุ่ม ID '{exact_id}' สำเร็จ")
                 return True
         except: pass
-        time.sleep(0.5)
+        time.sleep(0.3)
     return False
 
 def click_element_by_fuzzy_id(window, keyword, timeout=5):
@@ -93,7 +93,7 @@ def click_element_by_fuzzy_id(window, keyword, timeout=5):
                     log(f"[/] เจอ Fuzzy ID: '{aid}' -> กดสำเร็จ")
                     return True
         except: pass
-        time.sleep(0.5)
+        time.sleep(0.3)
     return False
 
 def wait_until_id_appears(window, exact_id, timeout=10):
@@ -105,7 +105,7 @@ def wait_until_id_appears(window, exact_id, timeout=10):
             found = window.descendants(automation_id=exact_id)
             if found and found[0].is_visible(): return True
         except: pass
-        time.sleep(1)
+        time.sleep(0.2) # ลดเวลา Sleep ลงเพื่อให้ตอบสนองเร็วขึ้น
     return False
 
 def wait_for_text(window, text_list, timeout=5):
@@ -118,7 +118,7 @@ def wait_for_text(window, text_list, timeout=5):
                 for t in text_list:
                     if t in txt and child.is_visible(): return True
         except: pass
-        time.sleep(0.5)
+        time.sleep(0.3)
     return False
 
 def smart_next(window):
@@ -158,7 +158,7 @@ def process_sender_info_popup(window, phone, sender_postal):
     Popup ข้อมูลผู้ส่ง: ใช้เบอร์ผู้ส่ง และ รหัสไปรษณีย์ต้นทาง (Sender Postal)
     """
     if smart_click(window, "อ่านบัตรประชาชน", timeout=3): 
-        time.sleep(1.5) 
+        time.sleep(1.0) # ลดลงจาก 1.5
         try:
             edits = window.descendants(control_type="Edit")
             for edit in edits:
@@ -188,7 +188,7 @@ def handle_prohibited_items(window):
                 if "สิ่งของต้องห้าม" in child.window_text():
                     window.type_keys("{RIGHT}{RIGHT}{ENTER}"); return
         except: pass
-        time.sleep(0.5)
+        time.sleep(0.3)
 
 def smart_input_weight(window, value):
     try:
@@ -228,7 +228,7 @@ def process_receiver_address_selection(window, address_keyword):
             for _ in range(10):
                 edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
                 if edits: search_ready = True; break
-                time.sleep(0.5)
+                time.sleep(0.3)
             
             edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
             filled = False
@@ -242,7 +242,7 @@ def process_receiver_address_selection(window, address_keyword):
 
         log("...กด Enter/ถัดไป เพื่อค้นหารายการ...")
         smart_next(window)
-        time.sleep(1.5) 
+        time.sleep(1.0) # ลดลงเล็กน้อย
         
         log("...ตรวจสอบผลลัพธ์ (Popup/List)...")
         found_popup = False; found_list = False
@@ -258,14 +258,14 @@ def process_receiver_address_selection(window, address_keyword):
             list_items = [i for i in window.descendants(control_type="ListItem") 
                           if i.is_visible() and i.rectangle().top > 200]
             if list_items: found_list = True; break
-            time.sleep(0.25)
+            time.sleep(0.2) # เช็คเร็วขึ้น
 
         if found_popup:
-            time.sleep(1.0)
+            time.sleep(0.5)
             
         elif found_list:
             log("...เจอรายการที่อยู่ -> เลือกรายการแรกสุด...")
-            time.sleep(1.0)
+            time.sleep(0.5)
             try:
                 all_list_items = [i for i in window.descendants(control_type="ListItem") if i.is_visible()]
                 valid_items = [i for i in all_list_items if i.rectangle().top > 200 and i.rectangle().height() > 50]
@@ -274,7 +274,7 @@ def process_receiver_address_selection(window, address_keyword):
                     target_item = valid_items[0]
                     target_item.click_input()
                     log("...เลือกรายการแล้ว รอโหลดข้อมูล...")
-                    time.sleep(2.0) 
+                    time.sleep(1.5) 
                 else: 
                     log("[!] เจอ List แต่กดไม่ได้")
             except: pass
@@ -292,7 +292,7 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
     # 1. รอให้ ID ช่องชื่อปรากฏขึ้นมาเพื่อความชัวร์ (สำคัญ!)
     log("...รอโหลดฟอร์ม (CustomerFirstName_UserControlBase)...")
     wait_until_id_appears(window, "CustomerFirstName_UserControlBase", timeout=10)
-    check_error_popup(window); time.sleep(0.5)
+    check_error_popup(window, delay=0.1) # เช็คเร็วๆ ไม่ต้องรอนาน
 
     try:
         # ฟังก์ชันช่วยหา Control ตาม ID แล้วเจาะเข้าไปหา Edit หรือคลิกที่ Container
@@ -301,7 +301,6 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
                 # 1. หา Container หลักตาม ID
                 containers = window.descendants(automation_id=container_id)
                 if not containers: 
-                    # log(f"[DEBUG] ไม่พบ Container ID: {container_id}")
                     return False
                 
                 target_container = containers[0]
@@ -314,7 +313,6 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
                     target_edit = edits[0]
                 else:
                     # ถ้าหา Edit ไม่เจอ ให้ถือว่า Container นั่นแหละคือตัวรับ Input
-                    # log(f"[DEBUG] ไม่พบ Edit ใน {container_id} -> จะคลิกที่ Container แทน")
                     target_edit = target_container
 
                 # 3. ตรวจสอบค่าและกรอก
@@ -389,7 +387,7 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
     log("...จบขั้นตอนข้อมูลผู้รับ -> กด 'ถัดไป' 3 ครั้ง...")
     for i in range(3):
         log(f"   -> Enter ครั้งที่ {i+1}")
-        smart_next(window); time.sleep(1.8)
+        smart_next(window); time.sleep(1.5)
 
 def process_repeat_transaction(window, should_repeat):
     """
@@ -405,11 +403,11 @@ def process_repeat_transaction(window, should_repeat):
     for i in range(30):
         if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=0.5):
             found_popup = True; break
-        time.sleep(0.5)
+        time.sleep(0.3)
         
     if found_popup:
         log("...เจอ Popup ทำรายการซ้ำ...")
-        time.sleep(1.0)
+        time.sleep(0.5)
         
         target = "ใช่" if is_repeat_intent else "ไม่"
         log(f"...Config: {should_repeat} -> Intent: {is_repeat_intent} -> เลือก: '{target}'")
@@ -428,9 +426,9 @@ def process_payment(window, payment_method, received_amount):
     # 1. กดรับเงิน (หน้าหลัก)
     log("...ค้นหาปุ่ม 'รับเงิน'...")
     # รอให้หน้าจอพร้อมสักนิดหลังปิด Popup Repeat
-    time.sleep(1.5)
+    time.sleep(1.0)
     if smart_click(window, "รับเงิน"):
-        time.sleep(1.5) # รอหน้าชำระเงิน
+        time.sleep(1.0) # รอหน้าชำระเงิน
     else:
         log("[WARN] หาปุ่มรับเงินไม่เจอ")
         return
@@ -441,7 +439,7 @@ def process_payment(window, payment_method, received_amount):
     if not smart_click(window, payment_method):
         log(f"[WARN] ไม่เจอ '{payment_method}' -> เลือก 'เงินสด' แทน")
         smart_click(window, "เงินสด")
-    time.sleep(1.0)
+    time.sleep(0.5)
 
     # 3. กรอกจำนวนเงิน (Popup)
     log(f"...กรอกจำนวนเงิน: {received_amount}...")
@@ -453,10 +451,10 @@ def process_payment(window, payment_method, received_amount):
                 edits[0].click_input()
                 edits[0].type_keys(str(received_amount), with_spaces=True)
                 break
-            time.sleep(0.5)
+            time.sleep(0.3)
         window.type_keys("{ENTER}") # กดถัดไป
     except: log("[!] Error กรอกเงิน")
-    time.sleep(1.5)
+    time.sleep(1.0)
 
     # 4. หน้าเงินทอน (จบ)
     log("...หน้าเงินทอน -> กด Enter จบรายการ...")
@@ -519,7 +517,7 @@ def run_smart_scenario(main_window, config):
     handle_prohibited_items(main_window)
     smart_input_weight(main_window, weight)
     smart_next(main_window)
-    time.sleep(1)
+    time.sleep(0.5)
     
     try: 
         log(f"...กรอก ปณ. ปลายทาง: {receiver_postal}")
@@ -534,7 +532,7 @@ def run_smart_scenario(main_window, config):
             if "ทับซ้อน" in child.window_text() or "พื้นที่" in child.window_text():
                 smart_click(main_window, "ดำเนินการ"); found = True; break
         if found: break
-        time.sleep(0.5)
+        time.sleep(0.3)
 
     log("...รอหน้าบริการหลัก...")
     wait_until_id_appears(main_window, "ShippingService_EMSServices", timeout=wait_timeout)
@@ -543,7 +541,7 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay) 
     if not click_element_by_id(main_window, "ShippingService_2572"):
         click_element_by_fuzzy_id(main_window, "ShippingService")
-    time.sleep(1)
+    time.sleep(0.5)
 
     if add_insurance_flag.lower() in ['true', 'yes']:
         log(f"...ใส่วงเงิน {insurance_amt}...")
@@ -552,13 +550,13 @@ def run_smart_scenario(main_window, config):
                 for child in main_window.descendants():
                     if child.element_info.automation_id == "CoverageAmount":
                         child.click_input(); child.type_keys(str(insurance_amt), with_spaces=True); break
-                time.sleep(0.5)
+                time.sleep(0.3)
                 submits = [c for c in main_window.descendants() if c.element_info.automation_id == "LocalCommand_Submit"]
                 submits.sort(key=lambda x: x.rectangle().top)
                 if submits: submits[0].click_input()
                 else: main_window.type_keys("{ENTER}")
     
-    time.sleep(1)
+    time.sleep(0.5)
     smart_next(main_window) 
     time.sleep(step_delay)
     process_special_services(main_window, special_services)
