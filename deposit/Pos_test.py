@@ -17,8 +17,7 @@ def load_config(filename='config.ini'):
     return config
 
 def log(message):
-    # เพิ่ม flush=True เพื่อให้ Log แสดงทันทีไม่ค้างใน Buffer
-    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}", flush=True)
+    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
 # ================= 2. Helper Functions =================
 def force_scroll_down(window, scroll_dist=-5):
@@ -370,15 +369,7 @@ def process_receiver_details_form(window, fname, lname, phone):
         smart_next(window); time.sleep(1.8)
 
 def process_repeat_transaction(window, should_repeat):
-    """
-    จัดการ popup และส่งค่ากลับ (Return) ว่าสรุปแล้วคือการทำรายการซ้ำหรือไม่
-    """
     log("--- หน้า: ทำรายการซ้ำ (รอ Popup) ---")
-    
-    # 1. ตีความค่า Config ให้ชัดเจน (ลบ Space, ลบ Quote, ตัวเล็ก)
-    clean_flag = str(should_repeat).strip().lower().replace("'", "").replace('"', "")
-    is_repeat_intent = clean_flag in ['true', 'yes', 'on', '1']
-    
     found_popup = False
     for i in range(30):
         if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=0.5):
@@ -388,18 +379,12 @@ def process_repeat_transaction(window, should_repeat):
     if found_popup:
         log("...เจอ Popup ทำรายการซ้ำ...")
         time.sleep(1.0)
-        
-        target = "ใช่" if is_repeat_intent else "ไม่"
-        log(f"...Config: {should_repeat} -> Intent: {is_repeat_intent} -> เลือก: '{target}'")
-        
+        target = "ใช่" if str(should_repeat).lower() in ['true', 'yes', 'on', '1'] else "ไม่"
+        log(f"...Config: {should_repeat} -> เลือก: '{target}'")
         if not smart_click(window, target, timeout=3):
             if target == "ไม่": window.type_keys("{ESC}")
             else: window.type_keys("{ENTER}")
-    else: 
-        log("[WARN] ไม่พบ Popup ทำรายการซ้ำ (Timeout)")
-
-    # สำคัญ: ส่งค่าความตั้งใจกลับไปบอกฟังก์ชันหลัก
-    return is_repeat_intent
+    else: log("[WARN] ไม่พบ Popup ทำรายการซ้ำ (Timeout)")
 
 def process_payment(window, payment_method, received_amount):
     log("--- ขั้นตอนการชำระเงิน ---")
@@ -473,7 +458,7 @@ def run_smart_scenario(main_window, config):
         }
     except: log("[Error] อ่าน Config ไม่สำเร็จ"); return
 
-    log(f"--- เริ่มต้นการทำงาน (VERSION: SYNCED LOGIC) ---")
+    log(f"--- เริ่มต้นการทำงาน ---")
     time.sleep(0.5)
 
     if not smart_click(main_window, "รับฝากสิ่งของ"): return
@@ -504,11 +489,26 @@ def run_smart_scenario(main_window, config):
         time.sleep(0.5)
 
     log("...รอหน้าบริการหลัก...")
-    wait_until_id_appears(main_window, "ShippingService_356420", timeout=wait_timeout)
-    if not click_element_by_id(main_window, "ShippingService_356420"):
+    wait_until_id_appears(main_window, "ShippingService_EMSServices", timeout=wait_timeout)
+    if not click_element_by_id(main_window, "ShippingService_EMSServices"):
         if not click_element_by_fuzzy_id(main_window, "EMSS"): return
+    time.sleep(step_delay) 
+    if not click_element_by_id(main_window, "ShippingService_2572"):
+        click_element_by_fuzzy_id(main_window, "ShippingService")
+    time.sleep(1)
 
-    main_window.type_keys("{ENTER}")
+    if add_insurance_flag.lower() in ['true', 'yes']:
+        log(f"...ใส่วงเงิน {insurance_amt}...")
+        if click_element_by_id(main_window, "CoverageButton"):
+            if wait_until_id_appears(main_window, "CoverageAmount", timeout=5):
+                for child in main_window.descendants():
+                    if child.element_info.automation_id == "CoverageAmount":
+                        child.click_input(); child.type_keys(str(insurance_amt), with_spaces=True); break
+                time.sleep(0.5)
+                submits = [c for c in main_window.descendants() if c.element_info.automation_id == "LocalCommand_Submit"]
+                submits.sort(key=lambda x: x.rectangle().top)
+                if submits: submits[0].click_input()
+                else: main_window.type_keys("{ENTER}")
     
     time.sleep(1)
     smart_next(main_window) 
@@ -521,19 +521,11 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
     process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone)
     time.sleep(step_delay)
-
-    # ----------------------------------------------------
-    # 1. เรียกฟังก์ชัน และรับค่ากลับมาด้วยว่า "ตกลงเมื่อกี้ตั้งใจจะ Repeat ใช่ไหม"
-    is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
     
-    # 2. เช็คเลยว่า ถ้าฟังก์ชันบอกว่าใช่ (is_repeat_mode = True) -> ให้จบการทำงานตรงนี้ทันที
-    if is_repeat_mode:
-        log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที (Safe Exit)")
-        log("\n[SUCCESS] จบการทำงาน (Repeat Mode)")
-        return # ออกจากฟังก์ชันหลักทันที
+    # ทำรายการซ้ำ (กด ใช่/ไม่)
+    process_repeat_transaction(main_window, repeat_flag)
     
-    # ถ้าไม่เข้าเงื่อนไขด้านบน (คือ is_repeat_mode = False) ถึงจะลงมาทำบรรทัดนี้
-    # 2. ชำระเงิน (จะทำงานก็ต่อเมื่อเงื่อนไขข้างบนไม่เป็นจริง)
+    # ชำระเงิน (ต่อจากทำรายการซ้ำ)
     process_payment(main_window, pay_method, pay_amount)
 
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
@@ -542,7 +534,7 @@ def run_smart_scenario(main_window, config):
 if __name__ == "__main__":
     conf = load_config()
     if conf:
-        log("Connecting... (Version: SYNCED LOGIC)")
+        log("Connecting...")
         try:
             wait = int(conf['SETTINGS'].get('ConnectTimeout', 10))
             app_title = conf['APP']['WindowTitle']
