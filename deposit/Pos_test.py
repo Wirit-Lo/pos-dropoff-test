@@ -510,14 +510,16 @@ def run_smart_scenario(main_window, config):
     # ทำรายการซ้ำ (กด ใช่/ไม่)
     process_repeat_transaction(main_window, repeat_flag)
     
-    # --- [ส่วนที่เพิ่ม: Pattern สำหรับเช็ค Repeat Flag] ---
+     # --- [ส่วนที่เพิ่ม: Pattern สำหรับเช็ค Repeat Flag] ---
+    # เช็คว่าถ้าเมื่อกี้คือการทำรายการซ้ำ (กด Yes) ให้จบงานตรงนี้เลย
     if str(repeat_flag).lower() in ['true', 'yes', 'on', '1']:
         log("...Config สั่งทำรายการซ้ำ -> จบการทำงานตรงนี้ (ไม่ไปชำระเงิน)")
         log("\n[SUCCESS] จบการทำงาน (Repeat Mode)")
-        return
+        return # <--- **สำคัญมาก** คำสั่งนี้จะดีดออกจากฟังก์ชันทันที
     # ----------------------------------------------------
 
-    # ชำระเงิน (ต่อจากทำรายการซ้ำ)
+    # 2. ชำระเงิน (จะทำงานก็ต่อเมื่อเงื่อนไขข้างบนไม่เป็นจริง)
+    # ถ้ากด "ไม่" หรือไม่ได้สั่ง repeat โค้ดจะไหลลงมาทำบรรทัดนี้
     process_payment(main_window, pay_method, pay_amount)
 
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
