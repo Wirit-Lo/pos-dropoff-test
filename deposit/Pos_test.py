@@ -258,30 +258,10 @@ def find_and_fill_smart(window, target_name, target_id_keyword, value):
         log(f"[!] Error find_and_fill: {e}")
         return False
 
-def fill_manual_address(window, manual_data):
-    """
-    กรอกที่อยู่เองเมื่อเกิด Error/Popup (ใช้การค้นหา Text ภาษาไทยเป็นหลัก)
-    """
-    log("...เข้าสู่โหมดกรอกที่อยู่ด้วยตนเอง (Manual Fallback: Smart Search)...")
-    province = manual_data.get('Province', '')
-    district = manual_data.get('District', '')
-    subdistrict = manual_data.get('SubDistrict', '')
-    log(f"   -> ข้อมูล: {province} > {district} > {subdistrict}")
-
-    # 1. จังหวัด (Name: จังหวัด, ID: AdministrativeArea)
-    if not find_and_fill_smart(window, "จังหวัด", "AdministrativeArea", province):
-        window.type_keys("{TAB}"); window.type_keys(province, with_spaces=True)
-
-    # 2. เขต/อำเภอ (Name: เขต/อำเภอ, ID: Locality)
-    if not find_and_fill_smart(window, "เขต/อำเภอ", "Locality", district):
-        window.type_keys("{TAB}"); window.type_keys(district, with_spaces=True)
-
-    # 3. แขวง/ตำบล (Name: แขวง/ตำบล, ID: DependentLocality)
-    if not find_and_fill_smart(window, "แขวง/ตำบล", "DependentLocality", subdistrict):
-        window.type_keys("{TAB}"); window.type_keys(subdistrict, with_spaces=True)
-
 def process_receiver_address_selection(window, address_keyword, manual_data):
     log(f"--- หน้า: ค้นหาที่อยู่ ({address_keyword}) ---")
+    is_manual_mode = False
+
     if wait_for_text(window, "ข้อมูลผู้รับ", timeout=5):
         try:
             search_ready = False
@@ -317,9 +297,14 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
             time.sleep(0.25)
 
         if found_popup:
+            # เจอ Popup -> เข้า Manual Mode
+            # [แก้] ไม่ต้องกรอกอะไรที่นี่ ให้ไปกรอกที่หน้า Details ทีเดียว (เรียงจากบนลงล่าง)
+            log("...เข้าสู่โหมดกรอกเอง (Manual Mode) -> รอส่งข้อมูลหน้าถัดไป...")
+            is_manual_mode = True
             time.sleep(1.0)
-            fill_manual_address(window, manual_data)
-            smart_next(window) # Manual ต้องกดถัดไป
+            # ไม่กด Next เพราะการปิด Popup มักจะเผยหน้าจอให้กรอกอยู่แล้ว
+            # หรือถ้าต้องกดจริงๆ ค่อยเปิดบรรทัดล่างนี้
+            # smart_next(window)
             
         elif found_list:
             log("...เจอรายการที่อยู่ -> เลือกรายการแรกสุด...")
@@ -340,12 +325,15 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
             except: pass
             # เลือก List แล้ว ไม่ต้องกด Next ซ้ำ
         else:
-            log("[!] ไม่เจอทั้ง Popup และ รายการ -> ลองกดถัดไป")
+            log("[!] ไม่เจอทั้ง Popup และ รายการ -> สันนิษฐานว่าเข้าหน้ากรอกเอง")
+            is_manual_mode = True
             smart_next(window)
 
-def process_receiver_details_form(window, fname, lname, phone):
+    return is_manual_mode
+
+def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, manual_data):
     """
-    [Update] ใช้ Smart Search หาจาก Name หรือ ID
+    หน้ากรอกรายละเอียด: กรอก ชื่อ -> [ที่อยู่] -> เบอร์โทร
     """
     log("--- หน้า: รายละเอียดผู้รับ ---")
     log("...รอหน้าจอโหลด (พร้อมตรวจสอบ Popup Error)...")
@@ -364,7 +352,7 @@ def process_receiver_details_form(window, fname, lname, phone):
         if found: break
         time.sleep(0.5)
 
-    # เริ่มกรอกข้อมูล
+    # เริ่มกรอกข้อมูลเรียงลำดับจาก บน -> ล่าง
     try:
         # 1. ชื่อ (Name: ชื่อ, ID: CustomerFirstName)
         find_and_fill_smart(window, "ชื่อ", "CustomerFirstName", fname)
@@ -372,11 +360,39 @@ def process_receiver_details_form(window, fname, lname, phone):
         # 2. นามสกุล (Name: นามสกุล, ID: CustomerLastName)
         find_and_fill_smart(window, "นามสกุล", "CustomerLastName", lname)
 
-        # 3. เบอร์โทร (Name: หมายเลขโทรศัพท์/โทร, ID: PhoneNumber)
+        # 3. [Manual Mode] กรอกที่อยู่ต่อจากนามสกุล
+        if is_manual_mode:
+            log("...[Manual Mode] เริ่มกรอกที่อยู่ (ไล่ลำดับ)...")
+            addr1 = manual_data.get('Address1', '')
+            addr2 = manual_data.get('Address2', '')
+            province = manual_data.get('Province', '')
+            district = manual_data.get('District', '')
+            subdistrict = manual_data.get('SubDistrict', '')
+
+            # ที่อยู่ 1 (ID: StreetAddress1)
+            if not find_and_fill_smart(window, "ที่อยู่ 1", "StreetAddress1", addr1):
+                # ถ้าหาไม่เจอ ลองกด Tab จากนามสกุล
+                window.type_keys("{TAB}"); window.type_keys(addr1, with_spaces=True)
+            
+            # ที่อยู่ 2 (ID: StreetAddress2)
+            if not find_and_fill_smart(window, "ที่อยู่ 2", "StreetAddress2", addr2):
+                window.type_keys("{TAB}"); window.type_keys(addr2, with_spaces=True)
+
+            # จังหวัด (ID: AdministrativeArea)
+            if not find_and_fill_smart(window, "จังหวัด", "AdministrativeArea", province):
+                window.type_keys("{TAB}"); window.type_keys(province, with_spaces=True)
+
+            # เขต/อำเภอ (ID: Locality)
+            if not find_and_fill_smart(window, "เขต/อำเภอ", "Locality", district):
+                window.type_keys("{TAB}"); window.type_keys(district, with_spaces=True)
+
+            # แขวง/ตำบล (ID: DependentLocality)
+            if not find_and_fill_smart(window, "แขวง/ตำบล", "DependentLocality", subdistrict):
+                window.type_keys("{TAB}"); window.type_keys(subdistrict, with_spaces=True)
+
+        # 4. เบอร์โทร (Name: หมายเลขโทรศัพท์/โทร, ID: PhoneNumber)
         force_scroll_down(window, -5)
-        # ลองหาคำว่า "หมายเลขโทรศัพท์" ก่อน
         if not find_and_fill_smart(window, "หมายเลขโทรศัพท์", "PhoneNumber", phone):
-             # ถ้าไม่เจอ ลองคำว่า "โทร"
              find_and_fill_smart(window, "โทร", "Phone", phone)
 
     except Exception as e: log(f"[!] Error Details: {e}")
@@ -487,6 +503,8 @@ def run_smart_scenario(main_window, config):
         wait_timeout = int(config['SETTINGS'].get('ElementWaitTimeout', 15))
 
         manual_data = {
+            'Address1': config['MANUAL_ADDRESS_FALLBACK'].get('Address1', '') if 'MANUAL_ADDRESS_FALLBACK' in config else '',
+            'Address2': config['MANUAL_ADDRESS_FALLBACK'].get('Address2', '') if 'MANUAL_ADDRESS_FALLBACK' in config else '',
             'Province': config['MANUAL_ADDRESS_FALLBACK'].get('Province', '') if 'MANUAL_ADDRESS_FALLBACK' in config else '',
             'District': config['MANUAL_ADDRESS_FALLBACK'].get('District', '') if 'MANUAL_ADDRESS_FALLBACK' in config else '',
             'SubDistrict': config['MANUAL_ADDRESS_FALLBACK'].get('SubDistrict', '') if 'MANUAL_ADDRESS_FALLBACK' in config else ''
@@ -561,9 +579,15 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
     process_sender_info_page(main_window)
     time.sleep(step_delay)
-    process_receiver_address_selection(main_window, addr_keyword, manual_data)
+    
+    # 1. ค้นหาที่อยู่ และรับค่าสถานะว่าเป็น Manual Mode หรือไม่?
+    is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
+    
     time.sleep(step_delay)
-    process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone)
+    
+    # 2. กรอกรายละเอียดผู้รับ (ส่ง is_manual_mode และ manual_data เข้าไป)
+    process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
+    
     time.sleep(step_delay)
     
     # 1. เรียกฟังก์ชัน และรับค่ากลับมา (ตัวแปรนี้จะได้ค่า True/False จากจุดที่ 1)
