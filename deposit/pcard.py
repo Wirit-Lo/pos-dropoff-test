@@ -18,22 +18,22 @@ def log(message):
 # ================= 2. Helper Functions (Scroll & Search) =================
 def force_scroll_down(window, scroll_dist=-5):
     """
-    [Updated V6] ฟังก์ชันช่วยเลื่อนหน้าจอลง
-    - ปรับลด delay ให้ทำงานไวขึ้นตามคำขอ
+    [Updated V7 - Fixed] เพิ่มความเร็วและแรงในการ Scroll
     """
-    # log(f"...สั่งเลื่อนหน้าจอ (Dist: {scroll_dist})...") # ปิด Log รกๆ
     try:
         window.set_focus()
         rect = window.rectangle()
-        # จุดหมุน Mouse อยู่ค่อนไปทางขวา (กันโดนปุ่มกลางจอ)
+        # [แก้] จุดหมุน Mouse อยู่ค่อนไปทางขวา (0.72)
         scrollbar_x = rect.left + int(rect.width() * 0.72)
         scrollbar_y = rect.top + int(rect.height() * 0.5)
         
         mouse.click(coords=(scrollbar_x, scrollbar_y))
-        # time.sleep(0.1) # ตัด delay ออกเพื่อความไว
         
+        # สั่ง Scroll
         mouse.scroll(coords=(scrollbar_x, scrollbar_y), wheel_dist=scroll_dist)
-        time.sleep(0.5) # ลดจาก 1.0 เหลือ 0.5 เพื่อความไว
+        
+        # [FIX Speed] ลด Delay หลัง Scroll จาก 0.5 เหลือ 0.2 เพื่อความต่อเนื่อง
+        time.sleep(0.2) 
         
     except Exception as e:
         log(f"[!] Scroll Error: {e}")
@@ -66,11 +66,10 @@ def smart_click(window, criteria_list, timeout=5, optional=False):
 
 def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
     """
-    [Updated V6 - Fast & Accurate] 
-    1. ลด Safe Zone เหลือ 70px (เพื่อให้กดปุ่มล่างๆ ได้เลย ไม่ต้องเลื่อน)
-    2. ถ้าต้องเลื่อนขยับ (Nudge) ให้เลื่อนแค่ -4 พอ (กันปุ่มกระเด็นหาย)
+    [Updated V7 - Fixed Logic] 
+    แก้ไขปัญหาเจอปุ่มที่ขอบล่างแล้วเลื่อนไม่ขึ้น
     """
-    log(f"...ค้นหา '{criteria}' (โหมดเลื่อนหาไว)...")
+    log(f"...ค้นหา '{criteria}' (โหมดเลื่อนหาไว Fixed)...")
     
     for i in range(max_scrolls + 1):
         found_element = None
@@ -89,18 +88,17 @@ def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
                 elem_rect = found_element.rectangle()
                 win_rect = window.rectangle()
                 
-                # [FIX 1] ลดพื้นที่กันชนด้านล่างลง (จาก 150 เหลือ 70) 
-                # ปุ่มอยู่ล่างแค่ไหนก็กดได้ ตราบใดที่ไม่ทับกับ Footer จริงๆ
-                safe_bottom_limit = win_rect.bottom - 70 
+                # Safe Zone: เผื่อระยะเพิ่มอีกนิด (จาก 70 เป็น 80)
+                safe_bottom_limit = win_rect.bottom - 80 
                 
-                # เช็คว่าปุ่มอยู่ต่ำกว่าเส้นตายหรือไม่
                 if elem_rect.bottom >= safe_bottom_limit:
-                    log(f"   [!] เจอปุ่ม '{criteria}' แต่อยู่ต่ำมาก (ติดขอบล่าง) -> ขยับนิดเดียว")
+                    log(f"   [!] เจอปุ่ม '{criteria}' แต่อยู่ต่ำมาก (ติดขอบล่าง) -> ดันขึ้นแรงๆ")
                     
-                    # [FIX 2] บังคับเลื่อนแค่ -4 พอ (Nudge) ไม่ใช้ค่า scroll_dist ที่อาจจะเยอะเกินไป
-                    # เพื่อป้องกันปุ่มเลื่อนเลยขึ้นไปข้างบนจนหาไม่เจอ
-                    force_scroll_down(window, -4)
-                    time.sleep(0.3) # รอแป๊บเดียวแล้วหาใหม่เลย
+                    # [FIX Logic Here] 
+                    # เปลี่ยนจาก -4 เป็น -10 เพื่อให้มันดีดขึ้นมากลางจอเลย
+                    force_scroll_down(window, -10)
+                    
+                    time.sleep(0.2) # พักแป๊บเดียวพอ
                     continue 
                 
                 # ถ้าตำแหน่ง OK -> กดเลย
@@ -111,7 +109,7 @@ def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
             except Exception as e:
                 log(f"   [!] เจอแต่กดไม่ได้ ({e}) -> ลองเลื่อนต่อ")
 
-        # 3. ถ้าไม่เจอเลย -> เลื่อนหาหน้าถัดไป (ใช้ค่า scroll_dist ตาม Config ได้เลยเพื่อความไว)
+        # 3. ถ้าไม่เจอเลย -> เลื่อนหาหน้าถัดไป
         if i < max_scrolls:
             if not found_element:
                 log(f"   [Rotate {i+1}] ไม่เจอ '{criteria}' -> เลื่อนหา (Scroll)")
