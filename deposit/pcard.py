@@ -66,15 +66,17 @@ def smart_click(window, criteria_list, timeout=5, optional=False):
 
 def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
     """
-    [Updated V7 - Fixed Logic] 
-    แก้ไขปัญหาเจอปุ่มที่ขอบล่างแล้วเลื่อนไม่ขึ้น
+    [Updated V8 - Anti-Loop] 
+    แก้ปัญหาเจอปุ่มติดขอบล่างแล้ววนลูปไม่หยุด -> ถ้าเลื่อนไม่ได้จะบังคับกดเลย
     """
-    log(f"...ค้นหา '{criteria}' (โหมดเลื่อนหาไว Fixed)...")
+    log(f"...ค้นหา '{criteria}' (โหมดเลื่อนหา V8)...")
+    
+    nudge_count = 0 # ตัวนับจำนวนครั้งที่พยายามขยับจอ
     
     for i in range(max_scrolls + 1):
         found_element = None
         
-        # 1. กวาดหา Element ในหน้าจอ
+        # 1. กวาดหา Element
         try:
             for child in window.descendants():
                 if child.is_visible() and criteria in child.window_text():
@@ -88,22 +90,27 @@ def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
                 elem_rect = found_element.rectangle()
                 win_rect = window.rectangle()
                 
-                # Safe Zone: เผื่อระยะเพิ่มอีกนิด (จาก 70 เป็น 80)
-                safe_bottom_limit = win_rect.bottom - 80 
+                # Safe Zone
+                safe_bottom_limit = win_rect.bottom - 80
                 
+                # เช็คว่าปุ่มอยู่ต่ำเกินไปหรือไม่
                 if elem_rect.bottom >= safe_bottom_limit:
-                    log(f"   [!] เจอปุ่ม '{criteria}' แต่อยู่ต่ำมาก (ติดขอบล่าง) -> ดันขึ้นแรงๆ")
+                    nudge_count += 1
                     
-                    # [FIX Logic Here] 
-                    # เปลี่ยนจาก -4 เป็น -10 เพื่อให้มันดีดขึ้นมากลางจอเลย
-                    force_scroll_down(window, -10)
-                    
-                    time.sleep(0.2) # พักแป๊บเดียวพอ
+                    # [FIX] ถ้าพยายามขยับเกิน 3 ครั้งแล้วยังอยู่ที่เดิม -> บังคับกดเลย
+                    if nudge_count > 3:
+                        log(f"   [!] ปุ่มติดขอบล่างและขยับไม่ได้ ({nudge_count} ครั้ง) -> บังคับกดทันที")
+                        found_element.click_input()
+                        return True
+
+                    log(f"   [!] เจอปุ่มอยู่ต่ำ (ครั้งที่ {nudge_count}) -> ดันขึ้น")
+                    force_scroll_down(window, -10) # เลื่อนลงแรงๆ
+                    time.sleep(0.2)
                     continue 
                 
-                # ถ้าตำแหน่ง OK -> กดเลย
+                # ถ้าตำแหน่งปกติ -> กดเลย
                 found_element.click_input()
-                log(f"   [/] เจอและกดปุ่ม '{criteria}' สำเร็จ")
+                log(f"   [/] เจอและกด '{criteria}' สำเร็จ")
                 return True
                 
             except Exception as e:
@@ -112,8 +119,9 @@ def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
         # 3. ถ้าไม่เจอเลย -> เลื่อนหาหน้าถัดไป
         if i < max_scrolls:
             if not found_element:
-                log(f"   [Rotate {i+1}] ไม่เจอ '{criteria}' -> เลื่อนหา (Scroll)")
+                # log(f"   [Scroll {i+1}] ไม่เจอ '{criteria}' -> เลื่อนหา")
                 force_scroll_down(window, scroll_dist)
+                nudge_count = 0 # รีเซ็ตตัวนับเมื่อเลื่อนหน้าใหม่
             
     log(f"[X] หมดความพยายามในการหาปุ่ม '{criteria}'")
     return False
