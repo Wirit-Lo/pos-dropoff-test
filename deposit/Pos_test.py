@@ -584,8 +584,8 @@ def run_smart_scenario(main_window, config):
     if not click_element_by_id(main_window, "ShippingService_EMSServices"):
         if not click_element_by_fuzzy_id(main_window, "EMSS"): return
     time.sleep(step_delay) 
-    if not click_element_by_id(main_window, "ShippingService_8509"):
-        if not click_element_by_fuzzy_id(main_window, "ShippingService_8509"): return
+
+    click_element_by_id(main_window, "ShippingService_8509")
     time.sleep(step_delay)
 
     if add_insurance_flag.lower() in ['true', 'yes']:
