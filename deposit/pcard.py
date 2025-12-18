@@ -18,26 +18,30 @@ def log(message):
 # ================= 2. Helper Functions (Scroll & Search) =================
 def force_scroll_down(window, scroll_dist=-5):
     """
-    [Updated V7 - Fixed] เพิ่มความเร็วและแรงในการ Scroll
+    [Updated V9 - Ultra Fast] ลดดีเลย์เหลือน้อยที่สุด เพื่อให้เลื่อนปรู๊ดปร๊าด
     """
     try:
-        window.set_focus()
+        # ไม่ set_focus ทุกครั้งเพื่อลดเวลา (ถ้าหน้าจอ Active อยู่แล้ว)
+        # window.set_focus() 
+        
         rect = window.rectangle()
-        # [แก้] จุดหมุน Mouse อยู่ค่อนไปทางขวา (0.72)
+        # จุดหมุน Mouse ขวากลางจอ
         scrollbar_x = rect.left + int(rect.width() * 0.72)
         scrollbar_y = rect.top + int(rect.height() * 0.5)
         
+        # คลิกเพื่อ Active 1 ที
         mouse.click(coords=(scrollbar_x, scrollbar_y))
         
-        # สั่ง Scroll
+        # สั่ง Scroll (ค่าลบ = เลื่อนลง)
         mouse.scroll(coords=(scrollbar_x, scrollbar_y), wheel_dist=scroll_dist)
         
-        # [FIX Speed] ลด Delay หลัง Scroll จาก 0.5 เหลือ 0.2 เพื่อความต่อเนื่อง
-        time.sleep(0.2) 
+        # [FIX Speed] ลดเหลือ 0.1 วินาที (เร็วสุดเท่าที่จะเป็นไปได้โดย UI ไม่ค้าง)
+        time.sleep(0.1) 
         
     except Exception as e:
         log(f"[!] Scroll Error: {e}")
-        window.type_keys("{PGDN}")
+        try: window.type_keys("{PGDN}")
+        except: pass
 
 def smart_click(window, criteria_list, timeout=5, optional=False):
     """คลิกปุ่มตามรายการชื่อ (พื้นฐาน)"""
@@ -64,16 +68,19 @@ def smart_click(window, criteria_list, timeout=5, optional=False):
         log(f"[X] หาปุ่ม {criteria_list} ไม่เจอ!")
     return False
 
-def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
+def smart_click_with_scroll(window, criteria, max_scrolls=10, scroll_dist=-5):
     """
-    [Updated V8 - Anti-Loop] 
-    แก้ปัญหาเจอปุ่มติดขอบล่างแล้ววนลูปไม่หยุด -> ถ้าเลื่อนไม่ได้จะบังคับกดเลย
+    [Updated V9 - Scroll Until Visible] 
+    - ไม่มีการบังคับกด (Force Click)
+    - ถ้าปุ่มอยู่ต่ำ จะเลื่อนลงแรงๆ (-15) จนกว่าปุ่มจะขึ้นมาอยู่ในระยะปลอดภัย
+    - เพิ่ม max_scrolls เป็น 10 รอบเพื่อให้หาเจอแน่นอน
     """
-    log(f"...ค้นหา '{criteria}' (โหมดเลื่อนหา V8)...")
+    log(f"...ค้นหา '{criteria}' (โหมดเลื่อนหา V9: ต่อเนื่อง)...")
     
-    nudge_count = 0 # ตัวนับจำนวนครั้งที่พยายามขยับจอ
+    # เพิ่มรอบการหาเผื่อรายการอยู่ลึกมาก
+    loop_limit = max_scrolls + 5 
     
-    for i in range(max_scrolls + 1):
+    for i in range(loop_limit):
         found_element = None
         
         # 1. กวาดหา Element
@@ -90,40 +97,33 @@ def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
                 elem_rect = found_element.rectangle()
                 win_rect = window.rectangle()
                 
-                # Safe Zone
+                # Safe Zone: กันชนขอบล่าง 80px (โดนบังห้ามกด)
                 safe_bottom_limit = win_rect.bottom - 80
                 
-                # เช็คว่าปุ่มอยู่ต่ำเกินไปหรือไม่
+                # ถ้าปุ่มอยู่ต่ำกว่า Safe Zone
                 if elem_rect.bottom >= safe_bottom_limit:
-                    nudge_count += 1
+                    log(f"   [Wait] เจอปุ่ม '{criteria}' แต่อยู่ต่ำ (Bottom={elem_rect.bottom}) -> เลื่อนหาต่อ...")
                     
-                    # [FIX] ถ้าพยายามขยับเกิน 3 ครั้งแล้วยังอยู่ที่เดิม -> บังคับกดเลย
-                    if nudge_count > 3:
-                        log(f"   [!] ปุ่มติดขอบล่างและขยับไม่ได้ ({nudge_count} ครั้ง) -> บังคับกดทันที")
-                        found_element.click_input()
-                        return True
-
-                    log(f"   [!] เจอปุ่มอยู่ต่ำ (ครั้งที่ {nudge_count}) -> ดันขึ้น")
-                    force_scroll_down(window, -10) # เลื่อนลงแรงๆ
-                    time.sleep(0.2)
-                    continue 
+                    # [Logic ใหม่] เลื่อนลงแรงๆ (-15) เพื่อดึงปุ่มขึ้นมาเร็วๆ
+                    force_scroll_down(window, -15) 
+                    
+                    continue # วนกลับไปเช็คใหม่ (ห้ามกด)
                 
-                # ถ้าตำแหน่งปกติ -> กดเลย
+                # ถ้าตำแหน่ง OK (อยู่ใน Safe Zone) -> กดเลย
                 found_element.click_input()
-                log(f"   [/] เจอและกด '{criteria}' สำเร็จ")
+                log(f"   [/] เจอและกดปุ่ม '{criteria}' สำเร็จ")
                 return True
                 
             except Exception as e:
-                log(f"   [!] เจอแต่กดไม่ได้ ({e}) -> ลองเลื่อนต่อ")
+                log(f"   [!] Error checking element: {e}")
 
-        # 3. ถ้าไม่เจอเลย -> เลื่อนหาหน้าถัดไป
-        if i < max_scrolls:
+        # 3. ถ้ายังไม่เจอเลย -> เลื่อนหน้าจอลงปกติ
+        if i < loop_limit:
             if not found_element:
-                # log(f"   [Scroll {i+1}] ไม่เจอ '{criteria}' -> เลื่อนหา")
+                # log(f"   [Scroll {i+1}] ไม่เจอ '{criteria}' -> เลื่อนลง")
                 force_scroll_down(window, scroll_dist)
-                nudge_count = 0 # รีเซ็ตตัวนับเมื่อเลื่อนหน้าใหม่
             
-    log(f"[X] หมดความพยายามในการหาปุ่ม '{criteria}'")
+    log(f"[X] หมดระยะเลื่อนหาแล้ว ไม่เจอปุ่ม '{criteria}' ในตำแหน่งที่กดได้")
     return False
 
 # ================= 3. Smart Input Functions =================
