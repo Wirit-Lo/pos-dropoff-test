@@ -264,14 +264,22 @@ def run_smart_scenario(main_window, config):
     
     smart_next(main_window)
     
-    # --- [เพิ่ม] ตรวจสอบ Popup อัตโนมัติ (มีหรือไม่มีก็ได้) ---
-    # รอเช็ค 2 วินาที ถ้ามี Popup เด้งมาจะกด Enter, ถ้าไม่มีจะข้ามไปเอง
-    time.sleep(1.0) 
+    # --- [Updated Step 1] ตรวจสอบ Popup พื้นที่ทับซ้อน/ซับซ้อน (ถ้ามี) ---
+    time.sleep(1.0)
+    # เช็คคำว่า "ทับซ้อน", "ซับซ้อน", "เลือกตำบล" หรือ "พื้นที่"
+    if wait_for_text(main_window, ["ทับซ้อน", "ซับซ้อน", "พื้นที่", "เลือกตำบล"], timeout=2.0):
+        log("[Auto-Check] พบ Popup พื้นที่ทับซ้อน -> พยายามกดดำเนินการ")
+        # ลองกดปุ่ม 'ดำเนินการ' หรือ 'ตกลง' ถ้าหาไม่เจอให้กด Enter (เลือกรายการแรก)
+        if not smart_click(main_window, ["ดำเนินการ", "ตกลง", "OK"], timeout=1, optional=True):
+            main_window.type_keys("{ENTER}")
+        time.sleep(1.5) # รอให้ Popup ถัดไป (ถ้ามี) เด้งขึ้นมา
+
+    # --- [Updated Step 2] ตรวจสอบ Popup แจ้งเตือน/ไม่สามารถดำเนินการ (ถ้ามี) ---
     if wait_for_text(main_window, ["ไม่สามารถดำเนินการ", "แจ้งเตือน", "ตกลง", "Warning"], timeout=2.0):
-        log("[Auto-Check] พบ Popup แจ้งเตือน -> กด Enter เพื่อปิด")
+        log("[Auto-Check] พบ Popup แจ้งเตือน (Warning) -> กด Enter เพื่อปิด")
         main_window.type_keys("{ENTER}")
     else:
-        log("[Auto-Check] ไม่พบ Popup -> ทำงานต่อตามปกติ")
+        log("[Auto-Check] ไม่พบ Popup Warning -> ทำงานต่อ")
     # -----------------------------------------------------
 
     time.sleep(step_delay)
