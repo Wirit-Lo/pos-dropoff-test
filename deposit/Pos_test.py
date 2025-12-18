@@ -21,6 +21,7 @@ def log(message):
 
 # ================= 2. Helper Functions =================
 def force_scroll_down(window, scroll_dist=-5):
+    """สั่ง Scroll Mouse ที่ตำแหน่งปลอดภัย (ขวากลางจอ)"""
     try:
         window.set_focus()
         rect = window.rectangle()
@@ -31,10 +32,10 @@ def force_scroll_down(window, scroll_dist=-5):
         mouse.click(coords=(scrollbar_x, scrollbar_y))
         # สั่ง Scroll (ค่าลบคือเลื่อนลง)
         mouse.scroll(coords=(scrollbar_x, scrollbar_y), wheel_dist=scroll_dist)
-        time.sleep(0.5) # รอให้หน้าจอนิ่ง
+        time.sleep(0.2) # [แก้ไข] ลดเวลาลงเหลือ 0.2 วินาที (เพื่อให้เลื่อนเร็วขึ้น)
     except Exception as e:
         log(f"[!] Scroll Error: {e}")
-        try: window.type_keys("{PGDN}") # Fallback
+        try: window.type_keys("{PGDN}") # Fallback ใช้ปุ่ม PageDown
         except: pass
 
 def smart_click(window, criteria_list, timeout=5):
@@ -77,10 +78,10 @@ def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
                 
                 # ถ้าปุ่มอยู่ต่ำเกินไป (ติดขอบล่าง) ให้ขยับลงนิดเดียว (-4)
                 if elem_rect.bottom >= safe_bottom_limit:
-                    log(f"   [!] เจอปุ่ม '{criteria}' แต่อยู่ต่ำเกินไป -> ขยับจอ")
+                    log(f"   [!] เจอปุ่มแต่ต่ำเกินไป -> ขยับจอลงนิดหน่อย")
                     force_scroll_down(window, -4)
-                    time.sleep(0.3)
-                    continue # วนกลับไปหาใหม่
+                    time.sleep(0.1) # [แก้ไข] ลดเวลาลงเหลือ 0.1 วินาที (เพื่อให้ขยับเร็วขึ้น)
+                    continue # วนกลับไปหาใหม่ในตำแหน่งใหม่
                 
                 # กดปุ่ม
                 found_element.click_input()
@@ -93,7 +94,7 @@ def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
         # 3. ถ้าไม่เจอเลย -> เลื่อนหน้าจอลง (Scroll)
         if i < max_scrolls:
             if not found_element:
-                # log(f"   [Rotate {i+1}] ไม่เจอ -> เลื่อนหา...")
+                log(f"   [Rotate {i+1}] ไม่เจอ '{criteria}' -> เลื่อนหา...")
                 force_scroll_down(window, scroll_dist)
             
     log(f"[X] หาปุ่ม '{criteria}' ไม่เจอจนหมดระยะ Scroll")
