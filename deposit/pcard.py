@@ -189,13 +189,19 @@ def process_sender_info(window, phone_number, default_postal):
         smart_input_with_scroll(window, "หมายเลขโทรศัพท์", phone_number)
         smart_next(window)
 
-def wait_for_text(window, text, timeout=5): # ลด timeout default
+def wait_for_text(window, text_list, timeout=5):
+    # ปรับปรุงให้รับได้ทั้งข้อความเดียว หรือ รายการข้อความ (List)
+    if isinstance(text_list, str): text_list = [text_list]
+    
     start = time.time()
     while time.time() - start < timeout:
         try:
             for child in window.descendants():
-                if text in child.window_text() and child.is_visible():
-                    return True
+                txt = child.window_text()
+                # เช็คว่ามีคำใดคำหนึ่งโผล่ขึ้นมาไหม
+                for t in text_list:
+                    if t in txt and child.is_visible():
+                        return True
         except: pass
         time.sleep(0.3)
     return False
@@ -257,6 +263,17 @@ def run_smart_scenario(main_window, config):
     except: pass
     
     smart_next(main_window)
+    
+    # --- [เพิ่ม] ตรวจสอบ Popup อัตโนมัติ (มีหรือไม่มีก็ได้) ---
+    # รอเช็ค 2 วินาที ถ้ามี Popup เด้งมาจะกด Enter, ถ้าไม่มีจะข้ามไปเอง
+    time.sleep(1.0) 
+    if wait_for_text(main_window, ["ไม่สามารถดำเนินการ", "แจ้งเตือน", "ตกลง", "Warning"], timeout=2.0):
+        log("[Auto-Check] พบ Popup แจ้งเตือน -> กด Enter เพื่อปิด")
+        main_window.type_keys("{ENTER}")
+    else:
+        log("[Auto-Check] ไม่พบ Popup -> ทำงานต่อตามปกติ")
+    # -----------------------------------------------------
+
     time.sleep(step_delay)
 
     smart_click(main_window, "ดำเนินการ", timeout=2, optional=True)
