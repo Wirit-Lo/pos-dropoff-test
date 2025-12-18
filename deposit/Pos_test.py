@@ -794,7 +794,7 @@ def run_smart_scenario(main_window, config):
         process_sender_info_page(main_window)
         time.sleep(step_delay)
         
-        # 1. ค้นหาที่อยู่ และรับค่าสถานะว่าเป็น Manual Mode หรือไม่?
+    # 1. ค้นหาที่อยู่ และรับค่าสถานะว่าเป็น Manual Mode หรือไม่?
     is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
     
     time.sleep(step_delay)
