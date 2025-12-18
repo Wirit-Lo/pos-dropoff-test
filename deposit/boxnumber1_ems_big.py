@@ -510,7 +510,7 @@ def run_smart_scenario(main_window, config):
         # แยกตัวแปร PostalCode ให้ชัดเจน
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
         receiver_postal = config['DEPOSIT_ENVELOPE'].get('ReceiverPostalCode', '10110') # ปลายทาง
-        sender_postal = config['TEST_DATA'].get('SenderPostalCode', '10110') # ต้นทาง (อ่านจาก [TEST_DATA])
+        sender_postal = config['TEST_DATA'].get('SenderPostalCode', '10110') # ต้นทาง
         
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
         special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
