@@ -24,13 +24,18 @@ def force_scroll_down(window, scroll_dist=-5):
     try:
         window.set_focus()
         rect = window.rectangle()
-        center_x = rect.left + int(rect.width() * 0.5)
-        center_y = rect.top + int(rect.height() * 0.5)
-        mouse.click(coords=(center_x, center_y))
-        time.sleep(0.2)
-        mouse.scroll(coords=(center_x, center_y), wheel_dist=scroll_dist)
-        time.sleep(0.8)
-    except: pass
+        # [แก้] ขยับจุดหมุนไปทางขวา (0.72) เพื่อหลบปุ่มกลางจอ
+        scrollbar_x = rect.left + int(rect.width() * 0.72)
+        scrollbar_y = rect.top + int(rect.height() * 0.5)
+        
+        mouse.click(coords=(scrollbar_x, scrollbar_y))
+        # สั่ง Scroll (ค่าลบคือเลื่อนลง)
+        mouse.scroll(coords=(scrollbar_x, scrollbar_y), wheel_dist=scroll_dist)
+        time.sleep(0.5) # รอให้หน้าจอนิ่ง
+    except Exception as e:
+        log(f"[!] Scroll Error: {e}")
+        try: window.type_keys("{PGDN}") # Fallback
+        except: pass
 
 def smart_click(window, criteria_list, timeout=5):
     if isinstance(criteria_list, str): criteria_list = [criteria_list]
@@ -48,25 +53,50 @@ def smart_click(window, criteria_list, timeout=5):
     return False
 
 def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
-    log(f"...ค้นหา '{criteria}' (Scroll)...")
+    log(f"...ค้นหา '{criteria}' (Scroll Mode)...")
+    
     for i in range(max_scrolls + 1):
-        found = None
+        found_element = None
+        
+        # 1. กวาดหา Element ในหน้าจอปัจจุบัน
         try:
             for child in window.descendants():
                 if child.is_visible() and criteria in child.window_text():
-                    found = child; break
+                    found_element = child
+                    break
         except: pass
-        if found:
+
+        # 2. ถ้าเจอ -> เช็คตำแหน่งและกด
+        if found_element:
             try:
-                elem_rect = found.rectangle()
+                elem_rect = found_element.rectangle()
                 win_rect = window.rectangle()
-                if elem_rect.bottom >= win_rect.bottom - 70:
-                    force_scroll_down(window, -3); time.sleep(0.5); continue 
-                found.click_input()
+                
+                # Safe Zone: กันชนขอบล่าง 70px
+                safe_bottom_limit = win_rect.bottom - 70 
+                
+                # ถ้าปุ่มอยู่ต่ำเกินไป (ติดขอบล่าง) ให้ขยับลงนิดเดียว (-4)
+                if elem_rect.bottom >= safe_bottom_limit:
+                    log(f"   [!] เจอปุ่ม '{criteria}' แต่อยู่ต่ำเกินไป -> ขยับจอ")
+                    force_scroll_down(window, -4)
+                    time.sleep(0.3)
+                    continue # วนกลับไปหาใหม่
+                
+                # กดปุ่ม
+                found_element.click_input()
                 log(f"   [/] เจอและกด '{criteria}' สำเร็จ")
                 return True
-            except: pass
-        if i < max_scrolls: force_scroll_down(window, scroll_dist)
+                
+            except Exception as e:
+                log(f"   [!] เจอแต่กดไม่ได้ ({e})")
+
+        # 3. ถ้าไม่เจอเลย -> เลื่อนหน้าจอลง (Scroll)
+        if i < max_scrolls:
+            if not found_element:
+                # log(f"   [Rotate {i+1}] ไม่เจอ -> เลื่อนหา...")
+                force_scroll_down(window, scroll_dist)
+            
+    log(f"[X] หาปุ่ม '{criteria}' ไม่เจอจนหมดระยะ Scroll")
     return False
 
 def click_element_by_id(window, exact_id, timeout=5, index=0):
@@ -520,7 +550,7 @@ def run_smart_scenario(main_window, config):
     process_sender_info_popup(main_window, phone, sender_postal) 
     
     time.sleep(step_delay)
-    if not smart_click_with_scroll(main_window, "ซองจดหมาย", scroll_dist=scroll_dist): return
+    if not smart_click_with_scroll(main_window, "กล่องธรรมดา หมายเลข 1", scroll_dist=scroll_dist): return
     time.sleep(step_delay)
     if special_options_str.strip():
         for opt in special_options_str.split(','):
@@ -553,7 +583,7 @@ def run_smart_scenario(main_window, config):
     if not click_element_by_id(main_window, "ShippingService_EMSServices"):
         if not click_element_by_fuzzy_id(main_window, "EMSS"): return
     time.sleep(step_delay) 
-    if not click_element_by_id(main_window, "ShippingService_2572"):
+    if not click_element_by_id(main_window, "ShippingService_363473"):
         click_element_by_fuzzy_id(main_window, "ShippingService")
     time.sleep(1)
 
