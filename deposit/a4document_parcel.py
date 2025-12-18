@@ -22,7 +22,7 @@ def log(message):
 
 # ================= 2. Helper Functions =================
 # ฟังก์ชันใหม่: ค้นหา Element แบบ Smart (Text หรือ ID)
-# ***** แปะเพิ่มเข้าไปในไฟล์ main.py (เช่น ไว้ต่อจาก smart_click_with_scroll) *****
+# *** แปะเพิ่มเข้าไปในไฟล์ main.py (เช่น ไว้ต่อจาก smart_click_with_scroll) ***
 def find_and_fill_smart(window, target_name, target_id_keyword, value):
     try:
         # [แก้ไข] ถ้าค่าว่าง ให้ข้ามเลย ไม่ต้องหาและไม่ต้องคลิก (เพื่อความเร็ว)
@@ -284,7 +284,7 @@ def check_error_popup(window, delay=0.5):
 
 # ================= 3. Business Logic Functions =================
 
-def process_sender_info_popup(window, phone, sender_postal):
+def process_sender_info_popup(window, phone, postal):
     if smart_click(window, "อ่านบัตรประชาชน", timeout=3): 
         time.sleep(1.5) 
         try:
@@ -292,7 +292,7 @@ def process_sender_info_popup(window, phone, sender_postal):
             for edit in edits:
                 if "รหัสไปรษณีย์" in edit.element_info.name:
                     if not edit.get_value():
-                        edit.click_input(); edit.type_keys(str(sender_postal), with_spaces=True)
+                        edit.click_input(); edit.type_keys(str(postal), with_spaces=True)
                     break 
         except: pass
         found_phone = False
@@ -451,6 +451,7 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
 
     return is_manual_mode
 
+
 def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, manual_data):
     """
     หน้ากรอกรายละเอียด: กรอกข้อมูลตามลำดับ 1-8 ที่ระบุมา
@@ -518,6 +519,7 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
     for i in range(3):
         log(f"   -> Enter ครั้งที่ {i+1}")
         smart_next(window); time.sleep(1.8)
+
 
 def process_repeat_transaction(window, should_repeat):
     """
@@ -597,8 +599,6 @@ def run_smart_scenario(main_window, config):
     try:
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
         postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
-        receiver_postal = config['DEPOSIT_ENVELOPE'].get('ReceiverPostalCode', '10110') # ปลายทาง
-        sender_postal = config['TEST_DATA'].get('SenderPostalCode', '10110') # ต้นทาง
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
         special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
         add_insurance_flag = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
@@ -625,6 +625,7 @@ def run_smart_scenario(main_window, config):
             'District': config['MANUAL_ADDRESS_FALLBACK'].get('District', '') if 'MANUAL_ADDRESS_FALLBACK' in config else '',
             'SubDistrict': config['MANUAL_ADDRESS_FALLBACK'].get('SubDistrict', '') if 'MANUAL_ADDRESS_FALLBACK' in config else ''
         }
+
     except: log("[Error] อ่าน Config ไม่สำเร็จ"); return
 
     log(f"--- เริ่มต้นการทำงาน (VERSION: SYNCED LOGIC) ---")
@@ -632,7 +633,7 @@ def run_smart_scenario(main_window, config):
 
     if not smart_click(main_window, "รับฝากสิ่งของ"): return
     time.sleep(step_delay)
-    process_sender_info_popup(main_window, phone, sender_postal)
+    process_sender_info_popup(main_window, phone, postal) 
     time.sleep(step_delay)
     if not smart_click_with_scroll(main_window, "ซอง A4 เอกสาร", scroll_dist=scroll_dist): return
     time.sleep(step_delay)
@@ -645,7 +646,7 @@ def run_smart_scenario(main_window, config):
     smart_input_weight(main_window, weight)
     smart_next(main_window)
     time.sleep(1)
-    try: main_window.type_keys(str(receiver_postal), with_spaces=True)
+    try: main_window.type_keys(str(postal), with_spaces=True)
     except: pass
     smart_next(main_window)
     time.sleep(step_delay)
@@ -673,9 +674,14 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
     process_sender_info_page(main_window)
     time.sleep(step_delay)
-    process_receiver_address_selection(main_window, addr_keyword, manual_data)
+# 1. ค้นหาที่อยู่ และรับค่าสถานะว่าเป็น Manual Mode หรือไม่?
+    is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
+    
     time.sleep(step_delay)
-    process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone)
+    
+    # 2. กรอกรายละเอียดผู้รับ (ส่ง is_manual_mode และ manual_data เข้าไป)
+    process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
+    
     time.sleep(step_delay)
 
     # ----------------------------------------------------
