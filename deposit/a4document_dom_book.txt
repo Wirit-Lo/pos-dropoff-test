@@ -20,6 +20,7 @@ def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
 # ================= 2. Helper Functions =================
+
 # ฟังก์ชันใหม่: ค้นหา Element แบบ Smart (Text หรือ ID)
 # *** แปะเพิ่มเข้าไปในไฟล์ main.py (เช่น ไว้ต่อจาก smart_click_with_scroll) ***
 def find_and_fill_smart(window, target_name, target_id_keyword, value):
@@ -70,8 +71,7 @@ def find_and_fill_smart(window, target_name, target_id_keyword, value):
     except Exception as e:
         log(f"[!] Error find_and_fill: {e}")
         return False
-
-
+    
 def click_scroll_arrow_smart(window, direction='right', repeat=5):
     """
     ฟังก์ชันเลื่อนหน้าจอโดยใช้ "แป้นพิมพ์" (Keyboard Arrow Keys) ล้วน 100%
@@ -794,15 +794,15 @@ def run_smart_scenario(main_window, config):
         process_sender_info_page(main_window)
         time.sleep(step_delay)
         
-        # 1. ค้นหาที่อยู่ และรับค่าสถานะว่าเป็น Manual Mode หรือไม่?
-        is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
+    # 1. ค้นหาที่อยู่ และรับค่าสถานะว่าเป็น Manual Mode หรือไม่?
+    is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
     
-        time.sleep(step_delay)
+    time.sleep(step_delay)
     
-        # 2. กรอกรายละเอียดผู้รับ (ส่ง is_manual_mode และ manual_data เข้าไป)
-        process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
+    # 2. กรอกรายละเอียดผู้รับ (ส่ง is_manual_mode และ manual_data เข้าไป)
+    process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
     
-        time.sleep(step_delay)
+    time.sleep(step_delay)
     
     # -------------------------------------------------------------------------
     # 1. เรียกฟังก์ชัน และรับค่ากลับมา (ตัวแปรนี้จะได้ค่า True/False จากจุดที่ 1)
