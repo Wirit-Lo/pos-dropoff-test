@@ -697,24 +697,40 @@ def run_smart_scenario(main_window, config):
                 continue # **สำคัญ** วนกลับไปเริ่มลูปใหม่ เพื่อเช็คข้อ 1 ("ไม่สามารถดำเนินการได้") อีกรอบ
 
             # 3. ถ้าไม่มี Popup อะไรแล้ว และเจอปุ่มบริการขนส่ง (ถือว่าผ่าน)
-            # แต่เราจะปล่อยให้มันวนจนครบ หรือ break ออกเมื่อเจอปุ่มบริการก็ได้
-            # ในที่นี้ปล่อยให้วนเช็คไปเรื่อยๆ จน timeout หรือเจอปุ่มข้างล่างทำงานต่อเอง
             
         except: pass
         time.sleep(0.5)
     # =========================================================
 
-    wait_until_id_appears(main_window, "ShippingService_363163", timeout=15)
-    if find_and_click_with_rotate_logic(main_window, "ShippingService_363163"):
+    # --- ส่วนเลือกบริการขนส่ง (ต้องถอยย่อหน้าออกมาให้อยู่ระดับเดียวกับ for loop ด้านบน) ---
+    log("...เลือกบริการขนส่ง...")
+    wait_until_id_appears(main_window, "ShippingService_363235", timeout=15)
+    if find_and_click_with_rotate_logic(main_window, "ShippingService_363235"):
         main_window.type_keys("{ENTER}")
     
+    time.sleep(1.0)
+
+    # --- ส่วนประกัน (Insurance) ---
+    if add_insurance_flag.lower() in ['true', 'yes', 'on', '1']:
+        log(f"...ใส่วงเงิน {insurance_amt}...")
+        if click_element_by_id(main_window, "CoverageButton"):
+            if wait_until_id_appears(main_window, "CoverageAmount", timeout=5):
+                for child in main_window.descendants():
+                    if child.element_info.automation_id == "CoverageAmount":
+                        child.click_input(); child.type_keys(str(insurance_amt), with_spaces=True); break
+                time.sleep(0.5)
+                submits = [c for c in main_window.descendants() if c.element_info.automation_id == "LocalCommand_Submit"]
+                submits.sort(key=lambda x: x.rectangle().top)
+                if submits: submits[0].click_input()
+                else: main_window.type_keys("{ENTER}")
+
     time.sleep(1)
     smart_next(main_window)
     time.sleep(step_delay)
-
+    
     process_special_services(main_window, special_services)
     time.sleep(step_delay)
-
+    
     process_sender_info_page(main_window)
     time.sleep(step_delay)
     
@@ -724,10 +740,18 @@ def run_smart_scenario(main_window, config):
     process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
     time.sleep(step_delay)
     
+    # --- ส่วนทำรายการซ้ำ (Repeat Transaction) ---
+    # **สำคัญ** ต้องวางตรงนี้ และย่อหน้าต้องชิดซ้ายเท่ากับบรรทัดอื่นๆ (ห้ามอยู่ใน if/for/try)
+    # ตัวแปร repeat_flag ดึงมาจาก Config ตอนต้นฟังก์ชัน run_smart_scenario
     is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
+    
     if is_repeat_mode:
         log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที")
-        return
+        return # จบการทำงาน (ไม่ต้องทำ Payment ต่อ)
+
+    # --- ส่วนชำระเงิน (Payment) ---
+    # จะทำก็ต่อเมื่อไม่ได้ Return จากเงื่อนไขข้างบน
+    process_payment(main_window, pay_method, pay_amount)
     
     process_payment(main_window, pay_method, pay_amount)
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
