@@ -108,39 +108,51 @@ def safe_type_keys(element, value):
 
 def find_and_fill_smart(window, target_name, target_id_keyword, value):
     """
-    ค้นหาและกรอกข้อมูล (FIXED: ค้นหาเฉพาะ Control Type = Edit เท่านั้น)
-    ป้องกันการไปจับ Container/Group แล้วกรอกข้อมูลใส่ช่องเดิมซ้ำๆ
+    ค้นหาและกรอกข้อมูล (FIXED V2: รองรับทั้ง Edit และ ComboBox)
+    แก้ปัญหา: 
+    1. ไม่ข้ามช่อง Dropdown (เพราะเพิ่ม ComboBox)
+    2. ไม่กรอกช่องเดิมซ้ำ (เพราะกรอง Group/Container ทิ้ง)
     """
     try:
         if not value or str(value).strip() == "": return True # ข้ามถ้าไม่มีข้อมูล
 
         target_elem = None
         
-        # [CRITICAL FIX] ค้นหาเฉพาะ Control Type = Edit เท่านั้น
-        # นี่คือจุดสำคัญที่แก้ปัญหา "กรอกช่องเดิม"
-        all_edits = window.descendants(control_type="Edit")
-
-        for child in all_edits:
+        # [FIXED] ดึง Descendants ทั้งหมดมาคัดกรองเอง
+        all_elements = window.descendants()
+        
+        candidates = []
+        for child in all_elements:
             if not child.is_visible(): continue
+            ctype = child.element_info.control_type
+            
+            # [CRITICAL] รับเฉพาะ Edit (ช่องพิมพ์) และ ComboBox (ช่องเลือก)
+            # ตัด Group, Pane, Window ทิ้ง เพื่อไม่ให้จับผิดตัว
+            if ctype in ["Edit", "ComboBox", "Document"]:
+                candidates.append(child)
+
+        # วนหาใน Candidates ที่คัดมาแล้ว
+        for child in candidates:
             aid = child.element_info.automation_id
             name = child.element_info.name
             
-            # เช็ค ID ก่อน (แม่นยำกว่าสำหรับ Manual Mode)
+            # เช็ค ID (Priority 1)
             if target_id_keyword and aid and target_id_keyword in aid:
                 target_elem = child
                 break
             
-            # เช็ค Name
+            # เช็ค Name (Priority 2)
             if target_name and name and target_name in name:
                 target_elem = child
                 break
 
         if target_elem:
-            log(f"   -> เจอช่อง '{target_name or target_id_keyword}' -> กำลังกรอก...")
+            log(f"   -> เจอช่อง '{target_name or target_id_keyword}' ({target_elem.element_info.control_type}) -> กรอก: {value}")
             return safe_type_keys(target_elem, value)
         else:
-            log(f"[WARN] หาช่อง '{target_name or target_id_keyword}' ไม่เจอ")
+            log(f"[WARN] หาช่อง '{target_name or target_id_keyword}' ไม่เจอ (ข้าม)")
             return False
+            
     except Exception as e:
         log(f"[!] Error find_and_fill: {e}")
         return False
@@ -340,26 +352,27 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
 
     return is_manual_mode
 
-# [Logic: กรอกรายละเอียด (ส่วนที่ปรับปรุง Manual Mode)]
+# [Logic: กรอกรายละเอียด (ปรับปรุงใหม่ให้หาเจอทุกช่อง)]
 def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, manual_data):
     log(f"--- [Step 2] รายละเอียดผู้รับ (Manual: {is_manual_mode}) ---")
     
-    # รอฟอร์มโหลด (เช็คจาก Edit Box)
+    # รอฟอร์มโหลด
     for _ in range(10):
         if check_error_popup(window): continue
         try:
-             if window.descendants(control_type="Edit"): break
+             # หา Control ใดๆ ที่ไม่ใช่ Text เพื่อยืนยันว่าฟอร์มโหลด
+             if window.descendants(control_type="Edit") or window.descendants(control_type="ComboBox"): break
         except: pass
         time.sleep(0.5)
 
-    # 1. ชื่อ-นามสกุล (ต้องกรอกเสมอ)
+    # 1. ชื่อ-นามสกุล
     find_and_fill_smart(window, "ชื่อ", "CustomerFirstName", fname)
     find_and_fill_smart(window, "นามสกุล", "CustomerLastName", lname)
 
     # 2. กรอกที่อยู่ (เฉพาะ Manual Mode)
     if is_manual_mode:
         log("...[Manual Mode] กำลังกรอกที่อยู่ละเอียด...")
-        # ใช้ ID ตามตัวอย่างที่ให้มา เพื่อความแม่นยำ
+        # ลำดับการกรอก (สำคัญ)
         fields_map = [
             ("จังหวัด", "AdministrativeArea", manual_data.get('Province')),
             ("เขต/อำเภอ", "Locality", manual_data.get('District')),
@@ -369,10 +382,9 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
         ]
         
         for name_kw, id_kw, val in fields_map:
-            # ใช้ find_and_fill_smart แบบใหม่ที่เจาะจง Edit Box เท่านั้น
             find_and_fill_smart(window, name_kw, id_kw, val)
 
-    # 3. เบอร์โทร (เลื่อนลงนิดหน่อยเผื่อตกขอบ)
+    # 3. เบอร์โทร
     force_scroll_down(window, -5)
     if not find_and_fill_smart(window, "หมายเลขโทรศัพท์", "PhoneNumber", phone):
          find_and_fill_smart(window, "โทร", "Phone", phone)
@@ -380,7 +392,6 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
     log("...เสร็จสิ้นหน้าข้อมูลผู้รับ -> กดถัดไป...")
     smart_next(window)
     time.sleep(1.0)
-    # กดย้ำเพื่อความชัวร์ (เผื่อ Animation)
     for i in range(2): 
         smart_next(window); time.sleep(1.0)
 
