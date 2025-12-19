@@ -9,7 +9,8 @@ from pywinauto import mouse
 def load_config(filename='config.ini'):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(script_dir, filename)
-    config = configparser.ConfigParser()
+    # [แก้ไข] เพิ่ม strict=False เพื่อป้องกัน Error กรณีมี Key ซ้ำใน Config
+    config = configparser.ConfigParser(strict=False)
     if not os.path.exists(file_path): 
         print(f"[Error] ไม่พบไฟล์ Config ที่: {file_path}")
         return None
@@ -33,6 +34,7 @@ def find_and_fill_smart(window, target_name, target_id_keyword, value):
             aid = child.element_info.automation_id
             name = child.element_info.name
             
+            # ค้นหาจากชื่อ (Name) หรือ ID
             if target_name and name and target_name in name:
                 target_elem = child
                 break
@@ -43,6 +45,7 @@ def find_and_fill_smart(window, target_name, target_id_keyword, value):
         if target_elem:
             log(f"   -> เจอช่อง '{target_name}/{target_id_keyword}' -> กรอก: {value}")
             try:
+                # ถ้าเจอ Container ให้หา Edit box ข้างใน
                 edits = target_elem.descendants(control_type="Edit")
                 if edits:
                     target_elem = edits[0]
@@ -321,14 +324,19 @@ def process_payment(window, payment_method, received_amount):
 def run_smart_scenario(main_window, config):
     try:
         # --- อ่านค่า Config ---
-        # 1. ข้อมูลสินค้า (ปรับแก้)
-        category_name = config['DEPOSIT_ENVELOPE'].get('ProductCategory', 'อุปกรณ์ไก่ชน') # ข้อ 3
-        product_detail = config['DEPOSIT_ENVELOPE'].get('ProductType', 'อุปกรณ์ไก่ชน ม้วนพรมไก่ ไม่เกิน 1 ผืน') # ข้อ 4
-        weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10') # ข้อ 5
-        volume = config['DEPOSIT_ENVELOPE'].get('Volume', '1000') # ข้อ 6 (เพิ่มใหม่)
+        # 1. ข้อมูลสินค้า (Hardcoded: กำหนดค่าที่นี่เลยตามคำขอ)
+        # [แก้ไข] อัปเดต category_name ให้เป็นชื่อเต็มตามที่ต้องการ
+        category_name = "อุปกรณ์ไก่ชน ม้วนพรมไก่ ไม่เกิน 1 ผืน"
+        product_detail = "อุปกรณ์ไก่ชน ม้วนพรมไก่ ไม่เกิน 1 ผืน"
         
-        # 2. ข้อมูลทั่วไป (เหมือนเดิม)
-        postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
+        # 2. ข้อมูลทั่วไป (อ่านจาก Config เหมือนเดิม)
+        weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10') # ข้อ 5
+        
+        # 3. ข้อมูลปริมาตร (กว้าง/ยาว/สูง) อ่านจาก Config ตามที่อัปเดตใหม่
+        width = config['DEPOSIT_ENVELOPE'].get('Width', '10')
+        length = config['DEPOSIT_ENVELOPE'].get('Length', '20')
+        height = config['DEPOSIT_ENVELOPE'].get('Height', '10')
+        
         receiver_postal = config['DEPOSIT_ENVELOPE'].get('ReceiverPostalCode', '10110')
         sender_postal = config['TEST_DATA'].get('SenderPostalCode', '10110')
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
@@ -361,7 +369,7 @@ def run_smart_scenario(main_window, config):
 
     # ================= ปรับแก้ 4 ขั้นตอนแรก ตามที่ขอ =================
 
-    # 3. เลือกหมวดหมู่ (รูป 1) -> อ่านจาก Config
+    # 3. เลือกหมวดหมู่ (รูป 1) -> ใช้ค่า Hardcoded
     log(f"...[Step 3] เลือกหมวดหมู่: {category_name}")
     # ใช้ smart_click_with_scroll เผื่อหมวดอยู่ข้างล่าง
     if not smart_click_with_scroll(main_window, category_name, max_scrolls=10, scroll_dist=scroll_dist):
@@ -369,8 +377,10 @@ def run_smart_scenario(main_window, config):
     
     time.sleep(step_delay)
 
-    # 4. เลือกรุปร่างชิ้นจดหมาย (รูป 2) -> อ่านจาก Config + เลื่อนหาได้
+    # 4. เลือกรุปร่างชิ้นจดหมาย (รูป 2) -> ใช้ค่า Hardcoded + เลื่อนหาได้
+    # **ใช้คนหาจาก Text (product_detail) ตามที่ต้องการ**
     log(f"...[Step 4] เลือกสินค้า: {product_detail}")
+    
     # เน้นย้ำ: ใช้ max_scrolls เยอะหน่อยเผื่อรายการเยอะ
     found_product = smart_click_with_scroll(main_window, product_detail, max_scrolls=15, scroll_dist=scroll_dist)
     if not found_product:
@@ -388,10 +398,24 @@ def run_smart_scenario(main_window, config):
     smart_next(main_window)
     time.sleep(step_delay)
 
-    # 6. หน้า ปริมาตร (รูป 4) -> เพิ่มใหม่ อ่านจาก Config
-    log(f"...[Step 6] กรอกปริมาตร: {volume}")
-    smart_input_generic(main_window, volume, "ปริมาตร")
+    # 6. หน้า ปริมาตร (รูป 4) -> ใช้ TAB Navigation
+    log(f"...[Step 6] กรอกปริมาตร (กว้าง: {width}, ยาว: {length}, สูง: {height})")
     
+    # [แก้ไข] ใช้การหา Edit แรกแล้วกด Tab ไปเรื่อยๆ เพราะช่องไม่มีชื่อ
+    try:
+        # พยายามหาช่องกรอกแรกสุดที่มองเห็น (ช่องกว้าง)
+        edits = [e for e in main_window.descendants(control_type="Edit") if e.is_visible()]
+        if edits:
+            edits[0].click_input()
+            log("   -> เจอช่องแรก -> เริ่มกรอกและ Tab")
+            # กรอก กว้าง -> TAB -> ยาว -> TAB -> สูง
+            main_window.type_keys(f"{width}{{TAB}}{length}{{TAB}}{height}", with_spaces=True)
+        else:
+            log("   [WARN] ไม่เจอ Edit box -> ลองพิมพ์ Blind Type")
+            main_window.type_keys(f"{width}{{TAB}}{length}{{TAB}}{height}", with_spaces=True)
+    except:
+         log("   [!] Error กรอกปริมาตร")
+
     # กด ถัดไป (Enter)
     smart_next(main_window)
     time.sleep(step_delay)
@@ -434,9 +458,13 @@ def run_smart_scenario(main_window, config):
 
 # ================= 5. Start App =================
 if __name__ == "__main__":
-    conf = load_config()
+    
+    target_config = 'config.ini' # <-- เปลี่ยนชื่อไฟล์ตรงนี้ได้เลยตามต้องการ
+    
+    conf = load_config(target_config)
+    
     if conf:
-        log("Connecting... (Version: UPDATED STEPS 3-6)")
+        log(f"Connecting... (Using Config: {target_config})")
         try:
             wait = int(conf['SETTINGS'].get('ConnectTimeout', 10))
             app_title = conf['APP']['WindowTitle']
