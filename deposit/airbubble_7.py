@@ -653,6 +653,48 @@ def run_smart_scenario(main_window, config):
         if found: break
         time.sleep(0.5)
 
+    # =========================================================
+    # [NEW LOGIC] จัดการ Popup ทับซ้อน และ Popup Error ที่ไปต่อไม่ได้
+    # =========================================================
+    log("...ตรวจสอบ Popup (พื้นที่ทับซ้อน / ไปต่อไม่ได้)...")
+    
+    # วนลูปเช็คประมาณ 3 วินาที (6 รอบ x 0.5s) เผื่อ Popup เด้งขึ้นมา
+    for _ in range(6):
+        try:
+            # 1. เช็ค Popup "ไม่สามารถดำเนินการต่อไปได้" (Fatal Error)
+            # ถ้าเจอ -> กดตกลง -> จบการทำงาน (Return)
+            if wait_for_text(main_window, "ไม่สามารถดำเนินการต่อไปได้", timeout=0.2):
+                log("[CRITICAL] พบแจ้งเตือน 'ไม่สามารถดำเนินการต่อไปได้' -> กำลังปิดและจบงาน")
+                # พยายามกดปุ่มปิด/ตกลง
+                if not smart_click(main_window, ["ตกลง", "OK", "ปิด"]):
+                    main_window.type_keys("{ENTER}") # ถ้าหาปุ่มไม่เจอ กด Enter แทน
+                
+                log("!!! STOP PROCESS (จบการทำงานทันที) !!!")
+                return # <--- คำสั่งนี้จะหยุดและออกจากฟังก์ชันทันที
+            
+            # 2. เช็ค Popup "พื้นที่ทับซ้อน" (Warning)
+            # ถ้าเจอ -> กดดำเนินการ -> ไปต่อ
+            found_overlap = False
+            for child in main_window.descendants(control_type="Window"):
+                txt = child.window_text()
+                if "ทับซ้อน" in txt or "พื้นที่" in txt:
+                    log(f"[Info] พบ Popup พื้นที่ทับซ้อน -> กด 'ดำเนินการ'")
+                    if smart_click(main_window, "ดำเนินการ"):
+                        found_overlap = True
+                    else:
+                        # ถ้าหาปุ่มไม่เจอ ลองกด Enter
+                        main_window.type_keys("{ENTER}")
+                        found_overlap = True
+                    break
+            
+            if found_overlap:
+                time.sleep(1.0) # รอหน้าจอโหลดหลังกดดำเนินการ
+                continue # วนกลับไปเช็คอีกรอบ (เผื่อมี Error เด้งตามมาหลังกดดำเนินการ)
+
+        except: pass
+        time.sleep(0.5)
+    # =========================================================
+
     wait_until_id_appears(main_window, "ShippingService_363241", timeout=15)
     if find_and_click_with_rotate_logic(main_window, "ShippingService_363241"):
         main_window.type_keys("{ENTER}")
