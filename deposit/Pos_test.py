@@ -536,6 +536,7 @@ def process_repeat_transaction(window, should_repeat):
     # สำคัญ: ส่งค่าความตั้งใจกลับไปบอกฟังก์ชันหลัก
     return is_repeat_intent
 
+
 def process_payment(window, payment_method, received_amount):
     log("--- ขั้นตอนการชำระเงิน ---")
     # 1. กดรับเงิน (หน้าหลัก)
@@ -736,13 +737,17 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
     
     # 5. ทำรายการซ้ำ
+    # 1. เรียกฟังก์ชัน และรับค่ากลับมา (ตัวแปรนี้จะได้ค่า True/False จากจุดที่ 1)
     is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
+    
+    # 2. เช็คเลยว่า ถ้าเป็นจริง -> จบการทำงาน
     if is_repeat_mode:
         log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที")
-        return
+        return # ออกจากฟังก์ชันทันที
     
-    # 6. ชำระเงิน
+    # 3. ถ้าไม่เข้าเงื่อนไขบน ก็จะลงมาทำชำระเงินต่อ
     process_payment(main_window, pay_method, pay_amount)
+
 
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
