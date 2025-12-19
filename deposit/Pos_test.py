@@ -244,6 +244,29 @@ def wait_for_text(window, text_list, timeout=5):
         time.sleep(0.5)
     return False
 
+def wait_while_processing(window, timeout=10):
+    """รอให้ Popup 'กำลังดำเนินการ' หรือ 'Loading' หายไป"""
+    log("...ตรวจสอบการโหลด (Wait for Idle)...")
+    start = time.time()
+    while time.time() - start < timeout:
+        found_loading = False
+        try:
+            for child in window.descendants():
+                txt = child.window_text()
+                # คำที่บ่งบอกว่ากำลังโหลด
+                if "กำลังดำเนินการ" in txt or "กรุณารอสักครู่" in txt or "Processing" in txt or "Loading" in txt:
+                    if child.is_visible():
+                        found_loading = True
+                        break
+        except: pass
+        
+        if not found_loading:
+            return True # ไม่เจอโหลดแล้ว ไปต่อได้
+        
+        time.sleep(0.5)
+    log("[WARN] รอโหลดนานเกินกำหนด (Timeout)")
+    return False
+
 def smart_next(window):
     """กดปุ่มถัดไป (Footer) หรือ Enter"""
     # พยายามหาปุ่ม Submit/Next ของระบบก่อน
@@ -490,6 +513,7 @@ def process_repeat_transaction(window, should_repeat):
     is_repeat_intent = clean_flag in ['true', 'yes', 'on', '1']
     
     found_popup = False
+    # รอ Popup นานหน่อย (เพราะบางทีต้องรอโหลดก่อน Popup จะขึ้น)
     for i in range(30):
         if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=0.5):
             found_popup = True; break
@@ -505,6 +529,12 @@ def process_repeat_transaction(window, should_repeat):
         if not smart_click(window, target, timeout=3):
             if target == "ไม่": window.type_keys("{ESC}")
             else: window.type_keys("{ENTER}")
+        
+        # [แก้ไข] เพิ่มการรอให้ Popup หายไปและหน้าจอพร้อมทำงาน (โดยเฉพาะกรณีกด "ไม่")
+        log(f"...กด '{target}' แล้ว -> รอ Popup ปิดและโหลดหน้าถัดไป (4s)...")
+        time.sleep(4.0) # เพิ่มเวลาตามที่ขอ
+        wait_while_processing(window, timeout=10) # รอโหลด (ถ้ามี)
+        
     else: 
         log("[WARN] ไม่พบ Popup ทำรายการซ้ำ (Timeout)")
 
@@ -513,22 +543,30 @@ def process_repeat_transaction(window, should_repeat):
 
 def process_payment(window, payment_method, received_amount):
     log("--- ขั้นตอนการชำระเงิน ---")
+    
+    # 0. รอให้แน่ใจว่าไม่มี Popup ค้าง
+    wait_while_processing(window)
+    
     # 1. กดรับเงิน (หน้าหลัก)
     log("...ค้นหาปุ่ม 'รับเงิน'...")
-    # รอให้หน้าจอพร้อมสักนิดหลังปิด Popup Repeat
-    time.sleep(1.5)
-    if smart_click(window, "รับเงิน"):
-        time.sleep(1.5) # รอหน้าชำระเงิน
+    if smart_click(window, "รับเงิน", timeout=5): # เพิ่ม timeout หาปุ่มรับเงิน
+        # [แก้ไข] รอหน้าชำระเงินโหลดจริงๆ ก่อนไปต่อ
+        log("...รอหน้าต่างชำระเงิน (รอ 'รับชำระเงิน' หรือ 'ยอดเงินสุทธิ')...")
+        time.sleep(2.0) # รอ UI Render
+        
+        # รอให้เจอ Text ที่ยืนยันว่าอยู่หน้าจ่ายเงินแล้วจริงๆ
+        if not wait_for_text(window, ["รับชำระเงิน", "ยอดเงินสุทธิ", "ช่องทางการชำระเงิน"], timeout=10):
+            log("[WARN] ไม่เจอข้อความยืนยันหน้าจ่ายเงิน -> อาจจะกดปุ่มเงินสดวืดได้")
     else:
         log("[WARN] หาปุ่มรับเงินไม่เจอ")
         return
 
     # 2. เลือกวิธีชำระเงิน
     log(f"...เลือกวิธีชำระเงิน: {payment_method}...")
-    wait_for_text(window, "รับชำระเงิน", timeout=5)
-    if not smart_click(window, payment_method):
+    if not smart_click(window, payment_method, timeout=5):
         log(f"[WARN] ไม่เจอ '{payment_method}' -> เลือก 'เงินสด' แทน")
         smart_click(window, "เงินสด")
+    
     time.sleep(1.0)
 
     # 3. กรอกจำนวนเงิน (Popup)
@@ -684,8 +722,8 @@ def run_smart_scenario(main_window, config):
         time.sleep(0.5)
 
     # เลือกบริการขนส่ง (ใช้ ShippingService_2579 สำหรับ EMS สำเร็จรูป)
-    wait_until_id_appears(main_window, "ShippingService_363163", timeout=15)
-    if find_and_click_with_rotate_logic(main_window, "ShippingService_363163"):
+    wait_until_id_appears(main_window, "ShippingService_2579", timeout=15)
+    if find_and_click_with_rotate_logic(main_window, "ShippingService_2579"):
         main_window.type_keys("{ENTER}")
     
     time.sleep(1)
@@ -710,13 +748,13 @@ def run_smart_scenario(main_window, config):
     process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
     time.sleep(step_delay)
     
-    # 5. ทำรายการซ้ำ
+    # 5. ทำรายการซ้ำ (มีรอ Popup แล้ว)
     is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
     if is_repeat_mode:
         log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที")
         return
     
-    # 6. ชำระเงิน
+    # 6. ชำระเงิน (มีรอ Popup แล้ว)
     process_payment(main_window, pay_method, pay_amount)
 
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
