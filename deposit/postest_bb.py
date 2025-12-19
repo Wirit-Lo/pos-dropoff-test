@@ -614,9 +614,9 @@ def run_smart_scenario(main_window, config):
     try:
         # --- อ่านค่า Config ---
         # 1. ข้อมูลสินค้า (Hardcoded: แยก Step 3 และ 4)
-        category_name = "อุปกรณ์ไก่ชน" 
+        category_name = "กล่องฟองอากาศ / โฟม" 
         category_id_fallback = "MailPieceShape_SubParent_CockFightingEquipments"
-        product_detail = "อุปกรณ์ไก่ชน ม้วนพรมไก่ ไม่เกิน 1 ผืน"
+        product_detail = "วัสดุกันกระแทก (Air bubble) แบบม้วน 35+35+25 ซม."
         
         # 2. ข้อมูลทั่วไป
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10') # ข้อ 5
@@ -702,23 +702,6 @@ def run_smart_scenario(main_window, config):
     smart_next(main_window)
     time.sleep(step_delay)
 
-    # 6. หน้า ปริมาตร (รูป 4)
-    log(f"...[Step 6] กรอกปริมาตร (กว้าง: {width}, ยาว: {length}, สูง: {height})")
-    try:
-        main_window.set_focus()
-        edits = [e for e in main_window.descendants(control_type="Edit") if e.is_visible()]
-        if edits:
-            edits[0].click_input()
-            log("   -> เจอช่องแรก -> เริ่มกรอกและ Tab")
-            main_window.type_keys(f"{width}{{TAB}}{length}{{TAB}}{height}", with_spaces=True)
-        else:
-            log("   [WARN] ไม่เจอ Edit box -> ลองพิมพ์ Blind Type")
-            main_window.type_keys(f"{width}{{TAB}}{length}{{TAB}}{height}", with_spaces=True)
-    except:
-         log("   [!] Error กรอกปริมาตร")
-
-    smart_next(main_window)
-    time.sleep(step_delay)
 
     # 7. หน้า เลข ปณ ปลายทาง (รูป 4/5)
     log(f"...[Step 7] กรอก ปณ ปลายทาง: {receiver_postal}")
