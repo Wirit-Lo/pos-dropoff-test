@@ -283,27 +283,43 @@ def smart_input_generic(window, value, description="ข้อมูล"):
 
 def process_special_services(window, services_str):
     log("--- หน้า: บริการพิเศษ ---")
-    time.sleep(1.0) 
+    time.sleep(1.5)  # รอโหลดหน้า
     if wait_for_text(window, ["บริการพิเศษ", "Services", "Special"], timeout=5):
-        if services_str.strip():
-            for s in services_str.split(','):
+        if services_str and services_str.strip():
+            # รองรับทั้งเครื่องหมายจุลภาค (,) และเครื่องหมายขีด (-) เผื่อ Config เขียนมาแบบต่างๆ
+            # แต่ถ้า user ตั้งใจใช้ขีดในชื่อปุ่มจริงๆ (เช่น "EMS-World") Logic นี้อาจต้องปรับ
+            # เบื้องต้นใช้ Comma เป็นตัวหลักตามคู่มือ
+            services = services_str.split(',')
+            
+            for s in services:
                 s = s.strip()
-                if s: 
-                    log(f"...เลือกบริการเสริม: {s}")
-                    smart_click_with_scroll(window, s, max_scrolls=5)
+                if not s: continue
+                log(f"...กำลังเลือกบริการ: '{s}'")
+                if not smart_click_with_scroll(window, s, max_scrolls=5):
+                    log(f"   [WARN] หาปุ่มบริการ '{s}' ไม่เจอ")
+        else:
+            log("[Info] ไม่มีการระบุบริการพิเศษใน Config")
     else:
         log("[WARN] ไม่พบหน้าบริการพิเศษ หรือข้ามไปแล้ว")
+    
+    # กดถัดไปเพื่อออกจากหน้าบริการพิเศษ
     smart_next(window)
 
 def process_sender_info_page(window):
     log("--- หน้า: ข้อมูลผู้ส่ง (ข้าม) ---")
-    wait_for_text(window, "ข้อมูลผู้ส่ง", timeout=5)
-    smart_next(window)
+    # [แก้ไขจุดที่ 1] ถ้าไม่เจอหน้าข้อมูลผู้ส่ง (Timeout) จะไม่กด Next 
+    # เพื่อป้องกันการกด Enter ค้างไปโดนหน้าถัดไป (ข้อมูลผู้รับ)
+    if wait_for_text(window, "ข้อมูลผู้ส่ง", timeout=5):
+        log("   [/] เจอหน้าข้อมูลผู้ส่ง -> กดถัดไป")
+        smart_next(window)
+    else:
+        log("   [Info] ไม่พบหน้าข้อมูลผู้ส่ง (ระบบอาจข้ามให้อัตโนมัติ) -> ไม่กดถัดไป")
 
 def process_receiver_address_selection(window, address_keyword, manual_data):
     log(f"--- หน้า: ค้นหาที่อยู่ ({address_keyword}) ---")
     is_manual_mode = False
 
+    # รอให้แน่ใจว่าเข้าหน้าข้อมูลผู้รับแล้ว
     if wait_for_text(window, "ข้อมูลผู้รับ", timeout=5):
         try:
             search_ready = False
