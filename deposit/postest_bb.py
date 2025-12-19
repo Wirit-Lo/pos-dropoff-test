@@ -21,8 +21,24 @@ def log(message):
 
 # ================= 2. Helper Functions =================
 
+# [NEW] เพิ่มฟังก์ชันกดปุ่มด้วย ID แบบเจาะจง (จากตัวอย่าง)
+def click_element_by_id(window, exact_id, timeout=5, index=0):
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            # กรองเฉพาะที่มองเห็น (is_visible) เพื่อเป็นเกราะป้องกัน
+            found = [c for c in window.descendants() if c.element_info.automation_id == exact_id and c.is_visible()]
+            if len(found) > index:
+                found[index].click_input()
+                log(f"[/] กดปุ่ม ID '{exact_id}' สำเร็จ")
+                return True
+        except: pass
+        time.sleep(0.5)
+    return False
+
 def find_and_fill_smart(window, target_name, target_id_keyword, value):
     try:
+        # [Protection] ถ้าค่าว่าง ให้ข้ามเลย
         if not value or str(value).strip() == "":
             return False
 
@@ -545,9 +561,7 @@ def run_smart_scenario(main_window, config):
         pay_method = config['PAYMENT'].get('Method', 'เงินสด') if 'PAYMENT' in config else 'เงินสด'
         pay_amount = config['PAYMENT'].get('ReceivedAmount', '1000') if 'PAYMENT' in config else '1000'
 
-        # Insurance Config (อ่านค่าจาก section ที่เหมาะสม หรือเช็คทั่วไป)
-        # เนื่องจาก user ไม่ได้ระบุ section ชัดเจนในคำสั่ง แต่บอกว่า "Config.ini มีอันนี้แล้ว"
-        # เราจะลองอ่านจาก section 'INSURANCE' (ถ้ามี) หรือ 'SPECIAL_SERVICES' หรือ root
+        # Insurance Config
         add_insurance = 'False'
         insurance_amt = '0'
         
@@ -607,8 +621,6 @@ def run_smart_scenario(main_window, config):
         smart_next(main_window)
     else:
         log("[OK] เลือกหมวดหมู่สำเร็จ -> (ข้ามการกดถัดไป เพื่อป้องกันการกดซ้ำที่หน้าถัดไป)")
-        # [แก้ไขจุดที่ 1] ไม่กด smart_next() ตรงนี้ เพราะการคลิกเลือกมักจะพาไปหน้าถัดไปอยู่แล้ว
-        # หรือถ้าไม่ไป ก็ปล่อยให้ Timeout หน้าถัดไปจัดการ หรือถ้าจำเป็นให้ uncomment บรรทัดล่างนี้
         # smart_next(main_window) 
         pass
 
@@ -627,7 +639,6 @@ def run_smart_scenario(main_window, config):
         smart_next(main_window)
     else:
         log(f"[WARN] หาสินค้า '{product_detail}' ไม่เจอ")
-        # ถ้าหาไม่เจอ ก็กดถัดไปเผื่อฟลุ๊ค
         smart_next(main_window)
     
     time.sleep(step_delay)
@@ -638,14 +649,8 @@ def run_smart_scenario(main_window, config):
     smart_next(main_window)
     time.sleep(step_delay)
 
-    # [แก้ไขจุดที่ 2] ลบ smart_next(main_window) ที่ซ้ำซ้อนตรงนี้ออก 
-    # เพราะมันทำให้กดข้ามไปหน้า เลข ปณ (Step 7) ทันทีโดยไม่ได้ตั้งตัว
-    # smart_next(main_window) <--- ลบออกแล้ว
-    # time.sleep(step_delay)
-
     # 7. หน้า เลข ปณ ปลายทาง (รูป 4/5)
     log(f"...[Step 7] กรอก ปณ ปลายทาง: {receiver_postal}")
-    # รอให้หน้าจอพร้อมรับค่าเล็กน้อย
     time.sleep(1.0)
     try: main_window.type_keys(str(receiver_postal), with_spaces=True)
     except: pass
@@ -669,24 +674,22 @@ def run_smart_scenario(main_window, config):
         main_window.type_keys("{ENTER}")
     
     # -----------------------------------------------------
-    # [NEW] เพิ่มราคารับประกัน (Insurance) ตามที่ User แจ้ง
+    # [UPDATED] เพิ่มราคารับประกัน (Insurance) ตาม Logic ตัวอย่าง + Protection
     # -----------------------------------------------------
     if add_insurance.lower() in ['true', 'yes', 'on', '1']:
         log(f"...[Insurance] ตรวจสอบพบ Config เพิ่มประกัน วงเงิน: {insurance_amt}")
-        # รอให้ UI อัปเดตหลังจากกดเลือกบริการ
         time.sleep(1.0) 
         
-        # กดปุ่ม + (CoverageButton)
-        if smart_click(main_window, "CoverageButton", timeout=3):
-            log("   -> กดปุ่ม + (CoverageButton) แล้ว")
-            
-            # รอช่องกรอกวงเงิน (CoverageAmount)
+        # ใช้ Logic การหา ID CoverageButton แบบเจาะจง (ตามตัวอย่าง)
+        if click_element_by_id(main_window, "CoverageButton", timeout=3):
+            # รอช่องกรอกวงเงิน
             if wait_until_id_appears(main_window, "CoverageAmount", timeout=5):
-                # ใช้ find_and_fill_smart หรือ loop เพื่อกรอกข้อมูล
                 log(f"   -> พบช่อง CoverageAmount -> กรอก: {insurance_amt}")
+                
+                # วนลูปหา Element ที่เป็น CoverageAmount และกรอกข้อมูล
                 filled_ins = False
                 for child in main_window.descendants():
-                    if child.element_info.automation_id == "CoverageAmount":
+                    if child.element_info.automation_id == "CoverageAmount" and child.is_visible():
                         child.set_focus()
                         child.click_input()
                         child.type_keys(str(insurance_amt), with_spaces=True)
@@ -695,12 +698,11 @@ def run_smart_scenario(main_window, config):
                 
                 if filled_ins:
                     time.sleep(0.5)
-                    # กดตกลง (Popup Submit)
-                    # ใช้ Logic หาปุ่ม Submit ที่อยู่บนสุด (ตาม Snippet) หรือใช้ smart_next ก็ได้
+                    # กดตกลงใน Popup (หาปุ่ม Submit ใน Context นี้)
                     submits = [c for c in main_window.descendants() if c.element_info.automation_id == "LocalCommand_Submit" and c.is_visible()]
                     if submits:
                         submits.sort(key=lambda x: x.rectangle().top)
-                        submits[0].click_input() # กดปุ่มบนสุด (Popup มักจะอยู่บนกว่า Footer)
+                        submits[0].click_input()
                         log("   -> กดตกลง (Submit) วงเงินประกัน")
                     else:
                         main_window.type_keys("{ENTER}")
