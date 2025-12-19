@@ -147,8 +147,9 @@ def smart_click(window, criteria_list, timeout=5):
                     # เพิ่มเงื่อนไขค้นหาด้วย ID ถ้า criteria ตรงกับ ID
                     text_match = criteria in child.window_text().strip()
                     id_match = criteria in str(child.element_info.automation_id)
+                    name_match = criteria in str(child.element_info.name) # เพิ่มการหาจาก Name
                     
-                    if child.is_visible() and (text_match or id_match):
+                    if child.is_visible() and (text_match or id_match or name_match):
                         child.click_input()
                         log(f"[/] กดปุ่ม '{criteria}' สำเร็จ")
                         return True
@@ -177,8 +178,9 @@ def smart_click_with_scroll(window, criteria, max_scrolls=20, scroll_dist=-10):
                 # เช็คทั้ง Text และ ID
                 text_ok = criteria in child.window_text()
                 id_ok = criteria in str(child.element_info.automation_id)
+                name_ok = criteria in str(child.element_info.name)
                 
-                if text_ok or id_ok:
+                if text_ok or id_ok or name_ok:
                     found_element = child
                     break
         except: pass
@@ -232,14 +234,18 @@ def wait_until_id_appears(window, exact_id, timeout=10):
     return False
 
 def wait_for_text(window, text_list, timeout=5):
+    # ปรับปรุงให้หาทั้ง window_text และ name
     if isinstance(text_list, str): text_list = [text_list]
     start = time.time()
     while time.time() - start < timeout:
         try:
             for child in window.descendants():
+                if not child.is_visible(): continue
                 txt = child.window_text()
+                name = child.element_info.name
                 for t in text_list:
-                    if t in txt and child.is_visible(): return True
+                    if (txt and t in txt) or (name and t in name): 
+                        return True
         except: pass
         time.sleep(0.5)
     return False
@@ -252,19 +258,18 @@ def wait_while_processing(window, timeout=10):
         found_loading = False
         try:
             for child in window.descendants():
+                if not child.is_visible(): continue
                 txt = child.window_text()
                 # คำที่บ่งบอกว่ากำลังโหลด
                 if "กำลังดำเนินการ" in txt or "กรุณารอสักครู่" in txt or "Processing" in txt or "Loading" in txt:
-                    if child.is_visible():
-                        found_loading = True
-                        break
+                    found_loading = True
+                    break
         except: pass
         
         if not found_loading:
             return True # ไม่เจอโหลดแล้ว ไปต่อได้
         
         time.sleep(0.5)
-    log("[WARN] รอโหลดนานเกินกำหนด (Timeout)")
     return False
 
 def smart_next(window):
@@ -513,30 +518,45 @@ def process_repeat_transaction(window, should_repeat):
     is_repeat_intent = clean_flag in ['true', 'yes', 'on', '1']
     
     found_popup = False
-    # รอ Popup นานหน่อย (เพราะบางทีต้องรอโหลดก่อน Popup จะขึ้น)
-    for i in range(30):
-        if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=0.5):
+    log("...กำลังสแกนหา Popup (30s)...")
+    
+    # [แก้ไข] รอ Popup นานหน่อย และหาปุ่มโดยตรงด้วยเผื่อไม่มีหัวข้อ
+    for i in range(60): # เพิ่มรอบการรอเป็น 60 (30 วินาที)
+        # หาหัวข้อ
+        if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ", "ยืนยัน", "Confirm", "Question"], timeout=0.2):
             found_popup = True; break
+        
+        # [แก้ไข] หาปุ่ม "ใช่"/"ไม่" หรือ "Yes"/"No" โดยตรง (ในกรณีที่ Popup ไม่มีหัวข้อ Text)
+        yes_btn = [c for c in window.descendants() if "ใช่" in c.window_text() or "Yes" in c.window_text()]
+        no_btn = [c for c in window.descendants() if "ไม่" in c.window_text() or "No" in c.window_text()]
+        if yes_btn and no_btn and yes_btn[0].is_visible():
+             log("...เจอชุดปุ่ม ใช่/ไม่ -> สันนิษฐานว่าเป็น Popup...")
+             found_popup = True; break
+             
         time.sleep(0.5)
         
     if found_popup:
-        log("...เจอ Popup ทำรายการซ้ำ...")
+        log("...เจอ Popup ทำรายการซ้ำ/ยืนยัน...")
         time.sleep(1.0)
         
         target = "ใช่" if is_repeat_intent else "ไม่"
         log(f"...Config: {should_repeat} -> Intent: {is_repeat_intent} -> เลือก: '{target}'")
         
+        # ลองกดปุ่มเป้าหมาย
         if not smart_click(window, target, timeout=3):
-            if target == "ไม่": window.type_keys("{ESC}")
-            else: window.type_keys("{ENTER}")
+            # Fallback ภาษาอังกฤษ
+            en_target = "Yes" if is_repeat_intent else "No"
+            if not smart_click(window, en_target, timeout=2):
+                if target == "ไม่": window.type_keys("{ESC}")
+                else: window.type_keys("{ENTER}")
         
-        # [แก้ไข] เพิ่มการรอให้ Popup หายไปและหน้าจอพร้อมทำงาน (โดยเฉพาะกรณีกด "ไม่")
+        # [แก้ไข] เพิ่มการรอให้ Popup หายไปและหน้าจอพร้อมทำงาน
         log(f"...กด '{target}' แล้ว -> รอ Popup ปิดและโหลดหน้าถัดไป (4s)...")
         time.sleep(4.0) # เพิ่มเวลาตามที่ขอ
         wait_while_processing(window, timeout=10) # รอโหลด (ถ้ามี)
         
     else: 
-        log("[WARN] ไม่พบ Popup ทำรายการซ้ำ (Timeout)")
+        log("[WARN] ไม่พบ Popup ทำรายการซ้ำ (Timeout) -> สันนิษฐานว่าไม่มี Popup")
 
     # สำคัญ: ส่งค่าความตั้งใจกลับไปบอกฟังก์ชันหลัก
     return is_repeat_intent
@@ -749,6 +769,7 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
     
     # 5. ทำรายการซ้ำ (มีรอ Popup แล้ว)
+    # รับค่า repeat_flag จาก Config แล้วส่งเข้าฟังก์ชัน
     is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
     if is_repeat_mode:
         log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที")
