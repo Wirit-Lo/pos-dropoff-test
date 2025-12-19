@@ -489,8 +489,13 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
 
     except Exception as e: log(f"[!] Error Details: {e}")
 
-    log("...จบขั้นตอนข้อมูลผู้รับ -> กด 'ถัดไป' 3 ครั้ง...")
+    log("...จบขั้นตอนข้อมูลผู้รับ -> พยายามกด 'ถัดไป'...")
     for i in range(3):
+        # [Added Logic] เช็คดักหน้า: ถ้าเจอ Popup ทำรายการซ้ำ ให้หยุดกดทันที (กันกดเกิน)
+        if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=0.2):
+             log("   [!] เจอ Popup 'ทำรายการซ้ำ' แล้ว -> หยุดกดถัดไปทันที")
+             break
+
         # [Added] เช็ค Popup Error ระหว่างกด Next (กัน Crash)
         if check_error_popup(window, delay=0.5):
             log(f"   [!] พบ Popup แจ้งเตือน (รอบที่ {i+1}) -> ปิดและดำเนินการต่อ")
