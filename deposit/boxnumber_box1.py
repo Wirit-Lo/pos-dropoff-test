@@ -549,13 +549,10 @@ def run_smart_scenario(main_window, config):
         time.sleep(0.5)
 
     log("...รอหน้าบริการหลัก...")
-    wait_until_id_appears(main_window, "ShippingService_EMSServices", timeout=wait_timeout)
-    if not click_element_by_id(main_window, "ShippingService_EMSServices"):
+    wait_until_id_appears(main_window, "ShippingService_2579", timeout=wait_timeout)
+    if not click_element_by_id(main_window, "ShippingService_2579"):
         if not click_element_by_fuzzy_id(main_window, "EMSS"): return
     time.sleep(step_delay) 
-    if not click_element_by_id(main_window, "ShippingService_2572"):
-        click_element_by_fuzzy_id(main_window, "ShippingService")
-    time.sleep(1)
 
     if add_insurance_flag.lower() in ['true', 'yes']:
         log(f"...ใส่วงเงิน {insurance_amt}...")
