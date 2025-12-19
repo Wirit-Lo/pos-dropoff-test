@@ -601,9 +601,9 @@ def run_smart_scenario(main_window, config):
     try:
         # --- อ่านค่า Config ---
         # 1. ข้อมูลสินค้า (Hardcoded: แยก Step 3 และ 4)
-        category_name = "อุปกรณ์ไก่ชน" 
+        category_name = "กล่องฟองอากาศ / โฟม" 
         category_id_fallback = "MailPieceShape_SubParent_CockFightingEquipments"
-        product_detail = "อุปกรณ์ไก่ชน ม้วนพรมไก่ ไม่เกิน 1 ผืน"
+        product_detail = "วัสดุกันกระแทก (Air bubble) แบบม้วน 35+35+25 ซม."
         
         # 2. ข้อมูลทั่วไป
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10') # ข้อ 5
@@ -673,25 +673,28 @@ def run_smart_scenario(main_window, config):
         found_category = True
         time.sleep(1.0) # [FIXED] รอ 1 วินาทีหลังคลิกสำเร็จ
         
-    if not found_category:
-        log(f"[WARN] หาหมวดหมู่ '{category_name}' ไม่เจอ")
+    if found_category:
+        smart_next(main_window)
+    else:
+        log(f"[WARN] หาหมวดหมู่ '{category_name}' ไม่เจอ -> ไม่กดถัดไป (ป้องกันการข้าม)")
     
-    # [FIXED] เช็คก่อนกดถัดไป ถ้าหาไม่เจอไม่ต้องกด (หรืออาจจะใส่ logic retry ได้)
-    smart_next(main_window)
     time.sleep(step_delay)
 
     # 4. เลือกรุปร่างชิ้นจดหมาย (รูป 2)
     log(f"...[Step 4] เลือกสินค้า: {product_detail}")
-    # [FIXED] เพิ่มเวลารอให้มั่นใจว่าหน้าโหลดเสร็จ
-    time.sleep(1.5)
+    
+    # [FIXED] เพิ่มการรอหน้าจอโหลดรายการสินค้าให้มั่นใจก่อน (ใช้คีย์เวิร์ดกลางๆ)
+    wait_for_text(main_window, ["วัสดุ", "กันกระแทก", "Air bubble", "ม้วน"], timeout=5.0)
+    time.sleep(1.0) # รออีกนิดหลัง Text ขึ้น
     
     found_product = smart_click_with_scroll(main_window, product_detail, max_scrolls=20, scroll_dist=scroll_dist)
+    
     if found_product:
         time.sleep(1.0) # [FIXED] รอ 1 วินาทีหลังคลิกสำเร็จ
+        smart_next(main_window) # กดถัดไปเฉพาะเมื่อเลือกได้แล้ว
     else:
-        log(f"[WARN] หาสินค้า '{product_detail}' ไม่เจอ")
+        log(f"[WARN] หาสินค้า '{product_detail}' ไม่เจอ -> ไม่กดถัดไป")
     
-    smart_next(main_window)
     time.sleep(step_delay)
 
     # 5. หน้า น้ำหนัก (รูป 3)
@@ -699,21 +702,6 @@ def run_smart_scenario(main_window, config):
     smart_input_generic(main_window, weight, "น้ำหนัก")
     smart_next(main_window)
     time.sleep(step_delay)
-
-    # 6. หน้า ปริมาตร (รูป 4)
-    log(f"...[Step 6] กรอกปริมาตร (กว้าง: {width}, ยาว: {length}, สูง: {height})")
-    try:
-        main_window.set_focus()
-        edits = [e for e in main_window.descendants(control_type="Edit") if e.is_visible()]
-        if edits:
-            edits[0].click_input()
-            log("   -> เจอช่องแรก -> เริ่มกรอกและ Tab")
-            main_window.type_keys(f"{width}{{TAB}}{length}{{TAB}}{height}", with_spaces=True)
-        else:
-            log("   [WARN] ไม่เจอ Edit box -> ลองพิมพ์ Blind Type")
-            main_window.type_keys(f"{width}{{TAB}}{length}{{TAB}}{height}", with_spaces=True)
-    except:
-         log("   [!] Error กรอกปริมาตร")
 
     smart_next(main_window)
     time.sleep(step_delay)
@@ -739,8 +727,8 @@ def run_smart_scenario(main_window, config):
         time.sleep(0.5)
 
     # เลือกบริการขนส่ง (ใช้ ShippingService_2579 สำหรับ EMS สำเร็จรูป)
-    wait_until_id_appears(main_window, "ShippingService_363163", timeout=15)
-    if find_and_click_with_rotate_logic(main_window, "ShippingService_363163"):
+    wait_until_id_appears(main_window, "ShippingService_363235", timeout=15)
+    if find_and_click_with_rotate_logic(main_window, "ShippingService_363235"):
         main_window.type_keys("{ENTER}")
     
     time.sleep(1)
