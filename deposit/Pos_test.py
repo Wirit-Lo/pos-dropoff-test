@@ -144,7 +144,11 @@ def smart_click(window, criteria_list, timeout=5):
         for criteria in criteria_list:
             try:
                 for child in window.descendants():
-                    if child.is_visible() and criteria in child.window_text().strip():
+                    # เพิ่มเงื่อนไขค้นหาด้วย ID ถ้า criteria ตรงกับ ID
+                    text_match = criteria in child.window_text().strip()
+                    id_match = criteria in str(child.element_info.automation_id)
+                    
+                    if child.is_visible() and (text_match or id_match):
                         child.click_input()
                         log(f"[/] กดปุ่ม '{criteria}' สำเร็จ")
                         return True
@@ -156,7 +160,7 @@ def smart_click_with_scroll(window, criteria, max_scrolls=20, scroll_dist=-10):
     """
     [Updated V10 - Turbo Aggressive] 
     - เพิ่ม max_scrolls เป็น 20 รอบ
-    - ถ้าเจอปุ่มอยู่ต่ำ สั่งเลื่อน -60 (แรงมาก) เพื่อดีดขึ้นมาทันที
+    - รองรับการหาด้วย ID ด้วย
     """
     log(f"...ค้นหา '{criteria}' (โหมด V10: Turbo)...")
     
@@ -165,10 +169,16 @@ def smart_click_with_scroll(window, criteria, max_scrolls=20, scroll_dist=-10):
     for i in range(loop_limit):
         found_element = None
         
-        # 1. กวาดหา Element
+        # 1. กวาดหา Element (Text หรือ ID)
         try:
             for child in window.descendants():
-                if child.is_visible() and criteria in child.window_text():
+                if not child.is_visible(): continue
+                
+                # เช็คทั้ง Text และ ID
+                text_ok = criteria in child.window_text()
+                id_ok = criteria in str(child.element_info.automation_id)
+                
+                if text_ok or id_ok:
                     found_element = child
                     break
         except: pass
@@ -358,9 +368,14 @@ def process_payment(window, payment_method, received_amount):
 def run_smart_scenario(main_window, config):
     try:
         # --- อ่านค่า Config ---
-        # 1. ข้อมูลสินค้า (Hardcoded: กำหนดค่าที่นี่เลยตามคำขอ)
-        # [แก้ไข] อัปเดต category_name ให้เป็นชื่อเต็มตามที่ต้องการ
-        category_name = "อุปกรณ์ไก่ชน ม้วนพรมไก่ ไม่เกิน 1 ผืน"
+        # 1. ข้อมูลสินค้า (Hardcoded: แยก Step 3 และ 4)
+        
+        # [แก้ไขใหม่] Step 3: หมวดหมู่ (ต้องหาชื่อสั้น หรือ ID นี้)
+        category_name = "อุปกรณ์ไก่ชน" 
+        # ID สำรองหากหาชื่อไม่เจอ: MailPieceShape_SubParent_CockFightingEquipments
+        category_id_fallback = "MailPieceShape_SubParent_CockFightingEquipments"
+
+        # [แก้ไขใหม่] Step 4: รูปร่าง (ชื่อยาว)
         product_detail = "อุปกรณ์ไก่ชน ม้วนพรมไก่ ไม่เกิน 1 ผืน"
         
         # 2. ข้อมูลทั่วไป (อ่านจาก Config เหมือนเดิม)
@@ -403,20 +418,28 @@ def run_smart_scenario(main_window, config):
 
     # ================= ปรับแก้ 4 ขั้นตอนแรก ตามที่ขอ =================
 
-    # 3. เลือกหมวดหมู่ (รูป 1) -> ใช้ค่า Hardcoded
+    # 3. เลือกหมวดหมู่ (รูป 1) -> ใช้ค่าสั้น "อุปกรณ์ไก่ชน" หรือ ID
     log(f"...[Step 3] เลือกหมวดหมู่: {category_name}")
-    # ใช้ smart_click_with_scroll เผื่อหมวดอยู่ข้างล่าง
-    if not smart_click_with_scroll(main_window, category_name, max_scrolls=10, scroll_dist=scroll_dist):
+    
+    # พยายามหาด้วยชื่อก่อน ถ้าไม่เจอหาด้วย ID
+    found_category = False
+    if smart_click_with_scroll(main_window, category_name, max_scrolls=10, scroll_dist=scroll_dist):
+        found_category = True
+    elif smart_click_with_scroll(main_window, category_id_fallback, max_scrolls=10, scroll_dist=scroll_dist):
+        found_category = True
+        
+    if not found_category:
         log(f"[WARN] หาหมวดหมู่ '{category_name}' ไม่เจอ")
     
+    # กดถัดไป เพื่อเข้าหน้า Step 4
+    smart_next(main_window)
     time.sleep(step_delay)
 
-    # 4. เลือกรุปร่างชิ้นจดหมาย (รูป 2) -> ใช้ค่า Hardcoded + เลื่อนหาได้
-    # **ใช้คนหาจาก Text (product_detail) ตามที่ต้องการ**
+    # 4. เลือกรุปร่างชิ้นจดหมาย (รูป 2) -> ใช้ค่าชื่อยาว + เลื่อนหาได้
     log(f"...[Step 4] เลือกสินค้า: {product_detail}")
     
     # เน้นย้ำ: ใช้ max_scrolls เยอะหน่อยเผื่อรายการเยอะ
-    found_product = smart_click_with_scroll(main_window, product_detail, max_scrolls=15, scroll_dist=scroll_dist)
+    found_product = smart_click_with_scroll(main_window, product_detail, max_scrolls=20, scroll_dist=scroll_dist)
     if not found_product:
         log(f"[WARN] หาสินค้า '{product_detail}' ไม่เจอ (ลองเลื่อนแล้ว)")
     
@@ -435,14 +458,15 @@ def run_smart_scenario(main_window, config):
     # 6. หน้า ปริมาตร (รูป 4) -> ใช้ TAB Navigation
     log(f"...[Step 6] กรอกปริมาตร (กว้าง: {width}, ยาว: {length}, สูง: {height})")
     
-    # [แก้ไข] ใช้การหา Edit แรกแล้วกด Tab ไปเรื่อยๆ เพราะช่องไม่มีชื่อ
     try:
         # พยายามหาช่องกรอกแรกสุดที่มองเห็น (ช่องกว้าง)
+        # เพิ่มการ set_focus ไปที่ Window หลักก่อนพิมพ์ Blind Type
+        main_window.set_focus()
+        
         edits = [e for e in main_window.descendants(control_type="Edit") if e.is_visible()]
         if edits:
             edits[0].click_input()
             log("   -> เจอช่องแรก -> เริ่มกรอกและ Tab")
-            # กรอก กว้าง -> TAB -> ยาว -> TAB -> สูง
             main_window.type_keys(f"{width}{{TAB}}{length}{{TAB}}{height}", with_spaces=True)
         else:
             log("   [WARN] ไม่เจอ Edit box -> ลองพิมพ์ Blind Type")
