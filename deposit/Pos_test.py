@@ -1,4 +1,3 @@
-
 import configparser
 import os
 import time
@@ -18,7 +17,8 @@ def load_config(filename='config.ini'):
     return config
 
 def log(message):
-    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
+    # เพิ่ม flush=True เพื่อให้ Log แสดงทันทีไม่ค้างใน Buffer
+    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}", flush=True)
 
 # ================= 2. Helper Functions =================
 # ฟังก์ชันใหม่: ค้นหา Element แบบ Smart (Text หรือ ID)
@@ -214,6 +214,20 @@ def click_element_by_id(window, exact_id, timeout=5, index=0):
         time.sleep(0.5)
     return False
 
+def click_element_by_fuzzy_id(window, keyword, timeout=5):
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            for child in window.descendants():
+                aid = child.element_info.automation_id
+                if child.is_visible() and aid and keyword in aid:
+                    child.click_input()
+                    log(f"[/] เจอ Fuzzy ID: '{aid}' -> กดสำเร็จ")
+                    return True
+        except: pass
+        time.sleep(0.5)
+    return False
+
 def wait_until_id_appears(window, exact_id, timeout=10):
     log(f"...รอโหลด ID: {exact_id}...")
     start = time.time()
@@ -244,9 +258,9 @@ def smart_next(window):
     if submits:
         submits.sort(key=lambda x: x.rectangle().top)
         submits[-1].click_input()
-        log(f"   [/] กดปุ่ม 'ถัดไป' (Footer)")
+        log("   [/] กดปุ่ม 'ถัดไป' (Footer)")
     else:
-        log(f"   [!] หาปุ่มถัดไปไม่เจอ -> กด Enter")
+        log("   [!] หาปุ่มถัดไปไม่เจอ -> กด Enter")
         window.type_keys("{ENTER}")
 
 def check_error_popup(window, delay=0.5):
@@ -314,18 +328,10 @@ def smart_input_weight(window, value):
 
 def process_special_services(window, services_str):
     log("--- หน้า: บริการพิเศษ ---")
-    # รอให้หน้าจอโหลดก่อน (ไม่ว่าจะติ๊กหรือไม่)
-    wait_for_text(window, ["บริการพิเศษ", "Additional Services"], timeout=3)
-    
-    # ติ๊กเฉพาะตอนที่มีค่า Config และเป็นค่าจริง
-    if services_str and services_str.strip():
-        log(f"...เลือกบริการพิเศษ: {services_str}...")
-        for s in services_str.split(','):
-            if s: smart_click(window, s.strip(), timeout=2)
-    else:
-        log("...ไม่มีบริการพิเศษต้องเลือก (Config=False/Empty)...")
-        
-    # [FIX] กดถัดไปเสมอ ไม่ว่าจะติ๊กหรือไม่ติ๊ก
+    if wait_for_text(window, "บริการพิเศษ", timeout=5):
+        if services_str.strip():
+            for s in services_str.split(','):
+                if s: smart_click(window, s.strip())
     smart_next(window)
 
 def process_sender_info_page(window):
@@ -594,10 +600,9 @@ def run_smart_scenario(main_window, config):
         receiver_postal = config['DEPOSIT_ENVELOPE'].get('ReceiverPostalCode', '10110') # ปลายทาง
         sender_postal = config['TEST_DATA'].get('SenderPostalCode', '10110') # ต้นทาง
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
-        register_flag = config['DEPOSIT_ENVELOPE'].get('RegisterOption', 'False')
         special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
-        # add_insurance_flag = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
-        # insurance_amt = config['DEPOSIT_ENVELOPE'].get('Insurance', '1000')
+        add_insurance_flag = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
+        insurance_amt = config['DEPOSIT_ENVELOPE'].get('Insurance', '1000')
         special_services = config['SPECIAL_SERVICES'].get('Services', '')
         addr_keyword = config['RECEIVER'].get('AddressKeyword', '99/99')
         rcv_fname = config['RECEIVER_DETAILS'].get('FirstName', 'A')
@@ -622,16 +627,12 @@ def run_smart_scenario(main_window, config):
         }
     except: log("[Error] อ่าน Config ไม่สำเร็จ"); return
 
-    log(f"--- เริ่มต้นการทำงาน ---")
-    
-    # [NEW LOG] Check what is read
-    log(f"DEBUG Check Config Repeat: {repeat_flag}")
-
+    log(f"--- เริ่มต้นการทำงาน (VERSION: SYNCED LOGIC) ---")
     time.sleep(0.5)
 
     if not smart_click(main_window, "รับฝากสิ่งของ"): return
     time.sleep(step_delay)
-    process_sender_info_popup(main_window, phone, sender_postal) 
+    process_sender_info_popup(main_window, phone, sender_postal)
     time.sleep(step_delay)
     if not smart_click_with_scroll(main_window, "ซอง A4 เอกสาร", scroll_dist=scroll_dist): return
     time.sleep(step_delay)
@@ -657,164 +658,43 @@ def run_smart_scenario(main_window, config):
         time.sleep(0.5)
 
     log("...รอหน้าบริการหลัก...")
-    wait_until_id_appears(main_window, "ShippingService_2582", timeout=wait_timeout)
+    wait_until_id_appears(main_window, "ShippingService_2579", timeout=wait_timeout)
      # คลิก 1 ครั้ง
-    if not find_and_click_with_rotate_logic(main_window, "ShippingService_2582"):
-        log("[Error] หาปุ่มบริการไม่เจอ (ShippingService_2582)")
+    if not find_and_click_with_rotate_logic(main_window, "ShippingService_2579"):
+        log("[Error] หาปุ่มบริการไม่เจอ (ShippingService_2579)")
         return
 
-    # [FIXED LOGIC] แยก Flow ตามการลงทะเบียน (Register)
-    # -------------------------------------------------------------------------
-    is_registered = str(register_flag).lower() in ['true', 'yes', 'on', '1']
-
-    if is_registered:
-        log("...Config สั่งให้เลือก: ลงทะเบียน (Register)...")
-        if not click_element_by_id(main_window, "RegisteredToggleIcon", timeout=3):
-             log("[Warning] หาปุ่ม ID: 'RegisteredToggleIcon' ไม่เจอ")
-    
-    time.sleep(0.5)
-    
-    # [สำคัญ] กด Enter เพื่อไปขั้นตอนถัดไป
-    log("...กดถัดไป (Enter) เพื่อเข้าสู่ขั้นตอนต่อไป...")
     main_window.type_keys("{ENTER}")
     
-    # -------------------------------------------------------------------------
-    # Flow แยก:
-    # 1. ไม่ลงทะเบียน -> กรอกจำนวน -> ข้ามรายละเอียด -> ทำรายการซ้ำ
-    # 2. ลงทะเบียน -> กรอกรายละเอียดครบ -> ทำรายการซ้ำ
-    # -------------------------------------------------------------------------
+    time.sleep(1)
+    smart_next(main_window) 
+    time.sleep(step_delay)
+    process_special_services(main_window, special_services)
+    time.sleep(step_delay)
+    process_sender_info_page(main_window)
+    time.sleep(step_delay)
+   # 1. ค้นหาที่อยู่ และรับค่าสถานะว่าเป็น Manual Mode หรือไม่?
+    is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
     
-    if not is_registered:
-        log("...Config ไม่ได้เลือกลงทะเบียน -> เข้าสู่กระบวนการจัดการ Popup จำนวน...")
-
-        # ดึงค่าจาก Config ตามที่ต้องการ
-        qty = config['PRODUCT_QUANTITY'].get('Quantity', '1') if 'PRODUCT_QUANTITY' in config else '1'
-        log(f"...รอ Popup 'จำนวน' (จะใส่เลขจาก Config: {qty})...")
-        
-        time.sleep(1.5) # รอ Animation Popup เด้ง
-
-        # --- [DEBUG MODE] ค้นหา Popup ---
-        popup_window = None
-        
-        # วิธีที่ 1: หาจาก Child Window ของ Main
-        try:
-            children = main_window.children(control_type="Window")
-            if children:
-                popup_window = children[0]
-                log(f"-> เจอ Child Window: {popup_window.window_text()}")
-        except: pass
-
-        # วิธีที่ 2: ถ้าไม่เจอ ให้ใช้ Top Window (หน้าต่างที่อยู่บนสุดของ Windows)
-        if not popup_window:
-            try:
-                # เชื่อมต่อกับ Window ที่ Active อยู่ (น่าจะเป็น Popup)
-                app_top = Application(backend="uia").connect(active_only=True).top_window()
-                log(f"-> ตรวจสอบ Top Window: {app_top.window_text()}")
-                # ตรวจสอบชื่อหน้าต่างว่าน่าจะเป็น Popup ไหม (บางทีไม่มีชื่อ แต่เป็น Dialog)
-                if "จำนวน" in app_top.window_text() or "Escher" in app_top.window_text() or app_top.element_info.control_type == "Window":
-                    popup_window = app_top
-            except Exception as e:
-                log(f"-> Error หา Top Window: {e}")
-
-        # --- เริ่มเจาะหาช่อง Edit ---
-        if popup_window:
-            try:
-                popup_window.set_focus()
-            except: pass
-            
-            log("...กำลังสแกนหาช่อง Edit ใน Popup...")
-            
-            target_edit = None
-            
-            # ดึง Edit ทั้งหมดออกมาดู
-            try:
-                edits = popup_window.descendants(control_type="Edit")
-                visible_edits = [e for e in edits if e.is_visible()]
-                
-                log(f"-> พบ Edit ทั้งหมด: {len(edits)} ช่อง (Visible: {len(visible_edits)})")
-                
-                if visible_edits:
-                    # กรองช่องที่เล็กเกินไป (พวกปุ่มซ่อน)
-                    valid_edits = [e for e in visible_edits if e.rectangle().width() > 30]
-                    
-                    if valid_edits:
-                        target_edit = valid_edits[0]
-                        log(f"-> เป้าหมาย: {target_edit} (ID: {target_edit.element_info.automation_id})")
-                    else:
-                        log("[!] เจอ Edit แต่ขนาดเล็กผิดปกติ")
-                else:
-                    log("[!] ไม่เจอช่อง Edit ที่มองเห็นได้เลย")
-            except Exception as e:
-                log(f"Error สแกนหา Edit: {e}")
-
-            # ถ้าเจอช่องแล้ว ให้กระทำการ
-            if target_edit:
-                try:
-                    # 1. Focus
-                    target_edit.click_input()
-                    time.sleep(0.2)
-                    
-                    # 2. Clear
-                    target_edit.type_keys("^a", pause=0.1)
-                    target_edit.type_keys("{DELETE}", pause=0.1)
-                    
-                    # 3. Type
-                    target_edit.type_keys(str(qty), with_spaces=True)
-                    log(f"-> พิมพ์เลข {qty} เรียบร้อย")
-                    time.sleep(0.5)
-                    
-                    # 4. Enter
-                    popup_window.type_keys("{ENTER}")
-                    log("-> กด Enter (ถัดไป) เรียบร้อย")
-                    
-                except Exception as e:
-                    log(f"Error ขณะพิมพ์: {e}")
-            else:
-                # ถ้าหา Edit ไม่เจอจริงๆ ลองวิธีสุดท้าย: พิมพ์ดื้อๆ ใส่ Popup Window
-                log("[Warning] หาช่องไม่เจอ -> ลองพิมพ์ใส่ Window โดยตรง (Blind Type)")
-                popup_window.type_keys(str(qty), with_spaces=True)
-                popup_window.type_keys("{ENTER}")
-
-        else:
-            log("[Error] หา Popup Window ไม่เจอเลย (อาจจะเด้งช้าหรือจับผิดตัว)")
-        
-        # --- จบส่วน Popup จำนวน ---
-        
-        log("...ข้ามขั้นตอนกรอกรายละเอียด (เนื่องจากไม่ได้ลงทะเบียน) -> ไปจัดการหน้าทำรายการซ้ำทันที...")
-
-    else:
-        # กรณีลงทะเบียน (Register = True) -> ทำตามขั้นตอนปกติ
-        time.sleep(step_delay)
-        
-        # 1. บริการพิเศษ (EMS, ประกัน ฯลฯ)
-        process_special_services(main_window, special_services)
-        time.sleep(step_delay)
-        
-        # 2. ข้อมูลผู้ส่ง (มักจะข้าม)
-        process_sender_info_page(main_window)
-        time.sleep(step_delay)
-        
-       # 1. ค้นหาที่อยู่ และรับค่าสถานะว่าเป็น Manual Mode หรือไม่?
-        is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
-        
-        time.sleep(step_delay)
-        
-        # 2. กรอกรายละเอียดผู้รับ (ส่ง is_manual_mode และ manual_data เข้าไป)
-        process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
-        
-        time.sleep(step_delay)
+    time.sleep(step_delay)
     
-    # -------------------------------------------------------------------------
+    # 2. กรอกรายละเอียดผู้รับ (ส่ง is_manual_mode และ manual_data เข้าไป)
+    process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
+    
+    time.sleep(step_delay)
 
-    # 1. เรียกฟังก์ชัน และรับค่ากลับมา (ตัวแปรนี้จะได้ค่า True/False จากจุดที่ 1)
+    # ----------------------------------------------------
+    # 1. เรียกฟังก์ชัน และรับค่ากลับมาด้วยว่า "ตกลงเมื่อกี้ตั้งใจจะ Repeat ใช่ไหม"
     is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
     
-    # 2. เช็คเลยว่า ถ้าเป็นจริง -> จบการทำงาน
+    # 2. เช็คเลยว่า ถ้าฟังก์ชันบอกว่าใช่ (is_repeat_mode = True) -> ให้จบการทำงานตรงนี้ทันที
     if is_repeat_mode:
-        log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที")
-        return # ออกจากฟังก์ชันทันที
+        log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที (Safe Exit)")
+        log("\n[SUCCESS] จบการทำงาน (Repeat Mode)")
+        return # ออกจากฟังก์ชันหลักทันที
     
-    # 3. ถ้าไม่เข้าเงื่อนไขบน ก็จะลงมาทำชำระเงินต่อ
+    # ถ้าไม่เข้าเงื่อนไขด้านบน (คือ is_repeat_mode = False) ถึงจะลงมาทำบรรทัดนี้
+    # 2. ชำระเงิน (จะทำงานก็ต่อเมื่อเงื่อนไขข้างบนไม่เป็นจริง)
     process_payment(main_window, pay_method, pay_amount)
 
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
@@ -823,7 +703,7 @@ def run_smart_scenario(main_window, config):
 if __name__ == "__main__":
     conf = load_config()
     if conf:
-        log("Connecting...")
+        log("Connecting... (Version: SYNCED LOGIC)")
         try:
             wait = int(conf['SETTINGS'].get('ConnectTimeout', 10))
             app_title = conf['APP']['WindowTitle']
