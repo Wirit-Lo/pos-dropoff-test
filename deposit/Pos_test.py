@@ -684,8 +684,8 @@ def run_smart_scenario(main_window, config):
         time.sleep(0.5)
 
     # เลือกบริการขนส่ง (ใช้ ShippingService_2579 สำหรับ EMS สำเร็จรูป)
-    wait_until_id_appears(main_window, "ShippingService_2579", timeout=15)
-    if find_and_click_with_rotate_logic(main_window, "ShippingService_2579"):
+    wait_until_id_appears(main_window, "ShippingService_363163", timeout=15)
+    if find_and_click_with_rotate_logic(main_window, "ShippingService_363163"):
         main_window.type_keys("{ENTER}")
     
     time.sleep(1)
