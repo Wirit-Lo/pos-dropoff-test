@@ -9,7 +9,6 @@ from pywinauto import mouse
 def load_config(filename='config.ini'):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(script_dir, filename)
-    # [Config] เพิ่ม strict=False เพื่อป้องกัน Error กรณีมี Key ซ้ำ
     config = configparser.ConfigParser(strict=False)
     if not os.path.exists(file_path): 
         print(f"[Error] ไม่พบไฟล์ Config ที่: {file_path}")
@@ -34,7 +33,6 @@ def find_and_fill_smart(window, target_name, target_id_keyword, value):
             aid = child.element_info.automation_id
             name = child.element_info.name
             
-            # ค้นหาจากชื่อ (Name) หรือ ID
             if target_name and name and target_name in name:
                 target_elem = child
                 break
@@ -45,7 +43,6 @@ def find_and_fill_smart(window, target_name, target_id_keyword, value):
         if target_elem:
             log(f"   -> เจอช่อง '{target_name}/{target_id_keyword}' -> กรอก: {value}")
             try:
-                # ถ้าเจอ Container ให้หา Edit box ข้างใน
                 edits = target_elem.descendants(control_type="Edit")
                 if edits:
                     target_elem = edits[0]
@@ -116,22 +113,12 @@ def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
     return False
 
 def force_scroll_down(window, scroll_dist=-5):
-    """
-    [Updated V10 - Turbo Speed] 
-    เน้นความไวสูงสุด ลด Delay แทบไม่เหลือ
-    """
     try:
-        # ไม่ set_focus และไม่คลิกซ้ำเพื่อความไว (อาศัยว่าคลิกไปแล้วตอนเริ่ม)
         rect = window.rectangle()
         scrollbar_x = rect.left + int(rect.width() * 0.72)
         scrollbar_y = rect.top + int(rect.height() * 0.5)
-        
-        # สั่ง Scroll ทันที
         mouse.scroll(coords=(scrollbar_x, scrollbar_y), wheel_dist=scroll_dist)
-        
-        # พักสั้นมากๆ ให้แค่พอ UI ขยับทัน
         time.sleep(0.05) 
-        
     except Exception as e:
         log(f"[!] Scroll Error: {e}")
         try: window.type_keys("{PGDN}")
@@ -144,12 +131,10 @@ def smart_click(window, criteria_list, timeout=5):
         for criteria in criteria_list:
             try:
                 for child in window.descendants():
-                    # เพิ่มเงื่อนไขค้นหาด้วย ID ถ้า criteria ตรงกับ ID
                     text_match = criteria in child.window_text().strip()
                     id_match = criteria in str(child.element_info.automation_id)
                     
                     if child.is_visible() and (text_match or id_match):
-                        # [Fix] พยายามคลิกที่จุดกึ่งกลางของ element เพื่อความแม่นยำ
                         child.click_input()
                         log(f"[/] กดปุ่ม '{criteria}' สำเร็จ")
                         return True
@@ -158,64 +143,41 @@ def smart_click(window, criteria_list, timeout=5):
     return False
 
 def smart_click_with_scroll(window, criteria, max_scrolls=20, scroll_dist=-10):
-    """
-    [Updated V10 - Turbo Aggressive] 
-    - เพิ่ม max_scrolls เป็น 20 รอบ
-    - รองรับการหาด้วย ID ด้วย
-    """
     log(f"...ค้นหา '{criteria}' (โหมด V10: Turbo)...")
-    
-    loop_limit = max_scrolls + 10 # เผื่อรอบเยอะๆ
+    loop_limit = max_scrolls + 10 
     
     for i in range(loop_limit):
         found_element = None
-        
-        # 1. กวาดหา Element (Text หรือ ID)
         try:
             for child in window.descendants():
                 if not child.is_visible(): continue
-                
-                # เช็คทั้ง Text และ ID
                 text_ok = criteria in child.window_text()
                 id_ok = criteria in str(child.element_info.automation_id)
-                
                 if text_ok or id_ok:
                     found_element = child
                     break
         except: pass
 
-        # 2. ถ้าเจอ -> เช็คตำแหน่ง
         if found_element:
             try:
                 elem_rect = found_element.rectangle()
                 win_rect = window.rectangle()
-                
-                # Safe Zone: กันชนขอบล่าง 80px
                 safe_bottom_limit = win_rect.bottom - 80
                 
-                # ถ้าปุ่มอยู่ต่ำกว่า Safe Zone
                 if elem_rect.bottom >= safe_bottom_limit:
-                    log(f"   [Turbo] เจอปุ่มอยู่ลึก (Bottom={elem_rect.bottom}) -> กระชากขึ้นแรงๆ")
-                    
-                    # [Logic ใหม่ V10] เลื่อน -60 คือเยอะมาก (ประมาณ 3-4 หน้าจอ)
+                    log(f"   [Turbo] เจอปุ่มอยู่ลึก -> กระชากขึ้นแรงๆ")
                     force_scroll_down(window, -60) 
-                    
-                    time.sleep(0.1) # รอ UI render แป๊บเดียว
+                    time.sleep(0.1)
                     continue 
                 
-                # ถ้าตำแหน่ง OK -> กดเลย
                 found_element.click_input()
                 log(f"   [/] เจอและกดปุ่ม '{criteria}' สำเร็จ")
                 return True
-                
             except Exception as e:
                 log(f"   [!] Error: {e}")
 
-        # 3. ถ้ายังไม่เจอเลย -> เลื่อนหน้าจอลงปกติ (แรงขึ้นกว่าเดิม)
         if i < loop_limit:
             if not found_element:
-                # log(f"   [Scroll {i+1}] ไม่เจอ -> เลื่อนหา")
-                # ใช้ค่า scroll_dist ที่รับมา (แนะนำให้ส่งมา -10 หรือ -15)
                 force_scroll_down(window, scroll_dist)
             
     log(f"[X] หมดระยะเลื่อนหาแล้ว ไม่เจอปุ่ม '{criteria}'")
@@ -247,14 +209,12 @@ def wait_for_text(window, text_list, timeout=5):
 
 def smart_next(window):
     """กดปุ่มถัดไป (Footer) หรือ Enter"""
-    # พยายามหาปุ่ม Submit/Next ของระบบก่อน
     submits = [c for c in window.descendants() if c.element_info.automation_id == "LocalCommand_Submit" and c.is_visible()]
     if submits:
         submits.sort(key=lambda x: x.rectangle().top)
         submits[-1].click_input()
         log("   [/] กดปุ่ม 'ถัดไป' (Footer)")
     else:
-        # ถ้าไม่เจอให้กด Enter
         log("   [!] หาปุ่มถัดไปไม่เจอ -> กด Enter")
         window.type_keys("{ENTER}")
 
@@ -277,7 +237,6 @@ def check_error_popup(window, delay=0.5):
 # ================= 3. Business Logic Functions =================
 
 def process_sender_info_popup(window, phone, sender_postal):
-    # ฟังก์ชันจัดการหน้า Popup ผู้ส่ง
     if smart_click(window, "อ่านบัตรประชาชน", timeout=3): 
         time.sleep(1.5) 
         try:
@@ -302,7 +261,6 @@ def process_sender_info_popup(window, phone, sender_postal):
         smart_next(window)
 
 def handle_prohibited_items(window):
-    # กดข้ามหน้าสิ่งของต้องห้าม
     for _ in range(5):
         try:
             for child in window.descendants():
@@ -312,39 +270,29 @@ def handle_prohibited_items(window):
         time.sleep(0.5)
 
 def smart_input_generic(window, value, description="ข้อมูล"):
-    """ฟังก์ชันกรอกข้อมูลทั่วไป (ใช้สำหรับน้ำหนัก/ปริมาตร)"""
     log(f"...กำลังกรอก {description}: {value}...")
     try:
-        # พยายามหา Edit box ที่มองเห็น
         edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
         if edits:
-            # ถ้าเจอ Edit box ให้คลิกแล้วพิมพ์
             edits[0].click_input()
             edits[0].type_keys(str(value), with_spaces=True)
             return True
     except: pass
-    
-    # ถ้าหาไม่เจอ ให้พิมพ์เลย (Fallback)
     window.type_keys(str(value), with_spaces=True)
     return True
 
 def process_special_services(window, services_str):
     log("--- หน้า: บริการพิเศษ ---")
-    # [FIXED] เพิ่มเวลารอให้หน้าโหลด และเช็คคีย์เวิร์ดกว้างขึ้น
     time.sleep(1.0) 
-    
-    # เช็คว่าอยู่หน้าบริการพิเศษจริงไหม
     if wait_for_text(window, ["บริการพิเศษ", "Services", "Special"], timeout=5):
         if services_str.strip():
             for s in services_str.split(','):
                 s = s.strip()
                 if s: 
-                    # [FIXED] ใช้ smart_click_with_scroll แทน เพื่อให้หาเจอถ้ารายการอยู่ล่าง
                     log(f"...เลือกบริการเสริม: {s}")
                     smart_click_with_scroll(window, s, max_scrolls=5)
     else:
         log("[WARN] ไม่พบหน้าบริการพิเศษ หรือข้ามไปแล้ว")
-        
     smart_next(window)
 
 def process_sender_info_page(window):
@@ -391,7 +339,6 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
             time.sleep(0.25)
 
         if found_popup:
-            # เจอ Popup -> เข้า Manual Mode
             log("...เข้าสู่โหมดกรอกเอง (Manual Mode) -> รอส่งข้อมูลหน้าถัดไป...")
             is_manual_mode = True
             time.sleep(1.0)
@@ -413,7 +360,6 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
                     time.sleep(2.0) 
                 else: log("[!] เจอ List แต่กรองความสูงไม่ผ่าน")
             except: pass
-            # เลือก List แล้ว ไม่ต้องกด Next ซ้ำ
         else:
             log("[!] ไม่เจอทั้ง Popup และ รายการ -> สันนิษฐานว่าเข้าหน้ากรอกเอง")
             is_manual_mode = True
@@ -422,20 +368,13 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
     return is_manual_mode
 
 def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, manual_data):
-    """
-    หน้ากรอกรายละเอียด: กรอกข้อมูลตามลำดับ 1-8 ที่ระบุมา
-    """
     log("--- หน้า: รายละเอียดผู้รับ ---")
     log("...รอหน้าจอโหลด (พร้อมตรวจสอบ Popup Error)...")
-    
-    # [FIXED] เพิ่มเวลารอ 2 วินาที เพื่อให้ฟอร์มโหลดเสร็จก่อนเริ่มทำอะไร
     time.sleep(2.0)
 
-    # [FIXED] บังคับรอจนกว่าช่อง "ชื่อ" (CustomerFirstName) จะปรากฏจริงๆ
     if not wait_until_id_appears(window, "CustomerFirstName", timeout=15):
         log("[WARN] รอนานเกินไป ช่องชื่อยังไม่โผล่! (จะพยายามหาต่อ)")
 
-    # วนลูปเช็ค Popup และรอหน้าจอ (Backup Loop)
     for _ in range(10):
         if check_error_popup(window, delay=0):
             log("...ปิด Popup แล้ว -> รอโหลดฟอร์มต่อ...")
@@ -448,29 +387,22 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
         if found: break
         time.sleep(0.5)
 
-    # เริ่มกรอกข้อมูลตามลำดับที่ขอ
     try:
-        # 1. ชื่อ (Name: ชื่อ, ID: CustomerFirstName)
         find_and_fill_smart(window, "ชื่อ", "CustomerFirstName", fname)
-        
-        # 2. นามสกุล (Name: นามสกุล, ID: CustomerLastName)
         find_and_fill_smart(window, "นามสกุล", "CustomerLastName", lname)
 
-        # [Improved] ตรวจสอบว่าต้อง Force Fill ที่อยู่หรือไม่?
         need_force_fill = False
         if not is_manual_mode:
             try:
-                # ลองเช็คช่อง จังหวัด ว่าว่างไหม
                 edits = window.descendants(control_type="Edit")
                 for edit in edits:
                     if "AdministrativeArea" in str(edit.element_info.automation_id) or "จังหวัด" in edit.element_info.name:
                         if not edit.get_value():
-                            log("[Auto-Detect] พบช่องจังหวัดว่าง! -> บังคับเข้าโหมดกรอกเอง (Force Manual Mode)")
+                            log("[Auto-Detect] พบช่องจังหวัดว่าง! -> บังคับเข้าโหมดกรอกเอง")
                             need_force_fill = True
                         break
             except: pass
 
-        # 3-7. กรอกที่อยู่ (Manual Mode หรือ Force Fill)
         if is_manual_mode or need_force_fill:
             log("...[Manual/Force Mode] เริ่มกรอกที่อยู่ (ตามลำดับ 3-7)...")
             addr1 = manual_data.get('Address1', '')
@@ -479,25 +411,15 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
             district = manual_data.get('District', '')
             subdistrict = manual_data.get('SubDistrict', '')
 
-            # 3. จังหวัด (ID: AdministrativeArea)
             if not find_and_fill_smart(window, "จังหวัด", "AdministrativeArea", province):
                 window.type_keys("{TAB}"); window.type_keys(province, with_spaces=True)
-
-            # 4. เขต/อำเภอ (ID: Locality)
             if not find_and_fill_smart(window, "เขต/อำเภอ", "Locality", district):
                 window.type_keys("{TAB}"); window.type_keys(district, with_spaces=True)
-
-            # 5. แขวง/ตำบล (ID: DependentLocality)
             if not find_and_fill_smart(window, "แขวง/ตำบล", "DependentLocality", subdistrict):
                 window.type_keys("{TAB}"); window.type_keys(subdistrict, with_spaces=True)
-
-            # 6. ที่อยู่ 1 (ID: StreetAddress1)
             find_and_fill_smart(window, "ที่อยู่ 1", "StreetAddress1", addr1)
-            
-            # 7. ที่อยู่ 2 (ID: StreetAddress2)
             find_and_fill_smart(window, "ที่อยู่ 2", "StreetAddress2", addr2)
 
-        # 8. เบอร์โทรศัพท์ (Name: หมายเลขโทรศัพท์/โทร, ID: PhoneNumber)
         force_scroll_down(window, -5)
         if not find_and_fill_smart(window, "หมายเลขโทรศัพท์", "PhoneNumber", phone):
              find_and_fill_smart(window, "โทร", "Phone", phone)
@@ -506,8 +428,6 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
 
     log("...จบขั้นตอนข้อมูลผู้รับ -> พยายามกด 'ถัดไป'...")
     for i in range(3):
-        # [FIXED] เพิ่ม Timeout การรอ Popup ให้นานขึ้น (2.0s) เพื่อให้แน่ใจว่าดักจับทัน
-        # ปัญหา "ทำรายการซ้ำไม่ได้" มักเกิดตรงนี้ เพราะ Loop กด Enter ไวเกินไปจนไปกดปิด Popup โดยไม่รู้ตัว
         if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=2.0):
              log("   [!] เจอ Popup 'ทำรายการซ้ำ' แล้ว -> หยุดกดถัดไปทันที")
              time.sleep(1.0) 
@@ -521,14 +441,9 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
         time.sleep(2.0)
 
 def process_repeat_transaction(window, should_repeat):
-    """
-    [FIXED] จัดการ popup และส่งค่ากลับ (Logic แบบเดียวกับ Code #2)
-    """
     log("--- หน้า: ทำรายการซ้ำ (ตรวจสอบ) ---")
-    
     clean_flag = str(should_repeat).strip().lower().replace("'", "").replace('"', "")
     is_repeat_intent = clean_flag in ['true', 'yes', 'on', '1']
-    
     found_popup = False
     
     for i in range(30):
@@ -539,32 +454,24 @@ def process_repeat_transaction(window, should_repeat):
     if found_popup:
         log("...เจอ Popup ทำรายการซ้ำ! กำลังเลือก...")
         time.sleep(1.0)
-        
         target = "ใช่" if is_repeat_intent else "ไม่"
-        log(f"...Config: {should_repeat} -> Intent: {is_repeat_intent} -> เลือก: '{target}'")
-        
         if not smart_click(window, target, timeout=3):
             log("   [Click Fail] คลิกไม่โดน -> ใช้ Keyboard Shortcut (Fallback)")
             if target == "ไม่": window.type_keys("{ESC}")
             else: window.type_keys("{ENTER}")
-            
         time.sleep(1.0)
     else: 
         log("[INFO] ไม่พบ Popup ทำรายการซ้ำ (ข้ามไปขั้นตอนถัดไป)")
-
     return is_repeat_intent
 
 def process_payment(window, payment_method, received_amount):
     log("--- ขั้นตอนการชำระเงิน ---")
-    
     if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=1.0):
-        log("[Alert] เจอ Popup ทำรายการซ้ำค้างอยู่! -> เรียกฟังก์ชันจัดการซ้ำ")
         process_repeat_transaction(window, False)
         time.sleep(2.0)
     
     log("...ค้นหาปุ่ม 'รับเงิน'...")
     time.sleep(1.5)
-    
     if smart_click(window, "รับเงิน"):
         time.sleep(1.5) 
     else:
@@ -599,14 +506,11 @@ def process_payment(window, payment_method, received_amount):
 # ================= 4. Workflow Main =================
 def run_smart_scenario(main_window, config):
     try:
-        # --- อ่านค่า Config ---
-        # 1. ข้อมูลสินค้า (Hardcoded: แยก Step 3 และ 4)
         category_name = "กล่องฟองอากาศ / โฟม" 
         category_id_fallback = "MailPieceShape_SubParent_CockFightingEquipments"
         product_detail = "วัสดุกันกระแทก (Air bubble) แบบม้วน 35+35+25 ซม."
         
-        # 2. ข้อมูลทั่วไป
-        weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10') # ข้อ 5
+        weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
         width = config['DEPOSIT_ENVELOPE'].get('Width', '10')
         length = config['DEPOSIT_ENVELOPE'].get('Length', '20')
         height = config['DEPOSIT_ENVELOPE'].get('Height', '10')
@@ -615,7 +519,6 @@ def run_smart_scenario(main_window, config):
         sender_postal = config['TEST_DATA'].get('SenderPostalCode', '10110')
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
 
-        # 3. ข้อมูลเพิ่มเติม (สำหรับส่วนท้ายที่เพิ่มเข้ามา)
         special_services = config['SPECIAL_SERVICES'].get('Services', '')
         addr_keyword = config['RECEIVER'].get('AddressKeyword', '99/99')
         rcv_fname = config['RECEIVER_DETAILS'].get('FirstName', 'A')
@@ -623,7 +526,6 @@ def run_smart_scenario(main_window, config):
         rcv_phone = config['RECEIVER_DETAILS'].get('PhoneNumber', '081')
         repeat_flag = config['REPEAT_TRANSACTION'].get('Repeat', 'False')
         
-        # Payment Config
         pay_method = config['PAYMENT'].get('Method', 'เงินสด') if 'PAYMENT' in config else 'เงินสด'
         pay_amount = config['PAYMENT'].get('ReceivedAmount', '1000') if 'PAYMENT' in config else '1000'
 
@@ -635,7 +537,6 @@ def run_smart_scenario(main_window, config):
             'SubDistrict': config['MANUAL_ADDRESS_FALLBACK'].get('SubDistrict', '') if 'MANUAL_ADDRESS_FALLBACK' in config else ''
         }
         
-        # Settings
         step_delay = float(config['SETTINGS'].get('StepDelay', 0.8))
         scroll_dist = int(config['SETTINGS'].get('ScrollDistance', -5))
         
@@ -650,7 +551,6 @@ def run_smart_scenario(main_window, config):
     if not smart_click(main_window, "รับฝากสิ่งของ"): return
     time.sleep(step_delay)
     
-    # Process Popup ผู้ส่ง
     process_sender_info_popup(main_window, phone, sender_postal)
     time.sleep(step_delay)
 
@@ -662,38 +562,43 @@ def run_smart_scenario(main_window, config):
 
     # 3. เลือกหมวดหมู่ (รูป 1)
     log(f"...[Step 3] เลือกหมวดหมู่: {category_name}")
-    # [FIXED] เพิ่มเวลารอ และใช้ wait_for_text ให้มั่นใจว่าหน้าโหลดเสร็จ
     time.sleep(2.0)
     
     found_category = False
     if smart_click_with_scroll(main_window, category_name, max_scrolls=10, scroll_dist=scroll_dist):
         found_category = True
-        time.sleep(1.0) # [FIXED] รอ 1 วินาทีหลังคลิกสำเร็จ เพื่อให้ระบบรับรู้การเลือก
+        time.sleep(1.5) 
     elif smart_click_with_scroll(main_window, category_id_fallback, max_scrolls=10, scroll_dist=scroll_dist):
         found_category = True
-        time.sleep(1.0) # [FIXED] รอ 1 วินาทีหลังคลิกสำเร็จ
+        time.sleep(1.5)
         
-    if found_category:
+    if not found_category:
+        log(f"[WARN] หาหมวดหมู่ '{category_name}' ไม่เจอ -> จะพยายามกดถัดไป (เผื่อเลือก default)")
         smart_next(main_window)
     else:
-        log(f"[WARN] หาหมวดหมู่ '{category_name}' ไม่เจอ -> ไม่กดถัดไป (ป้องกันการข้าม)")
-    
+        log("[OK] เลือกหมวดหมู่สำเร็จ -> (ข้ามการกดถัดไป เพื่อป้องกันการกดซ้ำที่หน้าถัดไป)")
+        # [แก้ไขจุดที่ 1] ไม่กด smart_next() ตรงนี้ เพราะการคลิกเลือกมักจะพาไปหน้าถัดไปอยู่แล้ว
+        # หรือถ้าไม่ไป ก็ปล่อยให้ Timeout หน้าถัดไปจัดการ หรือถ้าจำเป็นให้ uncomment บรรทัดล่างนี้
+        # smart_next(main_window) 
+        pass
+
     time.sleep(step_delay)
 
     # 4. เลือกรุปร่างชิ้นจดหมาย (รูป 2)
     log(f"...[Step 4] เลือกสินค้า: {product_detail}")
-    
-    # [FIXED] เพิ่มการรอหน้าจอโหลดรายการสินค้าให้มั่นใจก่อน (ใช้คีย์เวิร์ดกลางๆ)
-    wait_for_text(main_window, ["วัสดุ", "กันกระแทก", "Air bubble", "ม้วน"], timeout=5.0)
-    time.sleep(1.0) # รออีกนิดหลัง Text ขึ้น
+    # [แก้ไขจุดที่ 1 เพิ่มเติม] รอจนกว่าข้อความสินค้าจะขึ้นจริงๆ ก่อนกด เพื่อป้องกันการกดพลาด
+    wait_for_text(main_window, product_detail[:10], timeout=5) 
+    time.sleep(1.5)
     
     found_product = smart_click_with_scroll(main_window, product_detail, max_scrolls=20, scroll_dist=scroll_dist)
-    
     if found_product:
-        time.sleep(1.0) # [FIXED] รอ 1 วินาทีหลังคลิกสำเร็จ
-        smart_next(main_window) # กดถัดไปเฉพาะเมื่อเลือกได้แล้ว
+        time.sleep(1.0) 
+        log("[OK] เลือกสินค้าสำเร็จ -> กดถัดไป")
+        smart_next(main_window)
     else:
-        log(f"[WARN] หาสินค้า '{product_detail}' ไม่เจอ -> ไม่กดถัดไป")
+        log(f"[WARN] หาสินค้า '{product_detail}' ไม่เจอ")
+        # ถ้าหาไม่เจอ ก็กดถัดไปเผื่อฟลุ๊ค
+        smart_next(main_window)
     
     time.sleep(step_delay)
 
@@ -703,21 +608,24 @@ def run_smart_scenario(main_window, config):
     smart_next(main_window)
     time.sleep(step_delay)
 
-    smart_next(main_window)
-    time.sleep(step_delay)
+    # [แก้ไขจุดที่ 2] ลบ smart_next(main_window) ที่ซ้ำซ้อนตรงนี้ออก 
+    # เพราะมันทำให้กดข้ามไปหน้า เลข ปณ (Step 7) ทันทีโดยไม่ได้ตั้งตัว
+    # smart_next(main_window) <--- ลบออกแล้ว
+    # time.sleep(step_delay)
 
     # 7. หน้า เลข ปณ ปลายทาง (รูป 4/5)
     log(f"...[Step 7] กรอก ปณ ปลายทาง: {receiver_postal}")
+    # รอให้หน้าจอพร้อมรับค่าเล็กน้อย
+    time.sleep(1.0)
     try: main_window.type_keys(str(receiver_postal), with_spaces=True)
     except: pass
     
     smart_next(main_window)
     time.sleep(step_delay)
 
-    # --- ส่วนที่เชื่อมต่อกับโค้ดตัวอย่าง (Flow ต่อจากนี้) ---
+    # --- ส่วนที่เชื่อมต่อกับโค้ดตัวอย่าง ---
     
     log("...เข้าสู่กระบวนการเดิม (ตรวจสอบพื้นที่ทับซ้อน/บริการขนส่ง)...")
-    # (Handle Overlap Area)
     for _ in range(3):
         found = False
         for child in main_window.descendants():
@@ -726,7 +634,6 @@ def run_smart_scenario(main_window, config):
         if found: break
         time.sleep(0.5)
 
-    # เลือกบริการขนส่ง (ใช้ ShippingService_2579 สำหรับ EMS สำเร็จรูป)
     wait_until_id_appears(main_window, "ShippingService_363235", timeout=15)
     if find_and_click_with_rotate_logic(main_window, "ShippingService_363235"):
         main_window.type_keys("{ENTER}")
@@ -735,42 +642,29 @@ def run_smart_scenario(main_window, config):
     smart_next(main_window)
     time.sleep(step_delay)
 
-    # --- เรียกใช้ฟังก์ชันจากโค้ดตัวอย่างตามลำดับ ---
-
-    # 1. บริการพิเศษ
     process_special_services(main_window, special_services)
     time.sleep(step_delay)
 
-    # 2. ข้อมูลผู้ส่ง (ตรวจสอบหน้า)
     process_sender_info_page(main_window)
     time.sleep(step_delay)
     
-    # 3. ค้นหาที่อยู่ผู้รับ
     is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
     time.sleep(step_delay)
     
-    # 4. กรอกรายละเอียดผู้รับ
     process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
     time.sleep(step_delay)
     
-    # 5. ทำรายการซ้ำ
     is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
     if is_repeat_mode:
         log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที")
         return
     
-    # 6. ชำระเงิน
     process_payment(main_window, pay_method, pay_amount)
-
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
-# ================= 5. Start App =================
 if __name__ == "__main__":
-    
-    target_config = 'config.ini' # <-- เปลี่ยนชื่อไฟล์ตรงนี้ได้เลยตามต้องการ
-    
+    target_config = 'config.ini' 
     conf = load_config(target_config)
-    
     if conf:
         log(f"Connecting... (Using Config: {target_config})")
         try:
