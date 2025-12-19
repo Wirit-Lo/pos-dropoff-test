@@ -23,36 +23,50 @@ def log(message):
 # ================= 2. Helper Functions =================
 
 def find_and_fill_smart(window, target_name, target_id_keyword, value):
+    """
+    ค้นหาและกรอกข้อมูล: รองรับทั้ง Name และ AutomationId
+    """
     try:
         if not value or str(value).strip() == "":
             return False
 
         target_elem = None
+        # 1. ค้นหารอบแรก (ในหน้าจอที่เห็น)
         for child in window.descendants():
             if not child.is_visible(): continue
             
-            aid = child.element_info.automation_id
-            name = child.element_info.name
+            aid = str(child.element_info.automation_id)
+            name = str(child.element_info.name)
             
-            # ค้นหาจากชื่อ (Name) หรือ ID
-            if target_name and name and target_name in name:
-                target_elem = child
-                break
-            if target_id_keyword and aid and target_id_keyword in aid:
-                target_elem = child
-                break
+            if target_name and target_name in name:
+                target_elem = child; break
+            if target_id_keyword and target_id_keyword in aid:
+                target_elem = child; break
         
+        # 2. ถ้าไม่เจอ ให้ลองเลื่อนลงนิดนึงแล้วหาใหม่ (เผื่ออยู่ขอบล่าง)
+        if not target_elem:
+            force_scroll_down(window, -3)
+            time.sleep(0.5)
+            for child in window.descendants():
+                if not child.is_visible(): continue
+                aid = str(child.element_info.automation_id)
+                name = str(child.element_info.name)
+                if target_name and target_name in name:
+                    target_elem = child; break
+                if target_id_keyword and target_id_keyword in aid:
+                    target_elem = child; break
+
         if target_elem:
             log(f"   -> เจอช่อง '{target_name}/{target_id_keyword}' -> กรอก: {value}")
             try:
                 # ถ้าเจอ Container ให้หา Edit box ข้างใน
                 edits = target_elem.descendants(control_type="Edit")
-                if edits:
-                    target_elem = edits[0]
+                if edits: target_elem = edits[0]
             except: pass
 
             target_elem.set_focus()
             target_elem.click_input()
+            # ใช้การพิมพ์ทีละนิดเพื่อความชัวร์ หรือพิมพ์รวดเดียว
             target_elem.type_keys(str(value), with_spaces=True)
             return True
         else:
@@ -440,7 +454,7 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
 
 def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, manual_data):
     """
-    หน้ากรอกรายละเอียด: กรอกข้อมูลตามลำดับ 1-8 ที่ระบุมา
+    หน้ากรอกรายละเอียด: แก้ไขปัญหาข้ามการกรอก Manual Data
     """
     log("--- หน้า: รายละเอียดผู้รับ ---")
     log("...รอหน้าจอโหลด (พร้อมตรวจสอบ Popup Error)...")
@@ -467,9 +481,30 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
         # 2. นามสกุล (Name: นามสกุล, ID: CustomerLastName)
         find_and_fill_smart(window, "นามสกุล", "CustomerLastName", lname)
 
-        # 3-7. กรอกที่อยู่ (เฉพาะ Manual Mode)
-        if is_manual_mode:
-            log("...[Manual Mode] เริ่มกรอกที่อยู่ (ตามลำดับ 3-7)...")
+        # [Logic ใหม่] ตรวจสอบว่าจำเป็นต้องกรอกที่อยู่เองหรือไม่?
+        # ถ้า is_manual_mode เป็น False แต่ช่องจังหวัดว่างอยู่ ก็ต้องกรอก!
+        need_fill_address = is_manual_mode
+        
+        if not need_fill_address:
+            # เช็คว่ามีช่องจังหวัดว่างอยู่ไหม
+            try:
+                prov_box = [c for c in window.descendants(control_type="Edit") if "AdministrativeArea" in str(c.element_info.automation_id)]
+                if prov_box:
+                    val = prov_box[0].get_value()
+                    if not val or str(val).strip() == "":
+                        log("[Auto-Detect] ช่องจังหวัดว่าง -> บังคับเข้าโหมด Manual Fill")
+                        need_fill_address = True
+            except: pass
+
+        # 3-7. กรอกที่อยู่ (Manual / Auto-Detected)
+        if need_fill_address:
+            log("...[Manual Data] เริ่มกรอกที่อยู่ (Scroll & Fill)...")
+            
+            # [สำคัญ] เลื่อนหน้าจอลงก่อน เพื่อให้เห็นช่องที่อยู่ด้านล่าง
+            log("   -> Scroll Down เพื่อหาช่องที่อยู่...")
+            force_scroll_down(window, -5)
+            time.sleep(1.0)
+
             addr1 = manual_data.get('Address1', '')
             addr2 = manual_data.get('Address2', '')
             province = manual_data.get('Province', '')
@@ -496,6 +531,7 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
             find_and_fill_smart(window, "ที่อยู่ 2", "StreetAddress2", addr2)
 
         # 8. เบอร์โทรศัพท์ (Name: หมายเลขโทรศัพท์/โทร, ID: PhoneNumber)
+        # เลื่อนลงอีกรอบเผื่อตกขอบ
         force_scroll_down(window, -5)
         if not find_and_fill_smart(window, "หมายเลขโทรศัพท์", "PhoneNumber", phone):
              find_and_fill_smart(window, "โทร", "Phone", phone)
@@ -742,8 +778,8 @@ def run_smart_scenario(main_window, config):
         time.sleep(0.5)
 
     # เลือกบริการขนส่ง (ใช้ ShippingService_2579 สำหรับ EMS สำเร็จรูป)
-    wait_until_id_appears(main_window, "ShippingService_363163", timeout=15)
-    if find_and_click_with_rotate_logic(main_window, "ShippingService_363163"):
+    wait_until_id_appears(main_window, "ShippingService_2579", timeout=15)
+    if find_and_click_with_rotate_logic(main_window, "ShippingService_2579"):
         main_window.type_keys("{ENTER}")
     
     time.sleep(1)
