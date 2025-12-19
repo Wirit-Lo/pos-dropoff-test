@@ -508,33 +508,21 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
 
 def process_repeat_transaction(window, should_repeat):
     """
-    จัดการ popup และส่งค่ากลับ (Return) ว่าสรุปแล้วคือการทำรายการซ้ำหรือไม่
+    [FIXED] จัดการ popup และส่งค่ากลับ (Logic แบบเดียวกับ Code #2)
     """
     log("--- หน้า: ทำรายการซ้ำ (ตรวจสอบ) ---")
     
-    # 1. รอ UI นิ่งก่อนเริ่มเช็ค (สำคัญมาก)
-    time.sleep(2.0)
-    
-    # 2. ตีความค่า Config
+    # 1. ตีความค่า Config
     clean_flag = str(should_repeat).strip().lower().replace("'", "").replace('"', "")
     is_repeat_intent = clean_flag in ['true', 'yes', 'on', '1']
     
     found_popup = False
     
-    # [Updated Loop] พยายามหา Popup นานขึ้น และละเอียดขึ้น
-    for i in range(15):
+    # [FIXED] เพิ่มรอบการวนหา และตัด Debug code ที่ช้าออก
+    for i in range(30):
         if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=0.5):
-            found_popup = True
-            break
-        # ถ้าหา Text ไม่เจอ ลองดูว่ามี Window Modal เด้งขึ้นมาไหม
-        try:
-             child_windows = window.descendants(control_type="Window")
-             if child_windows:
-                 log(f"   [Debug] เจอ Window ย่อย: {[c.window_text() for c in child_windows]}")
-        except: pass
-        
-        log(f"   ...รอ Popup (รอบ {i+1}/15)...")
-        time.sleep(1.0)
+            found_popup = True; break
+        time.sleep(0.5)
         
     if found_popup:
         log("...เจอ Popup ทำรายการซ้ำ! กำลังเลือก...")
@@ -543,10 +531,9 @@ def process_repeat_transaction(window, should_repeat):
         target = "ใช่" if is_repeat_intent else "ไม่"
         log(f"...Config: {should_repeat} -> Intent: {is_repeat_intent} -> เลือก: '{target}'")
         
-        # กดปุ่ม
-        clicked = smart_click(window, target, timeout=3)
-        if not clicked:
-            log("   [Click Fail] คลิกไม่โดน -> ใช้ Keyboard Shortcut")
+        # กดปุ่ม (ใช้ timeout แบบ Code #2)
+        if not smart_click(window, target, timeout=3):
+            log("   [Click Fail] คลิกไม่โดน -> ใช้ Keyboard Shortcut (Fallback)")
             if target == "ไม่": window.type_keys("{ESC}")
             else: window.type_keys("{ENTER}")
             
