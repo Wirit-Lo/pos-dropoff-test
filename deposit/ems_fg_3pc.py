@@ -713,8 +713,8 @@ def run_smart_scenario(main_window, config):
         time.sleep(0.5)
     # =========================================================
 
-    wait_until_id_appears(main_window, "MailPieceShape_363168", timeout=15)
-    if find_and_click_with_rotate_logic(main_window, "MailPieceShape_363168"):
+    wait_until_id_appears(main_window, "ShippingService_363168", timeout=15)
+    if find_and_click_with_rotate_logic(main_window, "ShippingService_363168"):
         main_window.type_keys("{ENTER}")
 
     if add_insurance_flag.lower() in ['true', 'yes']:
