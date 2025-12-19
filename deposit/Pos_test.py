@@ -17,7 +17,8 @@ def load_config(filename='config.ini'):
     return config
 
 def log(message):
-    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
+    # เพิ่ม flush=True เพื่อให้ Log แสดงทันทีไม่ค้างใน Buffer
+    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}", flush=True)
 
 # ================= 2. Helper Functions =================
 # ฟังก์ชันใหม่: ค้นหา Element แบบ Smart (Text หรือ ID)
@@ -204,7 +205,6 @@ def check_error_popup(window, delay=0.5):
 # ================= 3. Business Logic Functions =================
 
 def process_sender_info_popup(window, phone, sender_postal):
-
     if smart_click(window, "อ่านบัตรประชาชน", timeout=3): 
         time.sleep(1.5) 
         try:
@@ -370,7 +370,6 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
             smart_next(window)
 
     return is_manual_mode
-
 
 def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, manual_data):
     """
@@ -548,7 +547,7 @@ def run_smart_scenario(main_window, config):
         }
     except: log("[Error] อ่าน Config ไม่สำเร็จ"); return
 
-    log(f"--- เริ่มต้นการทำงาน ---")
+    log(f"--- เริ่มต้นการทำงาน (VERSION: SYNCED LOGIC) ---")
     time.sleep(0.5)
 
     if not smart_click(main_window, "รับฝากสิ่งของ"): return
@@ -579,11 +578,11 @@ def run_smart_scenario(main_window, config):
         time.sleep(0.5)
 
     log("...รอหน้าบริการหลัก...")
-    wait_until_id_appears(main_window, "ShippingService_500006", timeout=wait_timeout)
-    if not click_element_by_id(main_window, "ShippingService_500006"):
+    wait_until_id_appears(main_window, "ShippingService_356420", timeout=wait_timeout)
+    if not click_element_by_id(main_window, "ShippingService_356420"):
         if not click_element_by_fuzzy_id(main_window, "EMSS"): return
 
-        main_window.type_keys("{ENTER}")
+    main_window.type_keys("{ENTER}")
     
     time.sleep(1)
     smart_next(main_window) 
@@ -592,7 +591,7 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
     process_sender_info_page(main_window)
     time.sleep(step_delay)
-    # 1. ค้นหาที่อยู่ และรับค่าสถานะว่าเป็น Manual Mode หรือไม่?
+  # 1. ค้นหาที่อยู่ และรับค่าสถานะว่าเป็น Manual Mode หรือไม่?
     is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
     
     time.sleep(step_delay)
@@ -601,17 +600,19 @@ def run_smart_scenario(main_window, config):
     process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
     
     time.sleep(step_delay)
-    
-    
-    # 1. เรียกฟังก์ชัน และรับค่ากลับมา (ตัวแปรนี้จะได้ค่า True/False จากจุดที่ 1)
+
+    # ----------------------------------------------------
+    # 1. เรียกฟังก์ชัน และรับค่ากลับมาด้วยว่า "ตกลงเมื่อกี้ตั้งใจจะ Repeat ใช่ไหม"
     is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
     
-    # 2. เช็คเลยว่า ถ้าเป็นจริง -> จบการทำงาน
+    # 2. เช็คเลยว่า ถ้าฟังก์ชันบอกว่าใช่ (is_repeat_mode = True) -> ให้จบการทำงานตรงนี้ทันที
     if is_repeat_mode:
-        log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที")
-        return # ออกจากฟังก์ชันทันที
+        log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที (Safe Exit)")
+        log("\n[SUCCESS] จบการทำงาน (Repeat Mode)")
+        return # ออกจากฟังก์ชันหลักทันที
     
-    # 3. ถ้าไม่เข้าเงื่อนไขบน ก็จะลงมาทำชำระเงินต่อ
+    # ถ้าไม่เข้าเงื่อนไขด้านบน (คือ is_repeat_mode = False) ถึงจะลงมาทำบรรทัดนี้
+    # 2. ชำระเงิน (จะทำงานก็ต่อเมื่อเงื่อนไขข้างบนไม่เป็นจริง)
     process_payment(main_window, pay_method, pay_amount)
 
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
@@ -620,7 +621,7 @@ def run_smart_scenario(main_window, config):
 if __name__ == "__main__":
     conf = load_config()
     if conf:
-        log("Connecting...")
+        log("Connecting... (Version: SYNCED LOGIC)")
         try:
             wait = int(conf['SETTINGS'].get('ConnectTimeout', 10))
             app_title = conf['APP']['WindowTitle']
