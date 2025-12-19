@@ -439,9 +439,24 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
         # 2. นามสกุล (Name: นามสกุล, ID: CustomerLastName)
         find_and_fill_smart(window, "นามสกุล", "CustomerLastName", lname)
 
-        # 3-7. กรอกที่อยู่ (เฉพาะ Manual Mode)
-        if is_manual_mode:
-            log("...[Manual Mode] เริ่มกรอกที่อยู่ (ตามลำดับ 3-7)...")
+        # [Improved] ตรวจสอบว่าต้อง Force Fill ที่อยู่หรือไม่?
+        # (กรณี is_manual_mode=False แต่เลือกที่อยู่ไม่ติด ทำให้ช่องว่างเปล่า)
+        need_force_fill = False
+        if not is_manual_mode:
+            try:
+                # ลองเช็คช่อง จังหวัด ว่าว่างไหม
+                edits = window.descendants(control_type="Edit")
+                for edit in edits:
+                    if "AdministrativeArea" in str(edit.element_info.automation_id) or "จังหวัด" in edit.element_info.name:
+                        if not edit.get_value():
+                            log("[Auto-Detect] พบช่องจังหวัดว่าง! -> บังคับเข้าโหมดกรอกเอง (Force Manual Mode)")
+                            need_force_fill = True
+                        break
+            except: pass
+
+        # 3-7. กรอกที่อยู่ (Manual Mode หรือ Force Fill)
+        if is_manual_mode or need_force_fill:
+            log("...[Manual/Force Mode] เริ่มกรอกที่อยู่ (ตามลำดับ 3-7)...")
             addr1 = manual_data.get('Address1', '')
             addr2 = manual_data.get('Address2', '')
             province = manual_data.get('Province', '')
@@ -476,8 +491,13 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
 
     log("...จบขั้นตอนข้อมูลผู้รับ -> กด 'ถัดไป' 3 ครั้ง...")
     for i in range(3):
+        # [Added] เช็ค Popup Error ระหว่างกด Next (กัน Crash)
+        if check_error_popup(window, delay=0.5):
+            log(f"   [!] พบ Popup แจ้งเตือน (รอบที่ {i+1}) -> ปิดและดำเนินการต่อ")
+            
         log(f"   -> Enter ครั้งที่ {i+1}")
-        smart_next(window); time.sleep(1.8)
+        smart_next(window)
+        time.sleep(1.8)
 
 def process_repeat_transaction(window, should_repeat):
     """
