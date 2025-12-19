@@ -772,9 +772,6 @@ def run_smart_scenario(main_window, config):
     if is_repeat_mode:
         log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที")
         return
-    
-    # 6. ชำระเงิน
-    process_payment(main_window, pay_method, pay_amount)
 
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
