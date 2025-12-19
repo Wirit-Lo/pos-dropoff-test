@@ -491,9 +491,10 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
 
     log("...จบขั้นตอนข้อมูลผู้รับ -> พยายามกด 'ถัดไป'...")
     for i in range(3):
-        # [Added Logic] เช็คดักหน้า: ถ้าเจอ Popup ทำรายการซ้ำ ให้หยุดกดทันที (กันกดเกิน)
-        if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=0.2):
+        # [Added Logic] เพิ่มเวลารอดักจับ Popup เป็น 1.0s (เพื่อให้แน่ใจว่ามัน render เสร็จ)
+        if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=1.0):
              log("   [!] เจอ Popup 'ทำรายการซ้ำ' แล้ว -> หยุดกดถัดไปทันที")
+             time.sleep(1.0) # รอให้ popup นิ่ง
              break
 
         # [Added] เช็ค Popup Error ระหว่างกด Next (กัน Crash)
@@ -502,47 +503,75 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
             
         log(f"   -> Enter ครั้งที่ {i+1}")
         smart_next(window)
-        time.sleep(1.8)
+        # เพิ่ม Delay ระหว่างการกด Enter นิดหน่อย เพื่อไม่ให้รัวเกินไปจนข้าม Popup
+        time.sleep(2.0)
 
 def process_repeat_transaction(window, should_repeat):
     """
     จัดการ popup และส่งค่ากลับ (Return) ว่าสรุปแล้วคือการทำรายการซ้ำหรือไม่
     """
-    log("--- หน้า: ทำรายการซ้ำ (รอ Popup) ---")
+    log("--- หน้า: ทำรายการซ้ำ (ตรวจสอบ) ---")
     
-    # 1. ตีความค่า Config ให้ชัดเจน (ลบ Space, ลบ Quote, ตัวเล็ก)
+    # 1. รอ UI นิ่งก่อนเริ่มเช็ค (สำคัญมาก)
+    time.sleep(2.0)
+    
+    # 2. ตีความค่า Config
     clean_flag = str(should_repeat).strip().lower().replace("'", "").replace('"', "")
     is_repeat_intent = clean_flag in ['true', 'yes', 'on', '1']
     
     found_popup = False
-    for i in range(30):
+    
+    # [Updated Loop] พยายามหา Popup นานขึ้น และละเอียดขึ้น
+    for i in range(15):
         if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=0.5):
-            found_popup = True; break
-        time.sleep(0.5)
+            found_popup = True
+            break
+        # ถ้าหา Text ไม่เจอ ลองดูว่ามี Window Modal เด้งขึ้นมาไหม
+        try:
+             child_windows = window.descendants(control_type="Window")
+             if child_windows:
+                 log(f"   [Debug] เจอ Window ย่อย: {[c.window_text() for c in child_windows]}")
+        except: pass
+        
+        log(f"   ...รอ Popup (รอบ {i+1}/15)...")
+        time.sleep(1.0)
         
     if found_popup:
-        log("...เจอ Popup ทำรายการซ้ำ...")
+        log("...เจอ Popup ทำรายการซ้ำ! กำลังเลือก...")
         time.sleep(1.0)
         
         target = "ใช่" if is_repeat_intent else "ไม่"
         log(f"...Config: {should_repeat} -> Intent: {is_repeat_intent} -> เลือก: '{target}'")
         
-        if not smart_click(window, target, timeout=3):
+        # กดปุ่ม
+        clicked = smart_click(window, target, timeout=3)
+        if not clicked:
+            log("   [Click Fail] คลิกไม่โดน -> ใช้ Keyboard Shortcut")
             if target == "ไม่": window.type_keys("{ESC}")
             else: window.type_keys("{ENTER}")
+            
+        time.sleep(1.0)
     else: 
-        log("[WARN] ไม่พบ Popup ทำรายการซ้ำ (Timeout)")
+        log("[INFO] ไม่พบ Popup ทำรายการซ้ำ (ข้ามไปขั้นตอนถัดไป)")
 
     # สำคัญ: ส่งค่าความตั้งใจกลับไปบอกฟังก์ชันหลัก
     return is_repeat_intent
 
-
 def process_payment(window, payment_method, received_amount):
     log("--- ขั้นตอนการชำระเงิน ---")
+    
+    # [Safety Net] ก่อนจะกดรับเงิน ลองเช็คอีกทีว่ามี Popup ทำรายการซ้ำค้างไหม?
+    # เผื่อ step ก่อนหน้าพลาดหลุดมา
+    if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=1.0):
+        log("[Alert] เจอ Popup ทำรายการซ้ำค้างอยู่! -> เรียกฟังก์ชันจัดการซ้ำ")
+        # เรียกใช้ฟังก์ชันเดิมเพื่อเคลียร์ Popup (Config = False คือกด 'ไม่' ตาม default safe mode)
+        process_repeat_transaction(window, False)
+        time.sleep(2.0)
+    
     # 1. กดรับเงิน (หน้าหลัก)
     log("...ค้นหาปุ่ม 'รับเงิน'...")
-    # รอให้หน้าจอพร้อมสักนิดหลังปิด Popup Repeat
     time.sleep(1.5)
+    
     if smart_click(window, "รับเงิน"):
         time.sleep(1.5) # รอหน้าชำระเงิน
     else:
@@ -737,17 +766,13 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
     
     # 5. ทำรายการซ้ำ
-    # 1. เรียกฟังก์ชัน และรับค่ากลับมา (ตัวแปรนี้จะได้ค่า True/False จากจุดที่ 1)
     is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
-    
-    # 2. เช็คเลยว่า ถ้าเป็นจริง -> จบการทำงาน
     if is_repeat_mode:
         log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที")
-        return # ออกจากฟังก์ชันทันที
+        return
     
-    # 3. ถ้าไม่เข้าเงื่อนไขบน ก็จะลงมาทำชำระเงินต่อ
+    # 6. ชำระเงิน
     process_payment(main_window, pay_method, pay_amount)
-
 
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
