@@ -627,8 +627,21 @@ def run_smart_scenario(main_window, config):
     smart_next(main_window)
     time.sleep(step_delay)
 
-    log(f"...[Step 5] กรอกน้ำหนัก: {weight}")
-    smart_input_generic(main_window, weight, "น้ำหนัก")
+    # 6. หน้า ปริมาตร (รูป 4)
+    log(f"...[Step 6] กรอกปริมาตร (กว้าง: {width}, ยาว: {length}, สูง: {height})")
+    try:
+        main_window.set_focus()
+        edits = [e for e in main_window.descendants(control_type="Edit") if e.is_visible()]
+        if edits:
+            edits[0].click_input()
+            log("   -> เจอช่องแรก -> เริ่มกรอกและ Tab")
+            main_window.type_keys(f"{width}{{TAB}}{length}{{TAB}}{height}", with_spaces=True)
+        else:
+            log("   [WARN] ไม่เจอ Edit box -> ลองพิมพ์ Blind Type")
+            main_window.type_keys(f"{width}{{TAB}}{length}{{TAB}}{height}", with_spaces=True)
+    except:
+         log("   [!] Error กรอกปริมาตร")
+
     smart_next(main_window)
     time.sleep(step_delay)
 
