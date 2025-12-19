@@ -662,56 +662,62 @@ def run_smart_scenario(main_window, config):
 
     # --- ส่วนที่เชื่อมต่อกับโค้ดตัวอย่าง ---
     
+    log("...เข้าสู่กระบวนการเดิม (ตรวจสอบพื้นที่ทับซ้อน/บริการขนส่ง)...")
+    for _ in range(3):
+        found = False
+        for child in main_window.descendants():
+            if "ทับซ้อน" in child.window_text() or "พื้นที่" in child.window_text():
+                smart_click(main_window, "ดำเนินการ"); found = True; break
+        if found: break
+        time.sleep(0.5)
+
+    # =========================================================
+    # [NEW LOGIC] จัดการ Popup ทับซ้อน และ Popup Error ที่ไปต่อไม่ได้
+    # =========================================================
     log("...ตรวจสอบ Popup (พื้นที่ทับซ้อน / ไปต่อไม่ได้)...")
     
-    # เพิ่มรอบการรอเป็น 20 รอบ (ประมาณ 10-15 วินาที) เผื่อ Popup มาช้า
-    for i in range(20):
+    # วนลูปเช็คประมาณ 3 วินาที (6 รอบ x 0.5s) เผื่อ Popup เด้งขึ้นมา
+    for _ in range(6):
         try:
-            # 1. เช็ค Popup "ไม่สามารถดำเนินการต่อไปได้" (สำคัญที่สุด)
-            # ถ้าเจอข้อความนี้ ให้กดตกลง แล้วจบการทำงานทันที
+            # 1. เช็ค Popup "ไม่สามารถดำเนินการต่อไปได้" (Fatal Error)
+            # ถ้าเจอ -> กดตกลง -> จบการทำงาน (Return)
             if wait_for_text(main_window, "ไม่สามารถดำเนินการต่อไปได้", timeout=0.2):
                 log("[CRITICAL] พบแจ้งเตือน 'ไม่สามารถดำเนินการต่อไปได้' -> กำลังปิดและจบงาน")
+                # พยายามกดปุ่มปิด/ตกลง
                 if not smart_click(main_window, ["ตกลง", "OK", "ปิด"]):
-                    main_window.type_keys("{ENTER}")
+                    main_window.type_keys("{ENTER}") # ถ้าหาปุ่มไม่เจอ กด Enter แทน
                 
                 log("!!! STOP PROCESS (จบการทำงานทันที) !!!")
-                return # <--- หยุดการทำงาน (ออกจากฟังก์ชัน)
+                return # <--- คำสั่งนี้จะหยุดและออกจากฟังก์ชันทันที
             
-            # 2. เช็ค Popup "พื้นที่ทับซ้อน"
-            # ถ้าเจอ -> กดดำเนินการ -> วนกลับไปเช็คข้อ 1 ใหม่
+            # 2. เช็ค Popup "พื้นที่ทับซ้อน" (Warning)
+            # ถ้าเจอ -> กดดำเนินการ -> ไปต่อ
             found_overlap = False
             for child in main_window.descendants(control_type="Window"):
                 txt = child.window_text()
                 if "ทับซ้อน" in txt or "พื้นที่" in txt:
-                    log(f"[Info] พบ Popup พื้นที่ทับซ้อน (รอบที่ {i+1}) -> กด 'ดำเนินการ'")
+                    log(f"[Info] พบ Popup พื้นที่ทับซ้อน -> กด 'ดำเนินการ'")
                     if smart_click(main_window, "ดำเนินการ"):
                         found_overlap = True
                     else:
+                        # ถ้าหาปุ่มไม่เจอ ลองกด Enter
                         main_window.type_keys("{ENTER}")
                         found_overlap = True
                     break
             
             if found_overlap:
-                log("   -> กดดำเนินการแล้ว รอเช็คผลลัพธ์ (เผื่อมี Error ตามมา)...")
-                time.sleep(2.0) # **สำคัญ** รอให้ระบบประมวลผลหลังกดดำเนินการ
-                continue # **สำคัญ** วนกลับไปเริ่มลูปใหม่ เพื่อเช็คข้อ 1 ("ไม่สามารถดำเนินการได้") อีกรอบ
+                time.sleep(1.0) # รอหน้าจอโหลดหลังกดดำเนินการ
+                continue # วนกลับไปเช็คอีกรอบ (เผื่อมี Error เด้งตามมาหลังกดดำเนินการ)
 
-            # 3. ถ้าไม่มี Popup อะไรแล้ว และเจอปุ่มบริการขนส่ง (ถือว่าผ่าน)
-            
         except: pass
         time.sleep(0.5)
     # =========================================================
 
-    # --- ส่วนเลือกบริการขนส่ง (ต้องถอยย่อหน้าออกมาให้อยู่ระดับเดียวกับ for loop ด้านบน) ---
-    log("...เลือกบริการขนส่ง...")
     wait_until_id_appears(main_window, "ShippingService_363235", timeout=15)
     if find_and_click_with_rotate_logic(main_window, "ShippingService_363235"):
         main_window.type_keys("{ENTER}")
-    
-    time.sleep(1.0)
 
-    # --- ส่วนประกัน (Insurance) ---
-    if add_insurance_flag.lower() in ['true', 'yes', 'on', '1']:
+    if add_insurance_flag.lower() in ['true', 'yes']:
         log(f"...ใส่วงเงิน {insurance_amt}...")
         if click_element_by_id(main_window, "CoverageButton"):
             if wait_until_id_appears(main_window, "CoverageAmount", timeout=5):
@@ -723,14 +729,14 @@ def run_smart_scenario(main_window, config):
                 submits.sort(key=lambda x: x.rectangle().top)
                 if submits: submits[0].click_input()
                 else: main_window.type_keys("{ENTER}")
-
+    
     time.sleep(1)
     smart_next(main_window)
     time.sleep(step_delay)
-    
+
     process_special_services(main_window, special_services)
     time.sleep(step_delay)
-    
+
     process_sender_info_page(main_window)
     time.sleep(step_delay)
     
@@ -740,18 +746,10 @@ def run_smart_scenario(main_window, config):
     process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
     time.sleep(step_delay)
     
-    # --- ส่วนทำรายการซ้ำ (Repeat Transaction) ---
-    # **สำคัญ** ต้องวางตรงนี้ และย่อหน้าต้องชิดซ้ายเท่ากับบรรทัดอื่นๆ (ห้ามอยู่ใน if/for/try)
-    # ตัวแปร repeat_flag ดึงมาจาก Config ตอนต้นฟังก์ชัน run_smart_scenario
     is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
-    
     if is_repeat_mode:
         log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที")
-        return # จบการทำงาน (ไม่ต้องทำ Payment ต่อ)
-
-    # --- ส่วนชำระเงิน (Payment) ---
-    # จะทำก็ต่อเมื่อไม่ได้ Return จากเงื่อนไขข้างบน
-    process_payment(main_window, pay_method, pay_amount)
+        return
     
     process_payment(main_window, pay_method, pay_amount)
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
