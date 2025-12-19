@@ -716,6 +716,19 @@ def run_smart_scenario(main_window, config):
     wait_until_id_appears(main_window, "ShippingService_363163", timeout=15)
     if find_and_click_with_rotate_logic(main_window, "ShippingService_363163"):
         main_window.type_keys("{ENTER}")
+
+    if add_insurance_flag.lower() in ['true', 'yes']:
+        log(f"...ใส่วงเงิน {insurance_amt}...")
+        if click_element_by_id(main_window, "CoverageButton"):
+            if wait_until_id_appears(main_window, "CoverageAmount", timeout=5):
+                for child in main_window.descendants():
+                    if child.element_info.automation_id == "CoverageAmount":
+                        child.click_input(); child.type_keys(str(insurance_amt), with_spaces=True); break
+                time.sleep(0.5)
+                submits = [c for c in main_window.descendants() if c.element_info.automation_id == "LocalCommand_Submit"]
+                submits.sort(key=lambda x: x.rectangle().top)
+                if submits: submits[0].click_input()
+                else: main_window.type_keys("{ENTER}")
     
     time.sleep(1)
     smart_next(main_window)
