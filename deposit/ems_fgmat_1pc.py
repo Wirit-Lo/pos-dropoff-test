@@ -9,7 +9,7 @@ from pywinauto import mouse
 def load_config(filename='config.ini'):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(script_dir, filename)
-    # [Config] เพิ่ม strict=False เพื่อป้องกัน Error กรณีมี Key ซ้ำ
+    # [แก้ไข] เพิ่ม strict=False เพื่อป้องกัน Error กรณีมี Key ซ้ำใน Config
     config = configparser.ConfigParser(strict=False)
     if not os.path.exists(file_path): 
         print(f"[Error] ไม่พบไฟล์ Config ที่: {file_path}")
@@ -149,7 +149,6 @@ def smart_click(window, criteria_list, timeout=5):
                     id_match = criteria in str(child.element_info.automation_id)
                     
                     if child.is_visible() and (text_match or id_match):
-                        # [Fix] พยายามคลิกที่จุดกึ่งกลางของ element เพื่อความแม่นยำ
                         child.click_input()
                         log(f"[/] กดปุ่ม '{criteria}' สำเร็จ")
                         return True
@@ -341,6 +340,7 @@ def process_sender_info_page(window):
     wait_for_text(window, "ข้อมูลผู้ส่ง", timeout=5)
     smart_next(window)
 
+# ฟังก์ชันจากโค้ดตัวอย่าง (เพิ่มเข้ามาใหม่)
 def process_receiver_address_selection(window, address_keyword, manual_data):
     log(f"--- หน้า: ค้นหาที่อยู่ ({address_keyword}) ---")
     is_manual_mode = False
@@ -481,62 +481,32 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
 
 def process_repeat_transaction(window, should_repeat):
     """
-    [FIXED] จัดการ popup ทำรายการซ้ำ
-    - รอให้ Popup นิ่งก่อน
-    - เช็ค Loop ว่า Popup หายไปจริงไหม ถ้ายังอยู่ให้กดใหม่
+    จัดการ popup และส่งค่ากลับ (Return) ว่าสรุปแล้วคือการทำรายการซ้ำหรือไม่
     """
     log("--- หน้า: ทำรายการซ้ำ (รอ Popup) ---")
     
-    # 1. ตีความค่า Config ให้ชัดเจน
+    # 1. ตีความค่า Config ให้ชัดเจน (ลบ Space, ลบ Quote, ตัวเล็ก)
     clean_flag = str(should_repeat).strip().lower().replace("'", "").replace('"', "")
     is_repeat_intent = clean_flag in ['true', 'yes', 'on', '1']
     
-    # Keyword ที่จะบอกว่าเป็น Popup ทำรายการซ้ำ
-    popup_keywords = ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ", "รายการซ้ำ"]
-
     found_popup = False
     for i in range(30):
-        if wait_for_text(window, popup_keywords, timeout=0.5):
+        if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=0.5):
             found_popup = True; break
         time.sleep(0.5)
         
     if found_popup:
         log("...เจอ Popup ทำรายการซ้ำ...")
-        # [Fix 1] รอให้ Animation Popup นิ่งก่อน (สำคัญมาก ถ้ากดเร็วไป Event จะหาย)
-        time.sleep(1.5) 
+        time.sleep(1.0)
         
         target = "ใช่" if is_repeat_intent else "ไม่"
         log(f"...Config: {should_repeat} -> Intent: {is_repeat_intent} -> เลือก: '{target}'")
         
-        # [Fix 2] Loop ตรวจสอบ: กดแล้ว Popup ต้องหายไป
-        popup_closed = False
-        for attempt in range(5):
-            # พยายามคลิก
-            clicked = smart_click(window, target, timeout=2)
-            
-            # ถ้าคลิกไม่โดน หรือคลิกแล้ว Popup ยังอยู่ -> ลองใช้ Keyboard
-            if not clicked:
-                log(f"   [Retry {attempt+1}] คลิกไม่โดน/หาไม่เจอ -> ลองใช้ Keyboard Shortcut")
-                if not is_repeat_intent: # ตอบ ไม่
-                    window.type_keys("{ESC}")
-                else: # ตอบ ใช่
-                    window.type_keys("{ENTER}")
-            
-            time.sleep(1.0) # รอผล
-            
-            # เช็คว่า Popup ยังอยู่ไหม?
-            if wait_for_text(window, popup_keywords, timeout=0.5):
-                log(f"   [!] Popup ยังค้างอยู่ (รอบที่ {attempt+1}) -> ลองกดใหม่")
-            else:
-                log("   [/] Popup ปิดลงเรียบร้อย")
-                popup_closed = True
-                break
-        
-        if not popup_closed:
-            log("[WARN] พยายามปิด Popup หลายครั้งแล้วไม่สำเร็จ (อาจต้องกดมือช่วย)")
-            
+        if not smart_click(window, target, timeout=3):
+            if target == "ไม่": window.type_keys("{ESC}")
+            else: window.type_keys("{ENTER}")
     else: 
-        log("[INFO] ไม่พบ Popup ทำรายการซ้ำ (Timeout/ไม่มี Popup)")
+        log("[WARN] ไม่พบ Popup ทำรายการซ้ำ (Timeout)")
 
     # สำคัญ: ส่งค่าความตั้งใจกลับไปบอกฟังก์ชันหลัก
     return is_repeat_intent
