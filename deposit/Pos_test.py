@@ -459,71 +459,59 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
 
 def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, manual_data):
     """
-    หน้ากรอกรายละเอียด: กรอกข้อมูลตามลำดับ 1-8 ที่ระบุมา
+    หน้ากรอกรายละเอียด: ปรับปรุง Manual Mode ให้เสถียรขึ้น (เลิกใช้ TAB)
     """
-    log("--- หน้า: รายละเอียดผู้รับ ---")
-    log("...รอหน้าจอโหลด (พร้อมตรวจสอบ Popup Error)...")
+    log(f"--- หน้า: รายละเอียดผู้รับ (โหมด: {'Manual' if is_manual_mode else 'Auto'}) ---")
+    log("...รอหน้าจอโหลด...")
     
-    # วนลูปเช็ค Popup และรอหน้าจอ
-    for _ in range(30):
-        if check_error_popup(window, delay=0):
-            log("...ปิด Popup แล้ว -> รอโหลดฟอร์มต่อ...")
-            time.sleep(1.0)
-        
-        # ลองเช็คว่ามีช่องชื่อโผล่มาหรือยัง
-        found = False
-        for child in window.descendants():
-            if "ชื่อ" in child.window_text() or "CustomerFirstName" in str(child.element_info.automation_id):
-                found = True; break
-        if found: break
+    # 1. รอให้ฟอร์มโหลดเสร็จ (เช็คว่ามี Edit box โผล่มาหรือยัง)
+    for _ in range(20):
+        if check_error_popup(window, delay=0): continue
+        try:
+            if window.descendants(control_type="Edit"): break
+        except: pass
         time.sleep(0.5)
 
-    # เริ่มกรอกข้อมูลตามลำดับที่ขอ
     try:
-        # 1. ชื่อ (Name: ชื่อ, ID: CustomerFirstName)
+        # --- ส่วนที่ 1: ชื่อ-นามสกุล (ต้องกรอกเสมอ) ---
         find_and_fill_smart(window, "ชื่อ", "CustomerFirstName", fname)
-        
-        # 2. นามสกุล (Name: นามสกุล, ID: CustomerLastName)
         find_and_fill_smart(window, "นามสกุล", "CustomerLastName", lname)
 
-        # 3-7. กรอกที่อยู่ (เฉพาะ Manual Mode)
+        # --- ส่วนที่ 2: ที่อยู่ (ทำงานเฉพาะเมื่อเข้า Manual Mode) ---
         if is_manual_mode:
-            log("...[Manual Mode] เริ่มกรอกที่อยู่ (ตามลำดับ 3-7)...")
-            addr1 = manual_data.get('Address1', '')
-            addr2 = manual_data.get('Address2', '')
-            province = manual_data.get('Province', '')
-            district = manual_data.get('District', '')
-            subdistrict = manual_data.get('SubDistrict', '')
-
-            # 3. จังหวัด (ID: AdministrativeArea)
-            if not find_and_fill_smart(window, "จังหวัด", "AdministrativeArea", province):
-                window.type_keys("{TAB}"); window.type_keys(province, with_spaces=True)
-
-            # 4. เขต/อำเภอ (ID: Locality)
-            if not find_and_fill_smart(window, "เขต/อำเภอ", "Locality", district):
-                window.type_keys("{TAB}"); window.type_keys(district, with_spaces=True)
-
-            # 5. แขวง/ตำบล (ID: DependentLocality)
-            if not find_and_fill_smart(window, "แขวง/ตำบล", "DependentLocality", subdistrict):
-                window.type_keys("{TAB}"); window.type_keys(subdistrict, with_spaces=True)
-
-            # 6. ที่อยู่ 1 (ID: StreetAddress1)
-            find_and_fill_smart(window, "ที่อยู่ 1", "StreetAddress1", addr1)
+            log("...[Manual Mode] กำลังกรอกข้อมูลที่อยู่...")
             
-            # 7. ที่อยู่ 2 (ID: StreetAddress2)
-            find_and_fill_smart(window, "ที่อยู่ 2", "StreetAddress2", addr2)
+            # สร้างรายการสิ่งที่ต้องกรอก (ชื่อช่องภาษาไทย, ID, ค่าที่จะกรอก)
+            fields_map = [
+                ("จังหวัด", "AdministrativeArea", manual_data.get('Province')),
+                ("เขต/อำเภอ", "Locality", manual_data.get('District')),
+                ("แขวง/ตำบล", "DependentLocality", manual_data.get('SubDistrict')),
+                ("ที่อยู่ 1", "StreetAddress1", manual_data.get('Address1')),
+                ("ที่อยู่ 2", "StreetAddress2", manual_data.get('Address2')),
+            ]
+            
+            # วนลูปกรอกทีละช่อง
+            for name_kw, id_kw, val in fields_map:
+                # เรียกใช้ find_and_fill_smart ที่คุณมีอยู่แล้ว
+                success = find_and_fill_smart(window, name_kw, id_kw, val)
+                if not success and val:
+                    log(f"[Skip] หาช่อง '{name_kw}' ไม่เจอ (ข้ามเพื่อความปลอดภัย)")
 
-        # 8. เบอร์โทรศัพท์ (Name: หมายเลขโทรศัพท์/โทร, ID: PhoneNumber)
+        # --- ส่วนที่ 3: เบอร์โทร (ต้องกรอกเสมอ) ---
+        # เลื่อนลงเล็กน้อยเผื่อช่องเบอร์อยู่ล่างสุด
         force_scroll_down(window, -5)
         if not find_and_fill_smart(window, "หมายเลขโทรศัพท์", "PhoneNumber", phone):
              find_and_fill_smart(window, "โทร", "Phone", phone)
 
-    except Exception as e: log(f"[!] Error Details: {e}")
+    except Exception as e:
+        log(f"[!] Error ในขั้นตอนกรอกข้อมูล: {e}")
 
-    log("...จบขั้นตอนข้อมูลผู้รับ -> กด 'ถัดไป' 3 ครั้ง...")
-    for i in range(3):
-        log(f"   -> Enter ครั้งที่ {i+1}")
-        smart_next(window); time.sleep(1.8)
+    log("...จบขั้นตอน -> เตรียมกดถัดไป...")
+    smart_next(window)
+    time.sleep(1.0)
+    # กดย้ำอีกครั้งเพื่อความชัวร์ (บางทีหน้าจอมันหน่วง)
+    for i in range(2): 
+        smart_next(window); time.sleep(1.5)
 
 
 def process_repeat_transaction(window, should_repeat):
@@ -689,8 +677,6 @@ def run_smart_scenario(main_window, config):
     process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
     
     time.sleep(step_delay)
-
-    # ----------------------------------------------------
     # 1. เรียกฟังก์ชัน และรับค่ากลับมาด้วยว่า "ตกลงเมื่อกี้ตั้งใจจะ Repeat ใช่ไหม"
     is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
     
