@@ -642,6 +642,17 @@ def run_smart_scenario(main_window, config):
     smart_next(main_window)
     time.sleep(step_delay)
 
+    # --- ส่วนที่เชื่อมต่อกับโค้ดตัวอย่าง ---
+    
+    log("...เข้าสู่กระบวนการเดิม (ตรวจสอบพื้นที่ทับซ้อน/บริการขนส่ง)...")
+    for _ in range(3):
+        found = False
+        for child in main_window.descendants():
+            if "ทับซ้อน" in child.window_text() or "พื้นที่" in child.window_text():
+                smart_click(main_window, "ดำเนินการ"); found = True; break
+        if found: break
+        time.sleep(0.5)
+    
     # =========================================================
     # [NEW LOGIC] จัดการ Popup ทับซ้อน และ Popup Error ที่ไปต่อไม่ได้
     # =========================================================
@@ -683,17 +694,6 @@ def run_smart_scenario(main_window, config):
         except: pass
         time.sleep(0.5)
     # =========================================================
-
-    # --- ส่วนที่เชื่อมต่อกับโค้ดตัวอย่าง ---
-    
-    log("...เข้าสู่กระบวนการเดิม (ตรวจสอบพื้นที่ทับซ้อน/บริการขนส่ง)...")
-    for _ in range(3):
-        found = False
-        for child in main_window.descendants():
-            if "ทับซ้อน" in child.window_text() or "พื้นที่" in child.window_text():
-                smart_click(main_window, "ดำเนินการ"); found = True; break
-        if found: break
-        time.sleep(0.5)
 
     wait_until_id_appears(main_window, "ShippingService_363244", timeout=15)
     if find_and_click_with_rotate_logic(main_window, "ShippingService_363244"):
