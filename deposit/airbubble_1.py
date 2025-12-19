@@ -124,6 +124,19 @@ def force_scroll_down(window, scroll_dist=-5):
         try: window.type_keys("{PGDN}")
         except: pass
 
+def click_element_by_id(window, exact_id, timeout=5, index=0):
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            found = [c for c in window.descendants() if c.element_info.automation_id == exact_id and c.is_visible()]
+            if len(found) > index:
+                found[index].click_input()
+                log(f"[/] กดปุ่ม ID '{exact_id}' สำเร็จ")
+                return True
+        except: pass
+        time.sleep(0.5)
+    return False
+
 def smart_click(window, criteria_list, timeout=5):
     if isinstance(criteria_list, str): criteria_list = [criteria_list]
     start = time.time()
@@ -519,12 +532,18 @@ def run_smart_scenario(main_window, config):
         sender_postal = config['TEST_DATA'].get('SenderPostalCode', '10110')
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
 
+        
+
         special_services = config['SPECIAL_SERVICES'].get('Services', '')
         addr_keyword = config['RECEIVER'].get('AddressKeyword', '99/99')
         rcv_fname = config['RECEIVER_DETAILS'].get('FirstName', 'A')
         rcv_lname = config['RECEIVER_DETAILS'].get('LastName', 'B')
         rcv_phone = config['RECEIVER_DETAILS'].get('PhoneNumber', '081')
         repeat_flag = config['REPEAT_TRANSACTION'].get('Repeat', 'False')
+        # อ่านค่า Config ประกัน (ปรับ Section ตามไฟล์ Config ของคุณ)
+        # ถ้าอยู่ใน [DEPOSIT_ENVELOPE] หรือ [INSURANCE] ก็แก้ตรงนี้ได้เลย
+        add_insurance_flag = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
+        insurance_amt = config['DEPOSIT_ENVELOPE'].get('Insurance', '1000')
         
         pay_method = config['PAYMENT'].get('Method', 'เงินสด') if 'PAYMENT' in config else 'เงินสด'
         pay_amount = config['PAYMENT'].get('ReceivedAmount', '1000') if 'PAYMENT' in config else '1000'
@@ -637,6 +656,19 @@ def run_smart_scenario(main_window, config):
     wait_until_id_appears(main_window, "ShippingService_363235", timeout=15)
     if find_and_click_with_rotate_logic(main_window, "ShippingService_363235"):
         main_window.type_keys("{ENTER}")
+
+    if add_insurance_flag.lower() in ['true', 'yes']:
+        log(f"...ใส่วงเงิน {insurance_amt}...")
+        if click_element_by_id(main_window, "CoverageButton"):
+            if wait_until_id_appears(main_window, "CoverageAmount", timeout=5):
+                for child in main_window.descendants():
+                    if child.element_info.automation_id == "CoverageAmount":
+                        child.click_input(); child.type_keys(str(insurance_amt), with_spaces=True); break
+                time.sleep(0.5)
+                submits = [c for c in main_window.descendants() if c.element_info.automation_id == "LocalCommand_Submit"]
+                submits.sort(key=lambda x: x.rectangle().top)
+                if submits: submits[0].click_input()
+                else: main_window.type_keys("{ENTER}")
     
     time.sleep(1)
     smart_next(main_window)
