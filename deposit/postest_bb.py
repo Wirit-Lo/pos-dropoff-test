@@ -21,24 +21,8 @@ def log(message):
 
 # ================= 2. Helper Functions =================
 
-# [NEW] เพิ่มฟังก์ชันกดปุ่มด้วย ID แบบเจาะจง (จากตัวอย่าง)
-def click_element_by_id(window, exact_id, timeout=5, index=0):
-    start = time.time()
-    while time.time() - start < timeout:
-        try:
-            # กรองเฉพาะที่มองเห็น (is_visible) เพื่อเป็นเกราะป้องกัน
-            found = [c for c in window.descendants() if c.element_info.automation_id == exact_id and c.is_visible()]
-            if len(found) > index:
-                found[index].click_input()
-                log(f"[/] กดปุ่ม ID '{exact_id}' สำเร็จ")
-                return True
-        except: pass
-        time.sleep(0.5)
-    return False
-
 def find_and_fill_smart(window, target_name, target_id_keyword, value):
     try:
-        # [Protection] ถ้าค่าว่าง ให้ข้ามเลย
         if not value or str(value).strip() == "":
             return False
 
@@ -139,6 +123,19 @@ def force_scroll_down(window, scroll_dist=-5):
         log(f"[!] Scroll Error: {e}")
         try: window.type_keys("{PGDN}")
         except: pass
+
+def click_element_by_id(window, exact_id, timeout=5, index=0):
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            found = [c for c in window.descendants() if c.element_info.automation_id == exact_id and c.is_visible()]
+            if len(found) > index:
+                found[index].click_input()
+                log(f"[/] กดปุ่ม ID '{exact_id}' สำเร็จ")
+                return True
+        except: pass
+        time.sleep(0.5)
+    return False
 
 def smart_click(window, criteria_list, timeout=5):
     if isinstance(criteria_list, str): criteria_list = [criteria_list]
@@ -299,43 +296,27 @@ def smart_input_generic(window, value, description="ข้อมูล"):
 
 def process_special_services(window, services_str):
     log("--- หน้า: บริการพิเศษ ---")
-    time.sleep(1.5)  # รอโหลดหน้า
+    time.sleep(1.0) 
     if wait_for_text(window, ["บริการพิเศษ", "Services", "Special"], timeout=5):
-        if services_str and services_str.strip():
-            # รองรับทั้งเครื่องหมายจุลภาค (,) และเครื่องหมายขีด (-) เผื่อ Config เขียนมาแบบต่างๆ
-            # แต่ถ้า user ตั้งใจใช้ขีดในชื่อปุ่มจริงๆ (เช่น "EMS-World") Logic นี้อาจต้องปรับ
-            # เบื้องต้นใช้ Comma เป็นตัวหลักตามคู่มือ
-            services = services_str.split(',')
-            
-            for s in services:
+        if services_str.strip():
+            for s in services_str.split(','):
                 s = s.strip()
-                if not s: continue
-                log(f"...กำลังเลือกบริการ: '{s}'")
-                if not smart_click_with_scroll(window, s, max_scrolls=5):
-                    log(f"   [WARN] หาปุ่มบริการ '{s}' ไม่เจอ")
-        else:
-            log("[Info] ไม่มีการระบุบริการพิเศษใน Config")
+                if s: 
+                    log(f"...เลือกบริการเสริม: {s}")
+                    smart_click_with_scroll(window, s, max_scrolls=5)
     else:
         log("[WARN] ไม่พบหน้าบริการพิเศษ หรือข้ามไปแล้ว")
-    
-    # กดถัดไปเพื่อออกจากหน้าบริการพิเศษ
     smart_next(window)
 
 def process_sender_info_page(window):
     log("--- หน้า: ข้อมูลผู้ส่ง (ข้าม) ---")
-    # [แก้ไขจุดที่ 1] ถ้าไม่เจอหน้าข้อมูลผู้ส่ง (Timeout) จะไม่กด Next 
-    # เพื่อป้องกันการกด Enter ค้างไปโดนหน้าถัดไป (ข้อมูลผู้รับ)
-    if wait_for_text(window, "ข้อมูลผู้ส่ง", timeout=5):
-        log("   [/] เจอหน้าข้อมูลผู้ส่ง -> กดถัดไป")
-        smart_next(window)
-    else:
-        log("   [Info] ไม่พบหน้าข้อมูลผู้ส่ง (ระบบอาจข้ามให้อัตโนมัติ) -> ไม่กดถัดไป")
+    wait_for_text(window, "ข้อมูลผู้ส่ง", timeout=5)
+    smart_next(window)
 
 def process_receiver_address_selection(window, address_keyword, manual_data):
     log(f"--- หน้า: ค้นหาที่อยู่ ({address_keyword}) ---")
     is_manual_mode = False
 
-    # รอให้แน่ใจว่าเข้าหน้าข้อมูลผู้รับแล้ว
     if wait_for_text(window, "ข้อมูลผู้รับ", timeout=5):
         try:
             search_ready = False
@@ -551,27 +532,21 @@ def run_smart_scenario(main_window, config):
         sender_postal = config['TEST_DATA'].get('SenderPostalCode', '10110')
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
 
+        
+
         special_services = config['SPECIAL_SERVICES'].get('Services', '')
         addr_keyword = config['RECEIVER'].get('AddressKeyword', '99/99')
         rcv_fname = config['RECEIVER_DETAILS'].get('FirstName', 'A')
         rcv_lname = config['RECEIVER_DETAILS'].get('LastName', 'B')
         rcv_phone = config['RECEIVER_DETAILS'].get('PhoneNumber', '081')
         repeat_flag = config['REPEAT_TRANSACTION'].get('Repeat', 'False')
+        # อ่านค่า Config ประกัน (ปรับ Section ตามไฟล์ Config ของคุณ)
+        # ถ้าอยู่ใน [DEPOSIT_ENVELOPE] หรือ [INSURANCE] ก็แก้ตรงนี้ได้เลย
+        add_insurance_flag = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
+        insurance_amt = config['DEPOSIT_ENVELOPE'].get('Insurance', '1000')
         
         pay_method = config['PAYMENT'].get('Method', 'เงินสด') if 'PAYMENT' in config else 'เงินสด'
         pay_amount = config['PAYMENT'].get('ReceivedAmount', '1000') if 'PAYMENT' in config else '1000'
-
-        # Insurance Config
-        add_insurance = 'False'
-        insurance_amt = '0'
-        
-        if 'INSURANCE' in config:
-            add_insurance = config['INSURANCE'].get('AddInsurance', 'False')
-            insurance_amt = config['INSURANCE'].get('Insurance', '0')
-        elif 'SPECIAL_SERVICES' in config:
-             # เผื่อ User ใส่ไว้ใน Special Services
-             add_insurance = config['SPECIAL_SERVICES'].get('AddInsurance', 'False')
-             insurance_amt = config['SPECIAL_SERVICES'].get('Insurance', '0')
 
         manual_data = {
             'Address1': config['MANUAL_ADDRESS_FALLBACK'].get('Address1', '') if 'MANUAL_ADDRESS_FALLBACK' in config else '',
@@ -621,6 +596,8 @@ def run_smart_scenario(main_window, config):
         smart_next(main_window)
     else:
         log("[OK] เลือกหมวดหมู่สำเร็จ -> (ข้ามการกดถัดไป เพื่อป้องกันการกดซ้ำที่หน้าถัดไป)")
+        # [แก้ไขจุดที่ 1] ไม่กด smart_next() ตรงนี้ เพราะการคลิกเลือกมักจะพาไปหน้าถัดไปอยู่แล้ว
+        # หรือถ้าไม่ไป ก็ปล่อยให้ Timeout หน้าถัดไปจัดการ หรือถ้าจำเป็นให้ uncomment บรรทัดล่างนี้
         # smart_next(main_window) 
         pass
 
@@ -639,6 +616,7 @@ def run_smart_scenario(main_window, config):
         smart_next(main_window)
     else:
         log(f"[WARN] หาสินค้า '{product_detail}' ไม่เจอ")
+        # ถ้าหาไม่เจอ ก็กดถัดไปเผื่อฟลุ๊ค
         smart_next(main_window)
     
     time.sleep(step_delay)
@@ -649,8 +627,14 @@ def run_smart_scenario(main_window, config):
     smart_next(main_window)
     time.sleep(step_delay)
 
+    # [แก้ไขจุดที่ 2] ลบ smart_next(main_window) ที่ซ้ำซ้อนตรงนี้ออก 
+    # เพราะมันทำให้กดข้ามไปหน้า เลข ปณ (Step 7) ทันทีโดยไม่ได้ตั้งตัว
+    # smart_next(main_window) <--- ลบออกแล้ว
+    # time.sleep(step_delay)
+
     # 7. หน้า เลข ปณ ปลายทาง (รูป 4/5)
     log(f"...[Step 7] กรอก ปณ ปลายทาง: {receiver_postal}")
+    # รอให้หน้าจอพร้อมรับค่าเล็กน้อย
     time.sleep(1.0)
     try: main_window.type_keys(str(receiver_postal), with_spaces=True)
     except: pass
@@ -672,48 +656,20 @@ def run_smart_scenario(main_window, config):
     wait_until_id_appears(main_window, "ShippingService_363235", timeout=15)
     if find_and_click_with_rotate_logic(main_window, "ShippingService_363235"):
         main_window.type_keys("{ENTER}")
-    
-    # -----------------------------------------------------
-    # [UPDATED] เพิ่มราคารับประกัน (Insurance) ตาม Logic ตัวอย่าง + Protection
-    # -----------------------------------------------------
-    if add_insurance.lower() in ['true', 'yes', 'on', '1']:
-        log(f"...[Insurance] ตรวจสอบพบ Config เพิ่มประกัน วงเงิน: {insurance_amt}")
-        time.sleep(1.0) 
-        
-        # ใช้ Logic การหา ID CoverageButton แบบเจาะจง (ตามตัวอย่าง)
-        if click_element_by_id(main_window, "CoverageButton", timeout=3):
-            # รอช่องกรอกวงเงิน
-            if wait_until_id_appears(main_window, "CoverageAmount", timeout=5):
-                log(f"   -> พบช่อง CoverageAmount -> กรอก: {insurance_amt}")
-                
-                # วนลูปหา Element ที่เป็น CoverageAmount และกรอกข้อมูล
-                filled_ins = False
-                for child in main_window.descendants():
-                    if child.element_info.automation_id == "CoverageAmount" and child.is_visible():
-                        child.set_focus()
-                        child.click_input()
-                        child.type_keys(str(insurance_amt), with_spaces=True)
-                        filled_ins = True
-                        break
-                
-                if filled_ins:
-                    time.sleep(0.5)
-                    # กดตกลงใน Popup (หาปุ่ม Submit ใน Context นี้)
-                    submits = [c for c in main_window.descendants() if c.element_info.automation_id == "LocalCommand_Submit" and c.is_visible()]
-                    if submits:
-                        submits.sort(key=lambda x: x.rectangle().top)
-                        submits[0].click_input()
-                        log("   -> กดตกลง (Submit) วงเงินประกัน")
-                    else:
-                        main_window.type_keys("{ENTER}")
-                else:
-                    log("   [WARN] หา Element CoverageAmount เพื่อกรอกไม่เจอ")
-            else:
-                log("   [WARN] ไม่พบช่องกรอกวงเงิน CoverageAmount (Timeout)")
-        else:
-            log("   [WARN] หาปุ่ม CoverageButton (+) ไม่เจอ")
-    # -----------------------------------------------------
 
+    if add_insurance_flag.lower() in ['true', 'yes']:
+        log(f"...ใส่วงเงิน {insurance_amt}...")
+        if click_element_by_id(main_window, "CoverageButton"):
+            if wait_until_id_appears(main_window, "CoverageAmount", timeout=5):
+                for child in main_window.descendants():
+                    if child.element_info.automation_id == "CoverageAmount":
+                        child.click_input(); child.type_keys(str(insurance_amt), with_spaces=True); break
+                time.sleep(0.5)
+                submits = [c for c in main_window.descendants() if c.element_info.automation_id == "LocalCommand_Submit"]
+                submits.sort(key=lambda x: x.rectangle().top)
+                if submits: submits[0].click_input()
+                else: main_window.type_keys("{ENTER}")
+    
     time.sleep(1)
     smart_next(main_window)
     time.sleep(step_delay)
