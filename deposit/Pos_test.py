@@ -519,10 +519,25 @@ def process_repeat_transaction(window, should_repeat):
     found_popup = False
     
     # [FIXED] เพิ่มรอบการวนหา และตัด Debug code ที่ช้าออก
-    for i in range(30):
-        if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=0.5):
-            found_popup = True; break
-        time.sleep(0.5)
+    # for i in range(30):
+    #     if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=0.5):
+    #         found_popup = True; break
+    #     time.sleep(0.5)
+    
+    while True:
+        try:
+            found_popup = True
+        except Exception as e:
+            time.sleep(0.5)
+            print("Error", e)
+            continue
+
+        if not wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=0.5):
+            time.sleep(0.5)
+            continue
+        
+        found_popup = True
+        break
         
     if found_popup:
         log("...เจอ Popup ทำรายการซ้ำ! กำลังเลือก...")
