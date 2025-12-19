@@ -506,7 +506,9 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
 
     log("...จบขั้นตอนข้อมูลผู้รับ -> พยายามกด 'ถัดไป'...")
     for i in range(3):
-        if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=1.0):
+        # [FIXED] เพิ่ม Timeout การรอ Popup ให้นานขึ้น (2.0s) เพื่อให้แน่ใจว่าดักจับทัน
+        # ปัญหา "ทำรายการซ้ำไม่ได้" มักเกิดตรงนี้ เพราะ Loop กด Enter ไวเกินไปจนไปกดปิด Popup โดยไม่รู้ตัว
+        if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=2.0):
              log("   [!] เจอ Popup 'ทำรายการซ้ำ' แล้ว -> หยุดกดถัดไปทันที")
              time.sleep(1.0) 
              break
@@ -666,12 +668,15 @@ def run_smart_scenario(main_window, config):
     found_category = False
     if smart_click_with_scroll(main_window, category_name, max_scrolls=10, scroll_dist=scroll_dist):
         found_category = True
+        time.sleep(1.0) # [FIXED] รอ 1 วินาทีหลังคลิกสำเร็จ เพื่อให้ระบบรับรู้การเลือก
     elif smart_click_with_scroll(main_window, category_id_fallback, max_scrolls=10, scroll_dist=scroll_dist):
         found_category = True
+        time.sleep(1.0) # [FIXED] รอ 1 วินาทีหลังคลิกสำเร็จ
         
     if not found_category:
         log(f"[WARN] หาหมวดหมู่ '{category_name}' ไม่เจอ")
     
+    # [FIXED] เช็คก่อนกดถัดไป ถ้าหาไม่เจอไม่ต้องกด (หรืออาจจะใส่ logic retry ได้)
     smart_next(main_window)
     time.sleep(step_delay)
 
@@ -681,7 +686,9 @@ def run_smart_scenario(main_window, config):
     time.sleep(1.5)
     
     found_product = smart_click_with_scroll(main_window, product_detail, max_scrolls=20, scroll_dist=scroll_dist)
-    if not found_product:
+    if found_product:
+        time.sleep(1.0) # [FIXED] รอ 1 วินาทีหลังคลิกสำเร็จ
+    else:
         log(f"[WARN] หาสินค้า '{product_detail}' ไม่เจอ")
     
     smart_next(main_window)
