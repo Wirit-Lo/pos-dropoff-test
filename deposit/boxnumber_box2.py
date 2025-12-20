@@ -20,6 +20,56 @@ def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
 # ================= 2. Helper Functions =================
+def find_and_fill_smart(window, target_name, target_id_keyword, value):
+    try:
+        # [แก้ไข] ถ้าค่าว่าง ให้ข้ามเลย ไม่ต้องหาและไม่ต้องคลิก (เพื่อความเร็ว)
+        if not value or str(value).strip() == "":
+            return False
+
+        target_elem = None
+        # วนลูปหาแค่รอบเดียวเพื่อประสิทธิภาพ
+        for child in window.descendants():
+            # ข้าม Element ที่มองไม่เห็น
+            if not child.is_visible(): continue
+            
+            # ดึงค่า ID และ Name
+            aid = child.element_info.automation_id
+            name = child.element_info.name
+            
+            # 1. เช็คจากชื่อ (Name) - แม่นยำสุดสำหรับภาษาไทย
+            if target_name and name and target_name in name:
+                target_elem = child
+                break
+                
+            # 2. เช็คจาก ID (Automation ID) - ถ้าชื่อไม่เจอ
+            if target_id_keyword and aid and target_id_keyword in aid:
+                target_elem = child
+                break
+        
+        if target_elem:
+            # ถ้าเจอแล้วว่าเป็น Container หรืออะไรก็ตาม พยายามหา Edit ข้างใน หรือคลิกเลย
+            log(f"   -> เจอช่อง '{target_name}/{target_id_keyword}' -> กรอก: {value}")
+            
+            # พยายามหา Edit box ข้างในก่อน (เผื่อเป็น Container)
+            try:
+                edits = target_elem.descendants(control_type="Edit")
+                if edits:
+                    target_elem = edits[0]
+            except: pass
+
+            target_elem.set_focus()
+            target_elem.click_input()
+            target_elem.type_keys(str(value), with_spaces=True)
+            return True
+        else:
+            log(f"[WARN] หาช่อง '{target_name}' ไม่เจอ")
+            return False
+            
+    except Exception as e:
+        log(f"[!] Error find_and_fill: {e}")
+        return False
+
+
 def click_scroll_arrow_smart(window, direction='right', repeat=5):
     """
     ฟังก์ชันเลื่อนหน้าจอโดยใช้ "แป้นพิมพ์" (Keyboard Arrow Keys) ล้วน 100%
@@ -463,7 +513,6 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
                 window.type_keys("{TAB}"); window.type_keys(subdistrict, with_spaces=True)
 
             # 6. ที่อยู่ 1 (ID: StreetAddress1)
-            # ถ้าค่าว่าง ระบบจะข้ามไปเลย ไม่คลิกให้เสียเวลา
             find_and_fill_smart(window, "ที่อยู่ 1", "StreetAddress1", addr1)
             
             # 7. ที่อยู่ 2 (ID: StreetAddress2)
