@@ -519,9 +519,9 @@ def process_payment(window, payment_method, received_amount):
 # ================= 4. Workflow Main =================
 def run_smart_scenario(main_window, config):
     try:
-        category_name = "อุปกรณ์ไก่ชน" 
+        category_name = "กล่องฟองอากาศ / โฟม" 
         category_id_fallback = "MailPieceShape_SubParent_CockFightingEquipments"
-        product_detail = "อุปกรณ์ไก่ชน ม้วนพรมไก่ ไม่เกิน 1 ผืน"
+        product_detail = "วัสดุกันกระแทก (Air bubble) แบบม้วน 35+35+25 ซม."
         
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
         width = config['DEPOSIT_ENVELOPE'].get('Width', '10')
@@ -627,24 +627,6 @@ def run_smart_scenario(main_window, config):
     smart_next(main_window)
     time.sleep(step_delay)
 
-    # 6. หน้า ปริมาตร (รูป 4)
-    log(f"...[Step 6] กรอกปริมาตร (กว้าง: {width}, ยาว: {length}, สูง: {height})")
-    try:
-        main_window.set_focus()
-        edits = [e for e in main_window.descendants(control_type="Edit") if e.is_visible()]
-        if edits:
-            edits[0].click_input()
-            log("   -> เจอช่องแรก -> เริ่มกรอกและ Tab")
-            main_window.type_keys(f"{width}{{TAB}}{length}{{TAB}}{height}", with_spaces=True)
-        else:
-            log("   [WARN] ไม่เจอ Edit box -> ลองพิมพ์ Blind Type")
-            main_window.type_keys(f"{width}{{TAB}}{length}{{TAB}}{height}", with_spaces=True)
-    except:
-         log("   [!] Error กรอกปริมาตร")
-
-    smart_next(main_window)
-    time.sleep(step_delay)
-
     # [แก้ไขจุดที่ 2] ลบ smart_next(main_window) ที่ซ้ำซ้อนตรงนี้ออก 
     # เพราะมันทำให้กดข้ามไปหน้า เลข ปณ (Step 7) ทันทีโดยไม่ได้ตั้งตัว
     # smart_next(main_window) <--- ลบออกแล้ว
@@ -713,8 +695,8 @@ def run_smart_scenario(main_window, config):
         time.sleep(0.5)
     # =========================================================
 
-    wait_until_id_appears(main_window, "ShippingService_363163", timeout=15)
-    if find_and_click_with_rotate_logic(main_window, "ShippingService_363163"):
+    wait_until_id_appears(main_window, "ShippingService_363235", timeout=15)
+    if find_and_click_with_rotate_logic(main_window, "ShippingService_363235"):
         main_window.type_keys("{ENTER}")
 
     if add_insurance_flag.lower() in ['true', 'yes']:
@@ -746,24 +728,10 @@ def run_smart_scenario(main_window, config):
     process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
     time.sleep(step_delay)
     
-    log("--- หน้า: ทำรายการซ้ำ (บังคับจบรายการ: กด ESC) ---")
-    
-    # วนลูปรอ Popup เด้งขึ้นมาสักครู่ (เผื่อเครื่องช้า)
-    found_repeat_popup = False
-    for _ in range(10): # รอประมาณ 5 วินาที
-        if wait_for_text(main_window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "เพิ่มธุรกรรม"], timeout=0.5):
-            found_repeat_popup = True
-            break
-        time.sleep(0.5)
-        
-    if found_repeat_popup:
-        log("   [Info] เจอ Popup ทำรายการซ้ำ -> กด ESC")
-        main_window.type_keys("{ESC}")
-    else:
-        log("   [Info] ไม่เจอ Popup (Timeout) -> กด ESC เผื่อไว้")
-        main_window.type_keys("{ESC}")
-        
-    time.sleep(1.0) # รอหน้าต่างปิด
+    is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
+    if is_repeat_mode:
+        log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที")
+        return
     
     process_payment(main_window, pay_method, pay_amount)
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
