@@ -552,7 +552,6 @@ def process_payment(window, payment_method, received_amount):
     window.type_keys("{ENTER}")
     time.sleep(1)
 
-
 # ================= 4. Workflow Main =================
 def run_smart_scenario(main_window, config):
     try:
