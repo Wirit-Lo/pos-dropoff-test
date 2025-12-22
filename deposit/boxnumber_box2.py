@@ -498,7 +498,7 @@ def run_smart_scenario(main_window, config):
         
         step_delay = float(config['SETTINGS'].get('StepDelay', 0.8))
         scroll_dist = int(config['SETTINGS'].get('ScrollDistance', -5))
-        wait_timeout = int(config['SETTINGS'].get('ElementWaitTimeout', 15))
+        wait_timeout = int(config['SETTINGS'].get('ElementWaitTimeout', 30))
 
         manual_data = {
             'Address1': config['MANUAL_ADDRESS_FALLBACK'].get('Address1', '') if 'MANUAL_ADDRESS_FALLBACK' in config else '',
