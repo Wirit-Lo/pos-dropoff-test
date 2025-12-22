@@ -667,16 +667,24 @@ def run_smart_scenario(main_window, config):
     
     time.sleep(step_delay)
     
-    # 1. เรียกฟังก์ชัน และรับค่ากลับมา (ตัวแปรนี้จะได้ค่า True/False จากจุดที่ 1)
-    is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
+    log("--- หน้า: ทำรายการซ้ำ (บังคับจบรายการ: กด ESC) ---")
     
-    # 2. เช็คเลยว่า ถ้าเป็นจริง -> จบการทำงาน
-    if is_repeat_mode:
-        log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที")
-        return # ออกจากฟังก์ชันทันที
-    
-    # 3. ถ้าไม่เข้าเงื่อนไขบน ก็จะลงมาทำชำระเงินต่อ
-    process_payment(main_window, pay_method, pay_amount)
+    # วนลูปรอ Popup เด้งขึ้นมาสักครู่ (เผื่อเครื่องช้า)
+    found_repeat_popup = False
+    for _ in range(10): # รอประมาณ 5 วินาที
+        if wait_for_text(main_window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "เพิ่มธุรกรรม"], timeout=0.5):
+            found_repeat_popup = True
+            break
+        time.sleep(0.5)
+        
+    if found_repeat_popup:
+        log("   [Info] เจอ Popup ทำรายการซ้ำ -> กด ESC")
+        main_window.type_keys("{ESC}")
+    else:
+        log("   [Info] ไม่เจอ Popup (Timeout) -> กด ESC เผื่อไว้")
+        main_window.type_keys("{ESC}")
+        
+    time.sleep(1.0) # รอหน้าต่างปิด
 
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
