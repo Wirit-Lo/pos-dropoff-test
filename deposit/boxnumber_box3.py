@@ -666,8 +666,6 @@ def run_smart_scenario(main_window, config):
     
     time.sleep(step_delay)
     
-    log("--- หน้า: ทำรายการซ้ำ (บังคับจบรายการ: กด ESC) ---")
-    
     # วนลูปรอ Popup เด้งขึ้นมาสักครู่ (เผื่อเครื่องช้า)
     found_repeat_popup = False
     for _ in range(10): # รอประมาณ 5 วินาที
@@ -684,6 +682,8 @@ def run_smart_scenario(main_window, config):
         main_window.type_keys("{ESC}")
         
     time.sleep(1.0) # รอหน้าต่างปิด
+    
+    process_payment(main_window, pay_method, pay_amount)
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
 # ================= 5. Start App =================
