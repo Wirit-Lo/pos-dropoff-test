@@ -498,7 +498,7 @@ def run_smart_scenario(main_window, config):
         
         step_delay = float(config['SETTINGS'].get('StepDelay', 0.8))
         scroll_dist = int(config['SETTINGS'].get('ScrollDistance', -5))
-        wait_timeout = int(config['SETTINGS'].get('ElementWaitTimeout', 30))
+        wait_timeout = int(config['SETTINGS'].get('ElementWaitTimeout', 15))
 
         manual_data = {
             'Address1': config['MANUAL_ADDRESS_FALLBACK'].get('Address1', '') if 'MANUAL_ADDRESS_FALLBACK' in config else '',
@@ -550,10 +550,10 @@ def run_smart_scenario(main_window, config):
 
     log("...รอหน้าบริการหลัก...")
     
-    # [จุดที่แก้ไข] เพิ่ม if not ครอบไว้
-    # เหตุผล: ถ้ารอจนหมดเวลา (Timeout) แล้วยังหาไม่เจอ ให้ Return ออกทันที 
-    # ระบบจะได้ไม่ "วิ่งเลย" ไปทำคำสั่งคลิกทั้งที่ยังไม่เจอหน้าจอ
-    if not wait_until_id_appears(main_window, "ShippingService_2598", timeout=wait_timeout):
+    # [จุดที่แก้ไข] กำหนด timeout เป็น 60 วินาที เฉพาะจุดนี้เพื่อให้รอได้นานขึ้น
+    # และยังคง if not ไว้ เพื่อป้องกันการ "วิ่งเลย" ถ้าครบ 60 วิแล้วยังไม่มา
+    if not wait_until_id_appears(main_window, "ShippingService_2598", timeout=60):
+        log("Error: รอนานเกิน 60 วินาทีแล้ว ยังไม่เข้าหน้าบริการหลัก")
         return 
 
     if not click_element_by_id(main_window, "ShippingService_2598"):
