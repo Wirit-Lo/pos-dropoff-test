@@ -546,10 +546,16 @@ def run_smart_scenario(main_window, config):
             if "ทับซ้อน" in child.window_text() or "พื้นที่" in child.window_text():
                 smart_click(main_window, "ดำเนินการ"); found = True; break
         if found: break
-        time.sleep(0.15)
+        time.sleep(0.5)
 
     log("...รอหน้าบริการหลัก...")
-    wait_until_id_appears(main_window, "ShippingService_2598", timeout=wait_timeout)
+    
+    # [จุดที่แก้ไข] เพิ่ม if not ครอบไว้
+    # เหตุผล: ถ้ารอจนหมดเวลา (Timeout) แล้วยังหาไม่เจอ ให้ Return ออกทันที 
+    # ระบบจะได้ไม่ "วิ่งเลย" ไปทำคำสั่งคลิกทั้งที่ยังไม่เจอหน้าจอ
+    if not wait_until_id_appears(main_window, "ShippingService_2598", timeout=wait_timeout):
+        return 
+
     if not click_element_by_id(main_window, "ShippingService_2598"):
         if not click_element_by_fuzzy_id(main_window, "EMSS"): return
     time.sleep(step_delay) 
