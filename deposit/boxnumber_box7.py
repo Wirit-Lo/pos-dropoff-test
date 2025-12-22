@@ -25,8 +25,9 @@ def click_scroll_arrow_smart(window, direction='right', repeat=5):
     ฟังก์ชันเลื่อนหน้าจอโดยใช้ "แป้นพิมพ์" (Keyboard Arrow Keys) ล้วน 100%
     """
     try:
-        # 1. พยายามโฟกัสไปที่กล่องรายการสินค้าก่อน
-        target_group = window.descendants(auto_id="ShippingServiceList")
+        # [แก้ไข] วิธีการค้นหา descendants แบบ Manual Loop เพื่อป้องกัน Error 'unexpected keyword argument'
+        # ของเดิม: target_group = window.descendants(auto_id="ShippingServiceList") <- สาเหตุที่พัง
+        target_group = [c for c in window.descendants() if c.element_info.automation_id == "ShippingServiceList"]
         
         if target_group:
             target_group[0].set_focus()
@@ -552,6 +553,7 @@ def process_payment(window, payment_method, received_amount):
     window.type_keys("{ENTER}")
     time.sleep(1)
 
+
 # ================= 4. Workflow Main =================
 def run_smart_scenario(main_window, config):
     try:
@@ -628,10 +630,16 @@ def run_smart_scenario(main_window, config):
         time.sleep(0.5)
 
     log("...รอหน้าบริการหลัก...")
-    wait_until_id_appears(main_window, "ShippingService_363204", timeout=wait_timeout)
-     # คลิก 1 ครั้ง
-    if not find_and_click_with_rotate_logic(main_window, "ShippingService_363204"):
-        log("[Error] หาปุ่มบริการไม่เจอ (ShippingService_363204)")
+    
+    # [จุดที่แก้ไขตามคำขอ] เพิ่มเวลารอเป็น 60 วินาที เฉพาะหน้านี้ และใช้ ID ของปุ่มตามโค้ดจริง
+    target_service_id = "ShippingService_363204" # ID ของปุ่มที่คุณต้องการคลิก
+    if not wait_until_id_appears(main_window, target_service_id, timeout=60):
+        log("Error: รอนานเกิน 60 วินาทีแล้ว ยังไม่เข้าหน้าบริการหลัก")
+        return 
+
+    # คลิก 1 ครั้ง โดยใช้ Logic หมุนหา (ซึ่งตอนนี้ Scroll ซ่อมแล้ว น่าจะหาเจอ)
+    if not find_and_click_with_rotate_logic(main_window, target_service_id):
+        log(f"[Error] หาปุ่มบริการไม่เจอ ({target_service_id})")
         return
 
     if add_insurance_flag.lower() in ['true', 'yes']:
