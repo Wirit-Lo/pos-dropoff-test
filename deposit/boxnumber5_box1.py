@@ -601,7 +601,7 @@ def run_smart_scenario(main_window, config):
     process_sender_info_popup(main_window, phone, sender_postal) 
     
     time.sleep(step_delay)
-    if not smart_click_with_scroll(main_window, "กล่องธรรมดา หมายเลข 3", scroll_dist=scroll_dist): return
+    if not smart_click_with_scroll(main_window, "กล่องธรรมดา หมายเลข 5", scroll_dist=scroll_dist): return
     time.sleep(step_delay)
     if special_options_str.strip():
         for opt in special_options_str.split(','):
@@ -632,7 +632,7 @@ def run_smart_scenario(main_window, config):
     log("...รอหน้าบริการหลัก...")
     
     # [แก้ไข] เพิ่ม timeout เป็น 60 และใส่ if not เพื่อเช็คว่าถ้าไม่เจอให้หยุดทันที
-    target_service_id = "ShippingService_359339" 
+    target_service_id = "ShippingService_2572" 
     if not wait_until_id_appears(main_window, target_service_id, timeout=60):
         log("Error: รอนานเกิน 60 วินาทีแล้ว ยังไม่เข้าหน้าบริการหลัก")
         return 
