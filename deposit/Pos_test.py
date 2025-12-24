@@ -618,6 +618,10 @@ def run_smart_scenario(main_window, config):
     if not is_registered:
         log("...Config ไม่ได้เลือกลงทะเบียน -> เข้าสู่กระบวนการจัดการ Popup จำนวน...")
 
+        # [แก้ไข] เพิ่มเวลาหน่วงเริ่มต้น 2.0 วินาที เพื่อรอให้ Popup เด้งขึ้นมาให้เต็มที่ก่อนเริ่มค้นหา
+        # ช่วยแก้ปัญหา "ทำงานไวไป" จนหาไม่เจอหรือข้ามขั้นตอน
+        time.sleep(2.0)
+
         # ดึงค่าจาก Config ตามที่ต้องการ
         qty = config['PRODUCT_QUANTITY'].get('Quantity', '1') if 'PRODUCT_QUANTITY' in config else '1'
         log(f"...รอ Popup 'จำนวน' (จะใส่เลขจาก Config: {qty})...")
