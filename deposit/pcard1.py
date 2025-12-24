@@ -102,16 +102,26 @@ def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
 
 
 def force_scroll_down(window, scroll_dist=-5):
+    """
+    [Updated V10 - Turbo Speed] 
+    เน้นความไวสูงสุด ลด Delay แทบไม่เหลือ
+    """
     try:
-        window.set_focus()
+        # ไม่ set_focus และไม่คลิกซ้ำเพื่อความไว (อาศัยว่าคลิกไปแล้วตอนเริ่ม)
         rect = window.rectangle()
-        center_x = rect.left + int(rect.width() * 0.5)
-        center_y = rect.top + int(rect.height() * 0.5)
-        mouse.click(coords=(center_x, center_y))
-        time.sleep(0.2)
-        mouse.scroll(coords=(center_x, center_y), wheel_dist=scroll_dist)
-        time.sleep(0.8)
-    except: pass
+        scrollbar_x = rect.left + int(rect.width() * 0.72)
+        scrollbar_y = rect.top + int(rect.height() * 0.5)
+        
+        # สั่ง Scroll ทันที
+        mouse.scroll(coords=(scrollbar_x, scrollbar_y), wheel_dist=scroll_dist)
+        
+        # พักสั้นมากๆ ให้แค่พอ UI ขยับทัน
+        time.sleep(0.05) 
+        
+    except Exception as e:
+        log(f"[!] Scroll Error: {e}")
+        try: window.type_keys("{PGDN}")
+        except: pass
 
 def smart_click(window, criteria_list, timeout=5):
     if isinstance(criteria_list, str): criteria_list = [criteria_list]
@@ -128,26 +138,62 @@ def smart_click(window, criteria_list, timeout=5):
         time.sleep(0.3)
     return False
 
-def smart_click_with_scroll(window, criteria, max_scrolls=5, scroll_dist=-5):
-    log(f"...ค้นหา '{criteria}' (Scroll)...")
-    for i in range(max_scrolls + 1):
-        found = None
+def smart_click_with_scroll(window, criteria, max_scrolls=20, scroll_dist=-10):
+    """
+    [Updated V10 - Turbo Aggressive] 
+    - เพิ่ม max_scrolls เป็น 20 รอบ
+    - ถ้าเจอปุ่มอยู่ต่ำ สั่งเลื่อน -60 (แรงมาก) เพื่อดีดขึ้นมาทันที
+    """
+    log(f"...ค้นหา '{criteria}' (โหมด V10: Turbo)...")
+    
+    loop_limit = max_scrolls + 10 # เผื่อรอบเยอะๆ
+    
+    for i in range(loop_limit):
+        found_element = None
+        
+        # 1. กวาดหา Element
         try:
             for child in window.descendants():
                 if child.is_visible() and criteria in child.window_text():
-                    found = child; break
+                    found_element = child
+                    break
         except: pass
-        if found:
+
+        # 2. ถ้าเจอ -> เช็คตำแหน่ง
+        if found_element:
             try:
-                elem_rect = found.rectangle()
+                elem_rect = found_element.rectangle()
                 win_rect = window.rectangle()
-                if elem_rect.bottom >= win_rect.bottom - 70:
-                    force_scroll_down(window, -3); time.sleep(0.5); continue 
-                found.click_input()
-                log(f"   [/] เจอและกด '{criteria}' สำเร็จ")
+                
+                # Safe Zone: กันชนขอบล่าง 80px
+                safe_bottom_limit = win_rect.bottom - 80
+                
+                # ถ้าปุ่มอยู่ต่ำกว่า Safe Zone
+                if elem_rect.bottom >= safe_bottom_limit:
+                    log(f"   [Turbo] เจอปุ่มอยู่ลึก (Bottom={elem_rect.bottom}) -> กระชากขึ้นแรงๆ")
+                    
+                    # [Logic ใหม่ V10] เลื่อน -60 คือเยอะมาก (ประมาณ 3-4 หน้าจอ)
+                    force_scroll_down(window, -60) 
+                    
+                    time.sleep(0.1) # รอ UI render แป๊บเดียว
+                    continue 
+                
+                # ถ้าตำแหน่ง OK -> กดเลย
+                found_element.click_input()
+                log(f"   [/] เจอและกดปุ่ม '{criteria}' สำเร็จ")
                 return True
-            except: pass
-        if i < max_scrolls: force_scroll_down(window, scroll_dist)
+                
+            except Exception as e:
+                log(f"   [!] Error: {e}")
+
+        # 3. ถ้ายังไม่เจอเลย -> เลื่อนหน้าจอลงปกติ (แรงขึ้นกว่าเดิม)
+        if i < loop_limit:
+            if not found_element:
+                # log(f"   [Scroll {i+1}] ไม่เจอ -> เลื่อนหา")
+                # ใช้ค่า scroll_dist ที่รับมา (แนะนำให้ส่งมา -10 หรือ -15)
+                force_scroll_down(window, scroll_dist)
+            
+    log(f"[X] หมดระยะเลื่อนหาแล้ว ไม่เจอปุ่ม '{criteria}'")
     return False
 
 def click_element_by_id(window, exact_id, timeout=5, index=0):
