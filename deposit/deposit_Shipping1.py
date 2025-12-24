@@ -484,13 +484,13 @@ def process_repeat_transaction(window, should_repeat):
 def process_payment(window, payment_method, received_amount):
     log("--- ขั้นตอนการชำระเงิน ---")
     # 1. กดรับเงิน (หน้าหลัก)
-    log("...ค้นหาปุ่ม 'เสร็จสิ้น'...")
+    log("...ค้นหาปุ่ม 'รับเงิน'...")
     # รอให้หน้าจอพร้อมสักนิดหลังปิด Popup Repeat
     time.sleep(1.5)
-    if smart_click(window, "เสร็จสิ้น"):
+    if smart_click(window, "รับเงิน"):
         time.sleep(1.5) # รอหน้าชำระเงิน
     else:
-        log("[WARN] หาปุ่มเสร็จสิ้นไม่เจอ")
+        log("[WARN] หาปุ่มรับเงินไม่เจอ")
         return
 
     # 2. เลือกวิธีชำระเงิน
