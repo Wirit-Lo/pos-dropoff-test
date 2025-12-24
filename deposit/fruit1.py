@@ -595,11 +595,13 @@ def run_smart_scenario(main_window, config):
         log(f"[WARN] หาหมวดหมู่ '{category_name}' ไม่เจอ -> จะพยายามกดถัดไป (เผื่อเลือก default)")
         smart_next(main_window)
     else:
-        log("[OK] เลือกหมวดหมู่สำเร็จ -> (ข้ามการกดถัดไป เพื่อป้องกันการกดซ้ำที่หน้าถัดไป)")
-        # [แก้ไขจุดที่ 1] ไม่กด smart_next() ตรงนี้ เพราะการคลิกเลือกมักจะพาไปหน้าถัดไปอยู่แล้ว
-        # หรือถ้าไม่ไป ก็ปล่อยให้ Timeout หน้าถัดไปจัดการ หรือถ้าจำเป็นให้ uncomment บรรทัดล่างนี้
-        # smart_next(main_window) 
-        pass
+        log("[OK] เลือกหมวดหมู่สำเร็จ -> รอ 1.5 วิ แล้วกด 'ถัดไป'")
+        
+        # เพิ่มเวลาหน่วงเพื่อให้หน้าจอพร้อม
+        time.sleep(1.5) 
+        
+        # สั่งกดปุ่มถัดไป (หรือ Enter) ตามที่ต้องการ
+        smart_next(main_window)
 
     time.sleep(step_delay)
 
