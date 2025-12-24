@@ -618,6 +618,11 @@ def run_smart_scenario(main_window, config):
     if not is_registered:
         log("...Config ไม่ได้เลือกลงทะเบียน -> เข้าสู่กระบวนการจัดการ Popup จำนวน...")
 
+        # [เพิ่มเติม] กด Enter (ถัดไป) เพื่อเรียก Popup จำนวนออกมา
+        # (สมมติว่าขั้นตอนก่อนหน้ามีการเลือกรายการสินค้าไว้แล้ว)
+        log("...กด Enter (ถัดไป) เพื่อเรียก Popup จำนวน...")
+        main_window.type_keys("{ENTER}")
+
         # ดึงค่าจาก Config ตามที่ต้องการ
         qty = config['PRODUCT_QUANTITY'].get('Quantity', '1') if 'PRODUCT_QUANTITY' in config else '1'
         log(f"...เริ่มค้นหา Popup 'จำนวน' (จะใส่เลขจาก Config: {qty})...")
@@ -736,7 +741,6 @@ def run_smart_scenario(main_window, config):
         # --- จบส่วน Popup จำนวน ---
         
         log("...ข้ามขั้นตอนกรอกรายละเอียด (เนื่องจากไม่ได้ลงทะเบียน) -> ไปจัดการหน้าทำรายการซ้ำทันที...")
-
 
     else:
         # กรณีลงทะเบียน (Register = True) -> ทำตามขั้นตอนปกติ
