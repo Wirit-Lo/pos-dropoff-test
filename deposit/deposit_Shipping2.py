@@ -612,42 +612,52 @@ def run_smart_scenario(main_window, config):
                 else: main_window.type_keys("{ENTER}")
     
     time.sleep(1)
-    smart_next(main_window) 
+    smart_next(main_window)
     time.sleep(step_delay)
+
     process_special_services(main_window, special_services)
     time.sleep(step_delay)
+
     process_sender_info_page(main_window)
     time.sleep(step_delay)
-    process_receiver_address_selection(main_window, addr_keyword, manual_data)
+    
+    is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
     time.sleep(step_delay)
-    process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone)
+    
+    process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
     time.sleep(step_delay)
     
-    # ----------------------------------------------------
-    # 1. เรียกฟังก์ชัน และรับค่ากลับมาด้วยว่า "ตกลงเมื่อกี้ตั้งใจจะ Repeat ใช่ไหม"
-    is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
+    log("--- หน้า: ทำรายการซ้ำ (บังคับจบรายการ: กด ESC) ---")
     
-    # 2. เช็คเลยว่า ถ้าฟังก์ชันบอกว่าใช่ (is_repeat_mode = True) -> ให้จบการทำงานตรงนี้ทันที
-    if is_repeat_mode:
-        log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที (Safe Exit)")
-        log("\n[SUCCESS] จบการทำงาน (Repeat Mode)")
-        return # ออกจากฟังก์ชันหลักทันที
+    # วนลูปรอ Popup เด้งขึ้นมาสักครู่ (เผื่อเครื่องช้า)
+    found_repeat_popup = False
+    for _ in range(10): # รอประมาณ 5 วินาที
+        if wait_for_text(main_window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "เพิ่มธุรกรรม"], timeout=0.5):
+            found_repeat_popup = True
+            break
+        time.sleep(0.5)
+        
+    if found_repeat_popup:
+        log("   [Info] เจอ Popup ทำรายการซ้ำ -> กด ESC")
+        main_window.type_keys("{ESC}")
+    else:
+        log("   [Info] ไม่เจอ Popup (Timeout) -> กด ESC เผื่อไว้")
+        main_window.type_keys("{ESC}")
+        
+    time.sleep(1.0) # รอหน้าต่างปิด
     
-    # ถ้าไม่เข้าเงื่อนไขด้านบน (คือ is_repeat_mode = False) ถึงจะลงมาทำบรรทัดนี้
-    # 2. ชำระเงิน (จะทำงานก็ต่อเมื่อเงื่อนไขข้างบนไม่เป็นจริง)
     process_payment(main_window, pay_method, pay_amount)
-
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
-# ================= 5. Start App =================
 if __name__ == "__main__":
-    conf = load_config()
+    target_config = 'config.ini' 
+    conf = load_config(target_config)
     if conf:
-        log("Connecting...")
+        log(f"Connecting... (Using Config: {target_config})")
         try:
             wait = int(conf['SETTINGS'].get('ConnectTimeout', 10))
             app_title = conf['APP']['WindowTitle']
-            log(f"Connecting to Title: {app_title} (Wait: {wait}s)")
+            log(f"Connecting to Title: {app_title}")
             app = Application(backend="uia").connect(title_re=app_title, timeout=wait)
             main_window = app.top_window()
             if main_window.exists():
