@@ -428,19 +428,26 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
             log("...เจอรายการที่อยู่ -> เลือกรายการแรกสุด...")
             time.sleep(1.0)
             try:
+                # ค้นหารายการอีกครั้ง
                 all_list_items = [i for i in window.descendants(control_type="ListItem") if i.is_visible()]
-                valid_items = [i for i in all_list_items if i.rectangle().top > 200 and i.rectangle().height() > 50]
+                # [แก้ไข] เอาเงื่อนไข height > 50 ออก เพื่อกันพลาด
+                valid_items = [i for i in all_list_items if i.rectangle().top > 200]
+                
                 if valid_items:
                     valid_items.sort(key=lambda x: x.rectangle().top)
                     target_item = valid_items[0]
                     log(f"[/] Click รายการที่: (Y={target_item.rectangle().top})")
-                    try: target_item.set_focus()
+                    
+                    # [แก้ไขจุดสำคัญ] เปลี่ยนจาก focus ที่ item เป็น focus ที่หน้าต่างหลักแทน
+                    try: window.set_focus()
                     except: pass
+                    
                     target_item.click_input()
                     log("...เลือกรายการแล้ว รอโหลดข้อมูล (2.0s)...")
                     time.sleep(2.0) 
-                else: log("[!] เจอ List แต่กรองความสูงไม่ผ่าน")
-            except: pass
+                else: log("[!] เจอ List แต่กรองไม่ผ่าน")
+            except Exception as e: pass
+            
             # เลือก List แล้ว ไม่ต้องกด Next ซ้ำ
         else:
             log("[!] ไม่เจอทั้ง Popup และ รายการ -> สันนิษฐานว่าเข้าหน้ากรอกเอง")
