@@ -618,101 +618,113 @@ def run_smart_scenario(main_window, config):
     if not is_registered:
         log("...Config ไม่ได้เลือกลงทะเบียน -> เข้าสู่กระบวนการจัดการ Popup จำนวน...")
 
-        # [เพิ่มเติม] สั่งกดถัดไป (Enter) เพื่อเรียก Popup จำนวนออกมา
-        # ตามคำแนะนำ: ต้องมีการกระตุ้นก่อน Popup ถึงจะเด้ง
-        smart_next(main_window)
-        time.sleep(1.0) # รอจังหวะ Popup เด้งขึ้นมา
-
-        # ดึงค่าจาก Config
+        # ดึงค่าจาก Config ตามที่ต้องการ
         qty = config['PRODUCT_QUANTITY'].get('Quantity', '1') if 'PRODUCT_QUANTITY' in config else '1'
-        log(f"...รอ Popup 'จำนวน' (Config: {qty})...")
+        log(f"...รอ Popup 'จำนวน' (จะใส่เลขจาก Config: {qty})...")
         
-        # [แก้ไข] เปลี่ยนจาก sleep เฉยๆ เป็น Loop รอจนกว่า Popup จะโผล่ (Dynamic Wait)
+        # [แก้ไข] เปลี่ยนจาก time.sleep(1.5) เป็น Loop วนหา Popup (รอสูงสุด 10 วินาที)
         popup_window = None
-        max_attempts = 15  # พยายามหา 15 รอบ
+        max_retries = 20 # 20 รอบ x 0.5 วิ = 10 วินาที
         
-        for attempt in range(max_attempts):
-            # 1. ลองหาจาก Child Window ของ Main
+        for i in range(max_retries):
+            # วิธีที่ 1: หาจาก Child Window ของ Main
             try:
                 children = main_window.children(control_type="Window")
                 if children:
                     popup_window = children[0]
-                    log(f"   -> [Attempt {attempt+1}] เจอ Child Window: {popup_window.window_text()}")
-                    break
+                    log(f"-> เจอ Child Window: {popup_window.window_text()}")
+                    break # เจอแล้วออกจากลูป
             except: pass
 
-            # 2. ลองหาจาก Top Window (หน้าต่างบนสุด)
+            # วิธีที่ 2: ถ้าไม่เจอ ให้ใช้ Top Window (หน้าต่างที่อยู่บนสุดของ Windows)
             if not popup_window:
                 try:
-                    # เชื่อมต่อกับ Window ที่ Active อยู่
+                    # เชื่อมต่อกับ Window ที่ Active อยู่ (น่าจะเป็น Popup)
                     app_top = Application(backend="uia").connect(active_only=True).top_window()
-                    txt = app_top.window_text()
-                    
-                    # กรองชื่อหน้าต่าง (กันไม่ให้ไปจับตัว Main Window เอง)
-                    current_main_title = main_window.window_text()
-                    
-                    # เงื่อนไข: ต้องไม่ใช่หน้าหลัก และ (มีคำว่าจำนวน หรือ เป็น Window ใหม่)
-                    if txt != current_main_title and ("จำนวน" in txt or "Escher" in txt or app_top.element_info.control_type == "Window"):
-                        popup_window = app_top
-                        log(f"   -> [Attempt {attempt+1}] เจอ Top Window: {txt}")
-                        break
-                except: pass
+                    # ตรวจสอบชื่อหน้าต่างว่าน่าจะเป็น Popup ไหม (บางทีไม่มีชื่อ แต่เป็น Dialog)
+                    if "จำนวน" in app_top.window_text() or "Escher" in app_top.window_text() or app_top.element_info.control_type == "Window":
+                        # เช็คเพิ่มเติมว่าต้องไม่ใช่ Main Window เอง
+                        if app_top != main_window: 
+                            popup_window = app_top
+                            log(f"-> เจอ Top Window: {app_top.window_text()}")
+                            break # เจอแล้วออกจากลูป
+                except Exception as e:
+                    pass
             
-            time.sleep(0.5) # รอ 0.5 วินาที แล้วหาใหม่ (รวมรอสูงสุดประมาณ 7.5 วินาที)
+            time.sleep(0.5) # รอ 0.5 วินาที แล้วหาใหม่
 
-        # เพิ่มความชัวร์: ถ้าเจอแล้ว ให้รออีกนิดเพื่อให้ Animation ของ Popup นิ่งสนิท (สำคัญมาก)
+        # เพิ่มความชัวร์: ถ้าเจอแล้ว ให้รออีกนิดเพื่อให้ Animation ของ Popup นิ่งสนิท
         if popup_window:
-            log("...เจอ Popup แล้ว -> รอ Animation นิ่ง 1.0 วินาที...")
             time.sleep(1.0)
         else:
-            log("[WARN] หมดเวลาการรอ Popup (หาไม่เจอ) -> จะพยายามพิมพ์ใส่ Active Window ล่าสุด")
+            log("[WARN] หมดเวลาการรอ Popup (หาไม่เจอ) -> ระบบจะลองพิมพ์ใส่ Active Window")
 
         # --- เริ่มเจาะหาช่อง Edit ---
-        # (ใช้ตัวแปร popup_window ที่หาได้จากข้างบน)
-        target_window = popup_window if popup_window else main_window
-        
-        if target_window:
+        # ใช้ popup_window ที่หาได้จาก Loop ข้างบน
+        if popup_window:
             try:
-                target_window.set_focus()
+                popup_window.set_focus()
             except: pass
             
-            log("...กำลังสแกนหาช่อง Edit...")
+            log("...กำลังสแกนหาช่อง Edit ใน Popup...")
+            
             target_edit = None
             
             # ดึง Edit ทั้งหมดออกมาดู
             try:
-                edits = target_window.descendants(control_type="Edit")
+                edits = popup_window.descendants(control_type="Edit")
                 visible_edits = [e for e in edits if e.is_visible()]
                 
+                log(f"-> พบ Edit ทั้งหมด: {len(edits)} ช่อง (Visible: {len(visible_edits)})")
+                
                 if visible_edits:
-                    # กรองช่องที่เล็กเกินไป
+                    # กรองช่องที่เล็กเกินไป (พวกปุ่มซ่อน)
                     valid_edits = [e for e in visible_edits if e.rectangle().width() > 30]
+                    
                     if valid_edits:
                         target_edit = valid_edits[0]
+                        log(f"-> เป้าหมาย: {target_edit} (ID: {target_edit.element_info.automation_id})")
+                    else:
+                        log("[!] เจอ Edit แต่ขนาดเล็กผิดปกติ")
+                else:
+                    log("[!] ไม่เจอช่อง Edit ที่มองเห็นได้เลย")
             except Exception as e:
                 log(f"Error สแกนหา Edit: {e}")
 
             # ถ้าเจอช่องแล้ว ให้กระทำการ
             if target_edit:
                 try:
+                    # 1. Focus
                     target_edit.click_input()
                     time.sleep(0.2)
+                    
+                    # 2. Clear
                     target_edit.type_keys("^a", pause=0.1)
                     target_edit.type_keys("{DELETE}", pause=0.1)
+                    
+                    # 3. Type
                     target_edit.type_keys(str(qty), with_spaces=True)
                     log(f"-> พิมพ์เลข {qty} เรียบร้อย")
                     time.sleep(0.5)
-                    target_window.type_keys("{ENTER}")
+                    
+                    # 4. Enter
+                    popup_window.type_keys("{ENTER}")
                     log("-> กด Enter (ถัดไป) เรียบร้อย")
-                except: pass
+                    
+                except Exception as e:
+                    log(f"Error ขณะพิมพ์: {e}")
             else:
-                # Fallback: พิมพ์ดื้อๆ
-                log("[Warning] หาช่องไม่เจอ -> Blind Type ใส่ Window")
-                target_window.type_keys(str(qty), with_spaces=True)
-                target_window.type_keys("{ENTER}")
+                # ถ้าหา Edit ไม่เจอจริงๆ ลองวิธีสุดท้าย: พิมพ์ดื้อๆ ใส่ Popup Window
+                log("[Warning] หาช่องไม่เจอ -> ลองพิมพ์ใส่ Window โดยตรง (Blind Type)")
+                popup_window.type_keys(str(qty), with_spaces=True)
+                popup_window.type_keys("{ENTER}")
+
+        else:
+            log("[Error] หา Popup Window ไม่เจอเลย (อาจจะเด้งช้าหรือจับผิดตัว)")
         
         # --- จบส่วน Popup จำนวน ---
-        log("...จบขั้นตอน Popup -> ไปจัดการหน้าทำรายการซ้ำทันที...")
+        
+        log("...ข้ามขั้นตอนกรอกรายละเอียด (เนื่องจากไม่ได้ลงทะเบียน) -> ไปจัดการหน้าทำรายการซ้ำทันที...")
 
     else:
         # กรณีลงทะเบียน (Register = True) -> ทำตามขั้นตอนปกติ
