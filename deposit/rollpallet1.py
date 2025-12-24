@@ -519,7 +519,7 @@ def process_payment(window, payment_method, received_amount):
 # ================= 4. Workflow Main =================
 def run_smart_scenario(main_window, config):
     try:
-        category_name = "กล่องบรรจุต้นไม้" 
+        category_name = "Roll Pallet สินค้าเกษตรแปรรูป" 
         category_id_fallback = "MailPieceShape_SubParent_CockFightingEquipments"
         
         
@@ -573,9 +573,9 @@ def run_smart_scenario(main_window, config):
     process_sender_info_popup(main_window, phone, sender_postal)
     time.sleep(step_delay)
 
-    # 2. กล่องผลไม้ / ต้นไม้
-    if not smart_click_with_scroll(main_window, "กล่องผลไม้ / ต้นไม้", scroll_dist=scroll_dist): 
-        log("[Error] ไม่เจอเมนู กล่องผลไม้ / ต้นไม้")
+    # 2. โรลพาเลท/ULD
+    if not smart_click_with_scroll(main_window, "โรลพาเลท/ULD", scroll_dist=scroll_dist): 
+        log("[Error] ไม่เจอเมนู โรลพาเลท/ULD")
         return
     time.sleep(step_delay)
 
@@ -679,8 +679,8 @@ def run_smart_scenario(main_window, config):
         time.sleep(0.5)
     # =========================================================
 
-    wait_until_id_appears(main_window, "ShippingService_363206", timeout=15)
-    if find_and_click_with_rotate_logic(main_window, "ShippingService_363206"):
+    wait_until_id_appears(main_window, "ShippingService_359336", timeout=15)
+    if find_and_click_with_rotate_logic(main_window, "ShippingService_359336"):
         main_window.type_keys("{ENTER}")
 
     if add_insurance_flag.lower() in ['true', 'yes']:
