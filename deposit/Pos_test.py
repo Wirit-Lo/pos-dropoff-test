@@ -622,7 +622,7 @@ def run_smart_scenario(main_window, config):
         qty = config['PRODUCT_QUANTITY'].get('Quantity', '1') if 'PRODUCT_QUANTITY' in config else '1'
         log(f"...รอ Popup 'จำนวน' (จะใส่เลขจาก Config: {qty})...")
         
-        time.sleep(5.0) # รอ Animation Popup เด้ง
+        time.sleep(15.0) # รอ Animation Popup เด้ง
 
         # --- [DEBUG MODE] ค้นหา Popup ---
         popup_window = None
