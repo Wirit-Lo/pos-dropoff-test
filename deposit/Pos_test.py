@@ -618,16 +618,16 @@ def run_smart_scenario(main_window, config):
     if not is_registered:
         log("...Config ไม่ได้เลือกลงทะเบียน -> เข้าสู่กระบวนการจัดการ Popup จำนวน...")
 
-        # [แก้ไข] เพิ่มเวลาหน่วงเริ่มต้น 3.0 วินาที เพื่อให้มั่นใจว่า Popup เริ่มเด้งออกมาแล้ว
-        time.sleep(3.0)
+        # [ปรับเวลา] เพิ่มเวลารอเริ่มต้นเป็น 5.0 วินาที ให้ Popup เด้งขึ้นมาแน่นอนก่อน
+        time.sleep(5.0)
 
         # ดึงค่าจาก Config
         qty = config['PRODUCT_QUANTITY'].get('Quantity', '1') if 'PRODUCT_QUANTITY' in config else '1'
         log(f"...เริ่มค้นหา Popup 'จำนวน' (Config: {qty})...")
         
         popup_window = None
-        # [แก้ไข] เพิ่มรอบการรอเป็น 30 รอบ (ประมาณ 15 วินาที) เพื่อความชัวร์
-        max_retries = 30 
+        # [ปรับเวลา] เพิ่มรอบการรอเป็น 60 รอบ (รอบละ 0.5 วิ = 30 วินาที) กันพลาด
+        max_retries = 60 
         
         for i in range(max_retries):
             # พยายามหา Popup Window
@@ -639,7 +639,7 @@ def run_smart_scenario(main_window, config):
                 if children: temp_window = children[0]
             except: pass
 
-            # 2. ถ้าไม่เจอ หาจาก Top Window (หน้าต่างบนสุด)
+            # 2. ถ้าไม่เจอ หาจาก Top Window (หน้าต่างที่อยู่บนสุดของ Windows)
             if not temp_window:
                 try:
                     app_top = Application(backend="uia").connect(active_only=True).top_window()
@@ -650,7 +650,6 @@ def run_smart_scenario(main_window, config):
                 except: pass
             
             # [จุดสำคัญ] ถ้าเจอหน้าต่างแล้ว ต้องเช็คว่า "มีช่อง Edit หรือไม่"
-            # ถ้ามีหน้าต่างแต่ไม่มีช่อง Edit แปลว่ามันอาจจะยังโหลดไม่เสร็จ -> ให้รอต่อ
             if temp_window:
                 try:
                     edits = temp_window.descendants(control_type="Edit")
@@ -665,9 +664,9 @@ def run_smart_scenario(main_window, config):
             
             time.sleep(0.5) # รอ 0.5 วินาที แล้วหาใหม่
 
-        # เพิ่มความชัวร์หลังเจอแล้วอีกนิดนึง
+        # [ปรับเวลา] เพิ่มเวลารอหลังเจอ Popup เป็น 1.5 วินาที (ให้ Animation นิ่งสนิท)
         if popup_window:
-            time.sleep(0.5)
+            time.sleep(1.5)
         else:
             log("[WARN] หมดเวลาการรอ Popup (หาไม่เจอหรือไม่สมบูรณ์) -> ระบบจะลองพิมพ์ใส่ Active Window")
             # ถ้าหาไม่เจอจริงๆ ให้ลองใช้ Main Window หรือ Active Window ล่าสุดแทน
