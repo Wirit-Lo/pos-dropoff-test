@@ -373,12 +373,18 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
         found_popup = False; found_list = False
         
         for _ in range(40): 
+            # 1. เช็ค List ก่อน! (ถ้าเจอ List ให้จบเลย ไม่ต้องเสียเวลาหา Popup)
+            list_items = [i for i in window.descendants(control_type="ListItem") 
+                          if i.is_visible() and i.rectangle().top > 200]
+            if list_items: 
+                found_list = True
+                break
+            
+            # 2. ถ้าไม่เจอ List ค่อยเช็ค Popup (ลดอาการหน่วง)
             if check_error_popup(window, delay=0.0):
                 log("[WARN] ตรวจพบ Popup คำเตือน! -> ปิดแล้วเข้าสู่โหมดกรอกเอง")
                 found_popup = True; break
-            list_items = [i for i in window.descendants(control_type="ListItem") 
-                          if i.is_visible() and i.rectangle().top > 200]
-            if list_items: found_list = True; break
+                
             time.sleep(0.25)
 
         if found_popup:
