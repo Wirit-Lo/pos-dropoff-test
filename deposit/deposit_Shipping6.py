@@ -713,104 +713,176 @@ def run_smart_scenario(main_window, config):
 
     # ================= Logic แยกสายงาน =================
     if not is_registered:
-        # >>> CASE 1: ไม่ลงทะเบียน <<<
-        log("...[Mode] ไม่ลงทะเบียน -> จัดการ Popup จำนวน...")
-        main_window.type_keys("{ENTER}") # เรียก Popup
-        
+        log("...Config ไม่ได้เลือกลงทะเบียน -> เข้าสู่กระบวนการจัดการ Popup จำนวน...")
+
+        # [เพิ่มเติม] กด Enter (ถัดไป) เพื่อเรียก Popup จำนวนออกมา
+        # (สมมติว่าขั้นตอนก่อนหน้ามีการเลือกรายการสินค้าไว้แล้ว)
+        log("...กด Enter (ถัดไป) เพื่อเรียก Popup จำนวน...")
+        main_window.type_keys("{ENTER}")
+
+        # ดึงค่าจาก Config ตามที่ต้องการ
         qty = config['PRODUCT_QUANTITY'].get('Quantity', '1') if 'PRODUCT_QUANTITY' in config else '1'
-        log(f"...ค้นหา Popup จำนวน (ค่า: {qty})...")
+        log(f"...เริ่มค้นหา Popup 'จำนวน' (จะใส่เลขจาก Config: {qty})...")
         
+        # [แก้ไข] เปลี่ยนจาก time.sleep() ตายตัว เป็น Loop รอจนกว่าจะเจอ Popup จริงๆ
         popup_window = None
-        for _ in range(30):
+        max_retries = 30 # รอสูงสุด 15 วินาที (30 x 0.5s)
+        
+        for i in range(max_retries):
+            # 1. พยายามหาหน้าต่าง Popup
+            temp_window = None
+            
+            # วิธีที่ 1: หาจาก Child Window
             try:
-                app_top = Application(backend="uia").connect(active_only=True).top_window()
-                if "จำนวน" in app_top.window_text() or app_top != main_window:
-                    edits = app_top.descendants(control_type="Edit")
-                    if edits and any(e.is_visible() for e in edits):
-                        popup_window = app_top; break
+                children = main_window.children(control_type="Window")
+                if children: temp_window = children[0]
             except: pass
+
+            # วิธีที่ 2: หาจาก Top Window
+            if not temp_window:
+                try:
+                    app_top = Application(backend="uia").connect(active_only=True).top_window()
+                    # เช็คว่าเป็น Popup จำนวนหรือไม่
+                    if app_top != main_window:
+                        txt = app_top.window_text()
+                        if "จำนวน" in txt or "Escher" in txt or app_top.element_info.control_type == "Window":
+                            temp_window = app_top
+                except: pass
+            
+            # 2. ถ้าเจอหน้าต่าง ต้องเช็คว่า "มีช่อง Edit หรือไม่" (สำคัญมาก)
+            # เพื่อป้องกันเคสที่หน้าต่างมาแล้ว แต่ไส้ในยังโหลดไม่เสร็จ
+            if temp_window:
+                try:
+                    edits = temp_window.descendants(control_type="Edit")
+                    # ต้องมี Edit อย่างน้อย 1 อันที่มองเห็นได้
+                    if edits and any(e.is_visible() for e in edits):
+                        popup_window = temp_window
+                        log(f"-> [Attempt {i+1}] เจอ Popup และช่อง Edit พร้อมใช้งาน: {popup_window.window_text()}")
+                        break # เจอครบเงื่อนไข ออกจากลูปทันที
+                except: pass
+            
+            # ถ้ายังไม่เจอ รอ 0.5 วินาทีแล้วหาใหม่
             time.sleep(0.5)
 
+        # เพิ่มความชัวร์หลังเจอแล้วอีกนิดนึง
+        if popup_window:
+            time.sleep(0.5)
+        else:
+            log("[WARN] หมดเวลาการรอ Popup (หาไม่เจอหรือไม่สมบูรณ์) -> ระบบจะลองพิมพ์ใส่ Active Window ล่าสุด")
+            # Fallback: พยายามใช้ Active Window ล่าสุด
+            try: popup_window = Application(backend="uia").connect(active_only=True).top_window()
+            except: popup_window = main_window
+
+        # --- เริ่มเจาะหาช่อง Edit ---
         if popup_window:
             try:
-                edits = [e for e in popup_window.descendants(control_type="Edit") if e.is_visible()]
-                if edits:
-                    edits[0].click_input(); edits[0].type_keys("^a"); edits[0].type_keys("{DELETE}")
-                    edits[0].type_keys(str(qty), with_spaces=True)
-                    popup_window.type_keys("{ENTER}")
-                    log(f"-> พิมพ์จำนวน {qty} สำเร็จ")
+                popup_window.set_focus()
             except: pass
-        else:
-            log("[WARN] หา Popup ไม่เจอ -> พิมพ์ใส่หน้าหลัก")
-            main_window.type_keys(str(qty), with_spaces=True); main_window.type_keys("{ENTER}")
             
-        log("...เตรียมไปหน้าทำรายการซ้ำ...")
+            log("...กำลังสแกนหาช่อง Edit ใน Popup...")
+            
+            target_edit = None
+            
+            # ดึง Edit ทั้งหมดออกมาดู (รอบสุดท้ายเพื่อจะพิมพ์)
+            try:
+                edits = popup_window.descendants(control_type="Edit")
+                visible_edits = [e for e in edits if e.is_visible()]
+                
+                log(f"-> พบ Edit ทั้งหมด: {len(edits)} ช่อง (Visible: {len(visible_edits)})")
+                
+                if visible_edits:
+                    # กรองช่องที่เล็กเกินไป (พวกปุ่มซ่อน)
+                    valid_edits = [e for e in visible_edits if e.rectangle().width() > 30]
+                    
+                    if valid_edits:
+                        target_edit = valid_edits[0]
+                        log(f"-> เป้าหมาย: {target_edit} (ID: {target_edit.element_info.automation_id})")
+                    else:
+                        log("[!] เจอ Edit แต่ขนาดเล็กผิดปกติ")
+                else:
+                    log("[!] ไม่เจอช่อง Edit ที่มองเห็นได้เลย")
+            except Exception as e:
+                log(f"Error สแกนหา Edit: {e}")
+
+            # ถ้าเจอช่องแล้ว ให้กระทำการ
+            if target_edit:
+                try:
+                    # 1. Focus
+                    target_edit.click_input()
+                    time.sleep(0.2)
+                    
+                    # 2. Clear
+                    target_edit.type_keys("^a", pause=0.1)
+                    target_edit.type_keys("{DELETE}", pause=0.1)
+                    
+                    # 3. Type
+                    target_edit.type_keys(str(qty), with_spaces=True)
+                    log(f"-> พิมพ์เลข {qty} เรียบร้อย")
+                    time.sleep(0.5)
+                    
+                    # 4. Enter
+                    popup_window.type_keys("{ENTER}")
+                    log("-> กด Enter (ถัดไป) เรียบร้อย")
+                    
+                except Exception as e:
+                    log(f"Error ขณะพิมพ์: {e}")
+            else:
+                # Fallback: พิมพ์ดื้อๆ
+                log("[Warning] หาช่องไม่เจอ -> Blind Type ใส่ Window")
+                popup_window.type_keys(str(qty), with_spaces=True)
+                popup_window.type_keys("{ENTER}")
+
+        else:
+            log("[Error] หา Popup Window ไม่เจอเลย (อาจจะเด้งช้าหรือจับผิดตัว)")
+        
+        # --- จบส่วน Popup จำนวน ---
+        
+        log("...ข้ามขั้นตอนกรอกรายละเอียด (เนื่องจากไม่ได้ลงทะเบียน) -> ไปจัดการหน้าทำรายการซ้ำทันที...")
 
     else:
-        # >>> CASE 2: ลงทะเบียน <<<
-        log("...[Mode] ลงทะเบียน -> กรอกข้อมูลผู้รับ (Manual/Auto System)...")
+        # กรณีลงทะเบียน (Register = True) -> ทำตามขั้นตอนปกติ
         time.sleep(step_delay)
         
-        # บริการพิเศษ
+        # 1. บริการพิเศษ (EMS, ประกัน ฯลฯ)
         process_special_services(main_window, special_services)
         time.sleep(step_delay)
         
-        # ข้อมูลผู้ส่ง
+        # 2. ข้อมูลผู้ส่ง (มักจะข้าม)
         process_sender_info_page(main_window)
         time.sleep(step_delay)
         
-        # 1. ค้นหาที่อยู่ (Manual System Part 1)
-        # ฟังก์ชันนี้จะส่งค่ากลับมาว่าต้องกรอกมือต่อหรือไม่
-        is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
-        
+        # 3. เลือกที่อยู่ผู้รับ
+        process_receiver_address_selection(main_window, addr_keyword, manual_data)
         time.sleep(step_delay)
         
-        # 2. กรอกรายละเอียดผู้รับ (Manual System Part 2)
-        # ถ้า is_manual_mode=True จะกรอกที่อยู่ 5 ช่องให้ด้วย
-        process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
-        
+        # 4. กรอกชื่อผู้รับและเบอร์โทร
+        process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone)
         time.sleep(step_delay)
+    
+    # -------------------------------------------------------------------------
 
-    # ================= จัดการ Repeat Transaction =================
-    # 1. รอ Popup และกด "ไม่" (หรือ "ใช่" ตาม Config)
-    log("...รอ Popup ทำรายการซ้ำ...")
+    # 1. เรียกฟังก์ชัน และรับค่ากลับมา (ตัวแปรนี้จะได้ค่า True/False จากจุดที่ 1)
     is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
     
+    # 2. เช็คเลยว่า ถ้าเป็นจริง -> จบการทำงาน
     if is_repeat_mode:
-        log("[Logic] เลือกทำรายการซ้ำ -> จบการทำงานเพื่อเริ่มรอบใหม่")
-        return 
-
-    # ================= จัดการ Payment / Closing =================
-    if is_registered:
-        # ลงทะเบียน -> จ่ายเงิน (Fast Cash)
-        log("...[Logic] ลงทะเบียน -> ไปขั้นตอนชำระเงิน (Fast Cash)...")
-        process_payment(main_window, pay_method, pay_amount)
-    else:
-        # ไม่ลงทะเบียน -> กดเสร็จสิ้น (Settle)
-        log("...[Logic] ไม่ลงทะเบียน -> กดปุ่ม 'Settle' (เสร็จสิ้น)...")
-        time.sleep(2.0)
-        try: main_window.set_focus()
-        except: pass
-        
-        if click_element_by_id(main_window, "SettleCommand", timeout=5):
-            log(" -> [SUCCESS] กดปุ่ม Settle เรียบร้อย")
-        else:
-            log(" -> [WARN] หาปุ่ม Settle ไม่เจอ -> กด Enter แทน")
-            main_window.type_keys("{ENTER}")
-            
-        time.sleep(1.0)
+        log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที")
+        return # ออกจากฟังก์ชันทันที
+    
+    # 3. ถ้าไม่เข้าเงื่อนไขบน ก็จะลงมาทำชำระเงินต่อ
+    process_payment(main_window, pay_method, pay_amount)
 
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
+# ================= 5. Start App =================
 if __name__ == "__main__":
-    target_config = 'config.ini' 
-    conf = load_config(target_config)
+    conf = load_config()
     if conf:
-        log(f"Connecting... (Using Config: {target_config})")
+        log("Connecting...")
         try:
             wait = int(conf['SETTINGS'].get('ConnectTimeout', 10))
             app_title = conf['APP']['WindowTitle']
-            log(f"Connecting to Title: {app_title}")
+            log(f"Connecting to Title: {app_title} (Wait: {wait}s)")
             app = Application(backend="uia").connect(title_re=app_title, timeout=wait)
             main_window = app.top_window()
             if main_window.exists():
