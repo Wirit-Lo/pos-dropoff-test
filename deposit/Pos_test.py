@@ -785,51 +785,31 @@ def run_smart_scenario(main_window, config):
         log("...[Logic] ลงทะเบียน -> ไปขั้นตอนชำระเงิน (Fast Cash)...")
         process_payment(main_window, pay_method, pay_amount)
    
+    # --- โค้ดใหม่ (วางทับ) ---
     else:
         # กรณีไม่ลงทะเบียน (Register=False) -> จบที่หน้าสรุป -> ต้องกดเสร็จสิ้น
-        log("...[Logic] ไม่ลงทะเบียน -> เตรียมกด 'เสร็จสิ้น' (Finalize)...")
+        log("...[Logic] ไม่ลงทะเบียน -> เตรียมกดปุ่ม 'Settle' (เสร็จสิ้น)...")
         
-        # 1. รอให้หน้าจอคืนสภาพหลัง Popup ปิด (เพิ่มเวลาเป็น 2 วิ)
-        time.sleep(2.0)
+        # 1. รอให้หน้าจอคืนสภาพหลัง Popup "ทำรายการซ้ำ" ปิดไป
+        time.sleep(2.0) 
         
-        # 2. ดึง Focus กลับมาที่หน้าหลัก (สำคัญมาก!)
-        try: 
-            main_window.set_focus()
-            # คลิกตรงกลางจอนิดนึงเพื่อเรียก Focus (เผื่อ Focus หลุดไปที่อื่นหลังปิด Popup)
-            rect = main_window.rectangle()
-            center_x = rect.left + int(rect.width() / 2)
-            center_y = rect.top + int(rect.height() / 2)
-            mouse.click(coords=(center_x, center_y))
-            log(" -> คลิกกลางจอเพื่อเรียก Focus กลับมา")
+        # 2. ดึง Focus กลับมาที่หน้าหลัก (ใช้แค่ set_focus พอ ไม่คลิกมั่วแล้ว)
+        try: main_window.set_focus()
         except: pass
         
-        time.sleep(0.5)
-
-        # 3. พยายามหาปุ่ม "เสร็จสิ้น" (Footer Button) แล้วกด
-        clicked_finish = False
-        try:
-             # หาปุ่มที่มี ID เป็น LocalCommand_Submit (ปุ่มขวาล่างมาตรฐาน)
-             submits = [c for c in main_window.descendants() if c.element_info.automation_id == "LocalCommand_Submit" and c.is_visible()]
-             if submits:
-                 # เอาตัวสุดท้าย (มักจะเป็นตัวที่อยู่บนสุดของ Layer)
-                 submits[-1].click_input()
-                 log(" -> เจอและกดปุ่ม ID 'LocalCommand_Submit' (เสร็จสิ้น) สำเร็จ")
-                 clicked_finish = True
-        except: pass
-
-        # 4. ไม้ตาย: ถ้าหาปุ่มไม่เจอ หรือกดแล้วเงียบ -> อัด Enter ย้ำ 2 ที
-        if not clicked_finish:
-            log(" -> ไม่เจอปุ่มเสร็จสิ้น -> บังคับกด Enter 2 ครั้ง")
-            main_window.type_keys("{ENTER}")
-            time.sleep(0.5)
-            main_window.type_keys("{ENTER}")
+        # 3. กดปุ่ม "เสร็จสิ้น" (ID: SettleCommand) โดยตรง
+        log("...กำลังค้นหาและกดปุ่ม ID: 'SettleCommand'...")
+        
+        # เรียกใช้ฟังก์ชัน click_element_by_id ที่มีอยู่แล้ว
+        if click_element_by_id(main_window, "SettleCommand", timeout=5):
+            log(" -> [SUCCESS] กดปุ่ม Settle (เสร็จสิ้น) เรียบร้อย")
         else:
-            # ถ้ากดปุ่มไปแล้ว ก็ย้ำ Enter อีกทีเพื่อความชัวร์ (บางทีต้อง confirm)
-            time.sleep(0.5)
+            # Fallback: ถ้าหาปุ่มไม่เจอจริงๆ ค่อยกด Enter (เป็นแผนสำรอง)
+            log(" -> [WARN] หาปุ่ม SettleCommand ไม่เจอ -> ลองกด Enter แทน")
             main_window.type_keys("{ENTER}")
             
         time.sleep(1.0)
-   
+
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
 
