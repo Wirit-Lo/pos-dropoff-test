@@ -665,7 +665,7 @@ def run_smart_scenario(main_window, config):
         time.sleep(0.5)
 
     log("...รอหน้าบริการหลัก...")
-    target_service_id = "ShippingService_2601" # หรือ ID ที่ถูกต้องของเครื่องคุณ
+    target_service_id = "ShippingService_2590" # หรือ ID ที่ถูกต้องของเครื่องคุณ
     if not wait_until_id_appears(main_window, target_service_id, timeout=60):
         log("Error: รอนานเกิน 60 วินาทีแล้ว ยังไม่เข้าหน้าบริการหลัก")
         return 
