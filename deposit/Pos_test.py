@@ -784,6 +784,7 @@ def run_smart_scenario(main_window, config):
         # กรณีลงทะเบียน (Register=True) -> ต้องไปหน้าชำระเงิน
         log("...[Logic] ลงทะเบียน -> ไปขั้นตอนชำระเงิน (Fast Cash)...")
         process_payment(main_window, pay_method, pay_amount)
+    # --- โค้ดเดิม (ลบออก) ---
     else:
         # กรณีไม่ลงทะเบียน (Register=False) -> ไม่ต้องชำระเงิน
         # หลังจากกด "ไม่" ที่ Popup ทำซ้ำแล้ว จะอยู่ที่หน้าเสร็จสิ้น -> ให้กด Enter ปิดงาน
@@ -791,6 +792,7 @@ def run_smart_scenario(main_window, config):
         time.sleep(0.5)
         main_window.type_keys("{ENTER}") 
         time.sleep(1.0)
+    # --- จบโค้ดเดิม ---
 
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
     # --- จบโค้ดใหม่ ---
