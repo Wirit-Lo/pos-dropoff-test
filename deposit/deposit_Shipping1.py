@@ -406,44 +406,63 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
         smart_next(window)
         time.sleep(1.0) 
         
-        log("...ตรวจสอบผลลัพธ์ (Popup/List)...")
-        found_popup = False; found_list = False
+        # ================== เริ่มส่วนที่แก้ไขใหม่ ==================
+        log("...ตรวจสอบผลลัพธ์ (Popup หรือ รายการที่อยู่)...")
+        found_popup = False
+        found_list = False
         
-        for _ in range(40): 
-            if check_error_popup(window, delay=0.0):
-                log("[WARN] ตรวจพบ Popup คำเตือน! -> ปิดแล้วเข้าสู่โหมดกรอกเอง")
-                found_popup = True; break
-            list_items = [i for i in window.descendants(control_type="ListItem") 
-                          if i.is_visible() and i.rectangle().top > 200]
-            if list_items: found_list = True; break
-            time.sleep(0.25)
-
-        if found_popup:
-            # เจอ Popup -> เข้า Manual Mode
-            log("...เข้าสู่โหมดกรอกเอง (Manual Mode) -> รอส่งข้อมูลหน้าถัดไป...")
-            is_manual_mode = True
-            time.sleep(1.0)
+        # วนลูปรอผลลัพธ์ประมาณ 10-15 วินาที
+        for _ in range(30): 
+            # 1. เช็ค Popup (กรณีแจ้งเตือนไม่มีข้อมูล)
+            # ฟังก์ชัน check_error_popup จะกด OK/ปิด ให้เองถ้าเจอ
+            if check_error_popup(window, delay=0.1):
+                log("[WARN] ตรวจพบ Popup (ไม่มีข้อมูล/แจ้งเตือน) -> เข้าสู่โหมด Manual")
+                found_popup = True
+                break
             
-        elif found_list:
-            log("...เจอรายการที่อยู่ -> เลือกรายการแรกสุด...")
-            time.sleep(1.0)
+            # 2. เช็ครายการที่อยู่ (ListItem)
             try:
-                all_list_items = [i for i in window.descendants(control_type="ListItem") if i.is_visible()]
-                valid_items = [i for i in all_list_items if i.rectangle().top > 200 and i.rectangle().height() > 50]
+                # หา ListItem ทั้งหมดที่มองเห็น
+                list_items = [i for i in window.descendants(control_type="ListItem") if i.is_visible()]
+                
+                # กรอง: เอาเฉพาะที่อยู่ต่ำกว่า Search Bar (Y > 150) เพื่อไม่ให้ไปกดโดน Header มั่วๆ
+                valid_items = [i for i in list_items if i.rectangle().top > 150]
+                
                 if valid_items:
+                    found_list = True
+                    
+                    # เรียงลำดับจากบนลงล่าง (Top น้อยไปมาก)
                     valid_items.sort(key=lambda x: x.rectangle().top)
+                    
+                    # *** เลือกตัวแรกสุด ***
                     target_item = valid_items[0]
-                    log(f"[/] Click รายการที่: (Y={target_item.rectangle().top})")
+                    
+                    log(f"[/] เจอรายการที่อยู่ ({len(valid_items)} รายการ) -> คลิกรายการแรกสุด")
+                    
                     try: target_item.set_focus()
                     except: pass
-                    target_item.click_input()
-                    log("...เลือกรายการแล้ว รอโหลดข้อมูล (2.0s)...")
-                    time.sleep(2.0) 
-                else: log("[!] เจอ List แต่กรองความสูงไม่ผ่าน")
+                    
+                    target_item.click_input() # กดเลือก
+                    time.sleep(2.0) # รอโหลดข้อมูลเข้าฟอร์ม
+                    break
             except: pass
-            # เลือก List แล้ว ไม่ต้องกด Next ซ้ำ
+            
+            time.sleep(0.5)
+
+        # สรุปผลเพื่อกำหนดค่า is_manual_mode
+        if found_popup:
+            # เจอ Popup -> ต้องกรอกเอง
+            is_manual_mode = True
+            log("...Set Manual Mode = True (จาก Popup)")
+            
+        elif found_list:
+            # เจอ List และเลือกไปแล้ว -> ไม่ต้องกรอกเอง
+            is_manual_mode = False 
+            log("...เลือกที่อยู่สำเร็จ (Auto Fill)")
+            
         else:
-            log("[!] ไม่เจอทั้ง Popup และ รายการ -> สันนิษฐานว่าเข้าหน้ากรอกเอง")
+            # เงียบกริบ (Timeout) -> สันนิษฐานว่าต้องกรอกเอง
+            log("[!] ไม่เจอทั้ง Popup และ List -> บังคับเข้า Manual Mode")
             is_manual_mode = True
             smart_next(window)
 
