@@ -856,18 +856,29 @@ def run_smart_scenario(main_window, config):
     
     # -------------------------------------------------------------------------
 
-    # 1. เรียกฟังก์ชัน และรับค่ากลับมา (ตัวแปรนี้จะได้ค่า True/False จากจุดที่ 1)
+    # --- โค้ดใหม่ (วางทับ) ---
+    # 1. เรียกฟังก์ชันตรวจสอบการทำรายการซ้ำ
     is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
     
-    # 2. เช็คเลยว่า ถ้าเป็นจริง -> จบการทำงาน
+    # 2. ถ้าเลือกทำรายการซ้ำ -> จบการทำงานทันที
     if is_repeat_mode:
         log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที")
-        return # ออกจากฟังก์ชันทันที
+        return 
     
-    # 3. ถ้าไม่เข้าเงื่อนไขบน ก็จะลงมาทำชำระเงินต่อ
-    process_payment(main_window, pay_method, pay_amount)
+    # 3. ตรวจสอบเงื่อนไขการชำระเงิน
+    if is_registered:
+        # กรณีลงทะเบียน (Register=True) -> ต้องชำระเงิน
+        log("...[Logic] สถานะ: ลงทะเบียน -> ดำเนินการชำระเงิน (Fast Cash)...")
+        process_payment(main_window, pay_method, pay_amount)
+    else:
+        # กรณีไม่ลงทะเบียน (Register=False) -> ข้ามการชำระเงิน -> กดเสร็จสิ้น
+        log("...[Logic] สถานะ: ไม่ลงทะเบียน -> ข้ามการชำระเงิน -> กดเสร็จสิ้น (Enter)")
+        time.sleep(0.5)
+        main_window.type_keys("{ENTER}") # กดเสร็จสิ้น/ปิดหน้าต่าง
+        time.sleep(1.0)
 
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
+    # --- จบโค้ดใหม่ ---
 
 # ================= 5. Start App =================
 if __name__ == "__main__":
