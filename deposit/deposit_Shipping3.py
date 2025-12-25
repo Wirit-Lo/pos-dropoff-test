@@ -553,71 +553,63 @@ def process_repeat_transaction(window, should_repeat):
 
 
 def process_payment(window, payment_method, received_amount):
-    log("--- ขั้นตอนการชำระเงิน ---")
+    log("--- ขั้นตอนการชำระเงิน (โหมด Fast Cash) ---")
+    
     # 1. กดรับเงิน (หน้าหลัก)
     log("...ค้นหาปุ่ม 'รับเงิน'...")
-    # รอให้หน้าจอพร้อมสักนิดหลังปิด Popup Repeat
     time.sleep(1.5)
+    
     if smart_click(window, "รับเงิน"):
-        time.sleep(1.5) # รอหน้าชำระเงิน
+        log("...เข้าสู่หน้าชำระเงิน รอโหลด 1.5s...")
+        time.sleep(1.5)
     else:
-        log("[WARN] หาปุ่มรับเงินไม่เจอ")
+        log("[WARN] หาปุ่ม 'รับเงิน' ไม่เจอ")
         return
 
-    # 2. เลือกวิธีชำระเงิน
-    log(f"...เลือกวิธีชำระเงิน: {payment_method}...")
-    wait_for_text(window, "รับชำระเงิน", timeout=5)
-    if not smart_click(window, payment_method):
-        log(f"[WARN] ไม่เจอ '{payment_method}' -> เลือก 'เงินสด' แทน")
-        smart_click(window, "เงินสด")
-    time.sleep(1.0)
+    # 2. กดปุ่ม Fast Cash (ID: EnableFastCash)
+    # ปุ่มนี้คือการจ่ายเงินแบบด่วน (ช่อง 2) ไม่ต้องกรอกตัวเลข
+    log("...กำลังกดปุ่ม Fast Cash (ID: EnableFastCash)...")
+    
+    # ใช้ฟังก์ชัน click_element_by_id ที่มีอยู่แล้วในโค้ด
+    if click_element_by_id(window, "EnableFastCash", timeout=5):
+        log("[/] กดปุ่ม Fast Cash สำเร็จ -> ระบบดำเนินการตัดเงินทันที")
+    else:
+        log("[WARN] ไม่เจอปุ่ม ID 'EnableFastCash' -> ลองกด Enter เผื่อเข้าระบบอัตโนมัติ")
+        window.type_keys("{ENTER}")
 
-    # 3. กรอกจำนวนเงิน (Popup)
-    log(f"...กรอกจำนวนเงิน: {received_amount}...")
-    try:
-        # รอ Edit box
-        for _ in range(10):
-            edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
-            if edits:
-                edits[0].click_input()
-                edits[0].type_keys(str(received_amount), with_spaces=True)
-                break
-            time.sleep(0.5)
-        window.type_keys("{ENTER}") # กดถัดไป
-    except: log("[!] Error กรอกเงิน")
-    time.sleep(1.5)
-
-    # 4. หน้าเงินทอน (จบ)
-    log("...หน้าเงินทอน -> กด Enter จบรายการ...")
-    wait_for_text(window, ["เปลี่ยนแปลงจำนวนเงิน", "เงินทอน"], timeout=5)
+    # 3. จบรายการ
+    # รอหน้าสรุป/เงินทอน แล้วกด Enter เพื่อปิดบิล
+    log("...รอหน้าสรุป/เงินทอน -> กด Enter ปิดรายการ...")
+    time.sleep(2.0) # รอ Animation จ่ายเงิน
     window.type_keys("{ENTER}")
     time.sleep(1)
 
 # ================= 4. Workflow Main =================
 def run_smart_scenario(main_window, config):
     try:
+        # --- Config Loading ---
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
-        receiver_postal = config['DEPOSIT_ENVELOPE'].get('ReceiverPostalCode', '10110') # ปลายทาง
-        sender_postal = config['TEST_DATA'].get('SenderPostalCode', '10110') # ต้นทาง
+        receiver_postal = config['DEPOSIT_ENVELOPE'].get('ReceiverPostalCode', '10110')
+        sender_postal = config['TEST_DATA'].get('SenderPostalCode', '10110')
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
+        
+        register_flag = config['DEPOSIT_ENVELOPE'].get('RegisterOption', 'False') # Config ลงทะเบียน
         special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
-        add_insurance_flag = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
-        insurance_amt = config['DEPOSIT_ENVELOPE'].get('Insurance', '1000')
         special_services = config['SPECIAL_SERVICES'].get('Services', '')
+        
         addr_keyword = config['RECEIVER'].get('AddressKeyword', '99/99')
         rcv_fname = config['RECEIVER_DETAILS'].get('FirstName', 'A')
         rcv_lname = config['RECEIVER_DETAILS'].get('LastName', 'B')
         rcv_phone = config['RECEIVER_DETAILS'].get('PhoneNumber', '081')
-        repeat_flag = config['REPEAT_TRANSACTION'].get('Repeat', 'False')
         
-        # Payment Config
+        repeat_flag = config['REPEAT_TRANSACTION'].get('Repeat', 'False')
         pay_method = config['PAYMENT'].get('Method', 'เงินสด') if 'PAYMENT' in config else 'เงินสด'
         pay_amount = config['PAYMENT'].get('ReceivedAmount', '1000') if 'PAYMENT' in config else '1000'
         
         step_delay = float(config['SETTINGS'].get('StepDelay', 0.8))
         scroll_dist = int(config['SETTINGS'].get('ScrollDistance', -5))
-        wait_timeout = int(config['SETTINGS'].get('ElementWaitTimeout', 15))
-
+        
+        # เตรียมข้อมูล Manual Data
         manual_data = {
             'Address1': config['MANUAL_ADDRESS_FALLBACK'].get('Address1', '') if 'MANUAL_ADDRESS_FALLBACK' in config else '',
             'Address2': config['MANUAL_ADDRESS_FALLBACK'].get('Address2', '') if 'MANUAL_ADDRESS_FALLBACK' in config else '',
@@ -628,28 +620,33 @@ def run_smart_scenario(main_window, config):
 
     except: log("[Error] อ่าน Config ไม่สำเร็จ"); return
 
-    log(f"--- เริ่มต้นการทำงาน ---")
+    log(f"--- เริ่มต้นการทำงาน (Mode: {'Register' if str(register_flag).lower() in ['true','yes','1'] else 'No-Register'}) ---")
     time.sleep(0.5)
 
+    # 1. เข้าเมนูและกรอกข้อมูลเบื้องต้น
     if not smart_click(main_window, "รับฝากสิ่งของ"): return
     time.sleep(step_delay)
     process_sender_info_popup(main_window, phone, sender_postal) 
     time.sleep(step_delay)
     if not smart_click_with_scroll(main_window, "ซองจดหมาย", scroll_dist=scroll_dist): return
     time.sleep(step_delay)
+    
     if special_options_str.strip():
         for opt in special_options_str.split(','):
             if opt: smart_click(main_window, opt.strip(), timeout=2)
     main_window.type_keys("{ENTER}")
     time.sleep(step_delay)
+    
     handle_prohibited_items(main_window)
     smart_input_weight(main_window, weight)
     smart_next(main_window)
     time.sleep(1)
+    
     try: main_window.type_keys(str(receiver_postal), with_spaces=True)
     except: pass
     smart_next(main_window)
     time.sleep(step_delay)
+    
     for _ in range(3):
         found = False
         for child in main_window.descendants():
@@ -659,74 +656,118 @@ def run_smart_scenario(main_window, config):
         time.sleep(0.5)
 
     log("...รอหน้าบริการหลัก...")
-    
-    # [แก้ไข] เพิ่ม timeout เป็น 60 และใส่ if not เพื่อเช็คว่าถ้าไม่เจอให้หยุดทันที
-    target_service_id = "ShippingService_2590" 
+    target_service_id = "ShippingService_2590" # หรือ ID ที่ถูกต้องของเครื่องคุณ
     if not wait_until_id_appears(main_window, target_service_id, timeout=60):
         log("Error: รอนานเกิน 60 วินาทีแล้ว ยังไม่เข้าหน้าบริการหลัก")
         return 
 
-    # คลิก 1 ครั้ง
     if not find_and_click_with_rotate_logic(main_window, target_service_id):
         log(f"[Error] หาปุ่มบริการไม่เจอ ({target_service_id})")
         return
 
     main_window.type_keys("{ENTER}")
+    
+    # --- แยก Flow: ลงทะเบียน vs ไม่ลงทะเบียน ---
+    is_registered = str(register_flag).lower() in ['true', 'yes', 'on', '1']
+    
+    if is_registered:
+        log("...Config สั่งให้เลือก: ลงทะเบียน (Register)...")
+        if not click_element_by_id(main_window, "RegisteredToggleIcon", timeout=3):
+             log("[Warning] หาปุ่ม RegisteredToggleIcon ไม่เจอ (อาจจะติ๊กอยู่แล้ว)")
+    
+    time.sleep(0.5)
+    log("...กดถัดไป (Enter) เพื่อเข้าสู่ขั้นตอนต่อไป...")
+    main_window.type_keys("{ENTER}")
 
-    if add_insurance_flag.lower() in ['true', 'yes']:
-        log(f"...ใส่วงเงิน {insurance_amt}...")
-        if click_element_by_id(main_window, "CoverageButton"):
-            if wait_until_id_appears(main_window, "CoverageAmount", timeout=5):
-                for child in main_window.descendants():
-                    if child.element_info.automation_id == "CoverageAmount":
-                        child.click_input(); child.type_keys(str(insurance_amt), with_spaces=True); break
-                time.sleep(0.5)
-                submits = [c for c in main_window.descendants() if c.element_info.automation_id == "LocalCommand_Submit"]
-                submits.sort(key=lambda x: x.rectangle().top)
-                if submits: submits[0].click_input()
-                else: main_window.type_keys("{ENTER}")
-    
-    time.sleep(1)
-    smart_next(main_window)
-    time.sleep(step_delay)
-
-    process_special_services(main_window, special_services)
-    time.sleep(step_delay)
-
-    process_sender_info_page(main_window)
-    time.sleep(step_delay)
-    
-    # 1. ค้นหาที่อยู่ และรับค่าสถานะว่าเป็น Manual Mode หรือไม่?
-    is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
-    
-    time.sleep(step_delay)
-    
-    # 2. กรอกรายละเอียดผู้รับ (ส่ง is_manual_mode และ manual_data เข้าไป)
-    process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
-    
-    time.sleep(step_delay)
-
-    
-    log("--- หน้า: ทำรายการซ้ำ (บังคับจบรายการ: กด ESC) ---")
-    
-    # วนลูปรอ Popup เด้งขึ้นมาสักครู่ (เผื่อเครื่องช้า)
-    found_repeat_popup = False
-    for _ in range(10): # รอประมาณ 5 วินาที
-        if wait_for_text(main_window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "เพิ่มธุรกรรม"], timeout=0.5):
-            found_repeat_popup = True
-            break
-        time.sleep(0.5)
+    # ================= Logic แยกสายงาน =================
+    if not is_registered:
+        # >>> CASE 1: ไม่ลงทะเบียน <<<
+        log("...[Mode] ไม่ลงทะเบียน -> จัดการ Popup จำนวน...")
+        main_window.type_keys("{ENTER}") # เรียก Popup
         
-    if found_repeat_popup:
-        log("   [Info] เจอ Popup ทำรายการซ้ำ -> กด ESC")
-        main_window.type_keys("{ESC}")
+        qty = config['PRODUCT_QUANTITY'].get('Quantity', '1') if 'PRODUCT_QUANTITY' in config else '1'
+        log(f"...ค้นหา Popup จำนวน (ค่า: {qty})...")
+        
+        popup_window = None
+        for _ in range(30):
+            try:
+                app_top = Application(backend="uia").connect(active_only=True).top_window()
+                if "จำนวน" in app_top.window_text() or app_top != main_window:
+                    edits = app_top.descendants(control_type="Edit")
+                    if edits and any(e.is_visible() for e in edits):
+                        popup_window = app_top; break
+            except: pass
+            time.sleep(0.5)
+
+        if popup_window:
+            try:
+                edits = [e for e in popup_window.descendants(control_type="Edit") if e.is_visible()]
+                if edits:
+                    edits[0].click_input(); edits[0].type_keys("^a"); edits[0].type_keys("{DELETE}")
+                    edits[0].type_keys(str(qty), with_spaces=True)
+                    popup_window.type_keys("{ENTER}")
+                    log(f"-> พิมพ์จำนวน {qty} สำเร็จ")
+            except: pass
+        else:
+            log("[WARN] หา Popup ไม่เจอ -> พิมพ์ใส่หน้าหลัก")
+            main_window.type_keys(str(qty), with_spaces=True); main_window.type_keys("{ENTER}")
+            
+        log("...เตรียมไปหน้าทำรายการซ้ำ...")
+
     else:
-        log("   [Info] ไม่เจอ Popup (Timeout) -> กด ESC เผื่อไว้")
-        main_window.type_keys("{ESC}")
+        # >>> CASE 2: ลงทะเบียน <<<
+        log("...[Mode] ลงทะเบียน -> กรอกข้อมูลผู้รับ (Manual/Auto System)...")
+        time.sleep(step_delay)
         
-    time.sleep(1.0) # รอหน้าต่างปิด
+        # บริการพิเศษ
+        process_special_services(main_window, special_services)
+        time.sleep(step_delay)
+        
+        # ข้อมูลผู้ส่ง
+        process_sender_info_page(main_window)
+        time.sleep(step_delay)
+        
+        # 1. ค้นหาที่อยู่ (Manual System Part 1)
+        # ฟังก์ชันนี้จะส่งค่ากลับมาว่าต้องกรอกมือต่อหรือไม่
+        is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
+        
+        time.sleep(step_delay)
+        
+        # 2. กรอกรายละเอียดผู้รับ (Manual System Part 2)
+        # ถ้า is_manual_mode=True จะกรอกที่อยู่ 5 ช่องให้ด้วย
+        process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
+        
+        time.sleep(step_delay)
+
+    # ================= จัดการ Repeat Transaction =================
+    # 1. รอ Popup และกด "ไม่" (หรือ "ใช่" ตาม Config)
+    log("...รอ Popup ทำรายการซ้ำ...")
+    is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
     
-    process_payment(main_window, pay_method, pay_amount)
+    if is_repeat_mode:
+        log("[Logic] เลือกทำรายการซ้ำ -> จบการทำงานเพื่อเริ่มรอบใหม่")
+        return 
+
+    # ================= จัดการ Payment / Closing =================
+    if is_registered:
+        # ลงทะเบียน -> จ่ายเงิน (Fast Cash)
+        log("...[Logic] ลงทะเบียน -> ไปขั้นตอนชำระเงิน (Fast Cash)...")
+        process_payment(main_window, pay_method, pay_amount)
+    else:
+        # ไม่ลงทะเบียน -> กดเสร็จสิ้น (Settle)
+        log("...[Logic] ไม่ลงทะเบียน -> กดปุ่ม 'Settle' (เสร็จสิ้น)...")
+        time.sleep(2.0)
+        try: main_window.set_focus()
+        except: pass
+        
+        if click_element_by_id(main_window, "SettleCommand", timeout=5):
+            log(" -> [SUCCESS] กดปุ่ม Settle เรียบร้อย")
+        else:
+            log(" -> [WARN] หาปุ่ม Settle ไม่เจอ -> กด Enter แทน")
+            main_window.type_keys("{ENTER}")
+            
+        time.sleep(1.0)
+
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
 if __name__ == "__main__":
