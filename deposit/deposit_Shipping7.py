@@ -687,14 +687,27 @@ def run_smart_scenario(main_window, config):
         if found: break
         time.sleep(0.5)
 
-    log("...รอหน้าบริการหลัก...")
-    target_service_id = "ShippingService_363207" # หรือ ID ที่ถูกต้องของเครื่องคุณ
-    if not wait_until_id_appears(main_window, target_service_id, timeout=60):
-        log("Error: รอนานเกิน 60 วินาทีแล้ว ยังไม่เข้าหน้าบริการหลัก")
-        return 
+    log("...รอหน้าบริการหลัก (โหมดรอโหลดจนกว่าจะเสร็จ)...")
 
+    target_service_id = "ShippingService_363207" 
+    
+    # วนลูปรอไปเรื่อยๆ จนกว่าหน้าจอจะโหลดเสร็จ (ไม่ตัดจบที่ 60 วิ)
+    while True:
+        # 1. ลองค้นหาปุ่ม (รอบละ 5 วินาที)
+        if wait_until_id_appears(main_window, target_service_id, timeout=5):
+            log(f" -> [OK] โหลดเสร็จแล้ว! เจอ ID: {target_service_id}")
+            break # เจอแล้ว -> ออกจากลูปไปทำงานต่อ
+        
+        # 2. ระหว่างรอ ถ้ามี Popup Error เด้งมา (เช่น เน็ตหลุด) ให้กดปิด
+        if check_error_popup(main_window, delay=0):
+            log("[WARN] เจอ Popup ระหว่างรอโหลด -> ปิดแล้วรอต่อ...")
+            
+        log(" ...ยังโหลดไม่เสร็จ (รอต่อ)...")
+        # วนกลับไปรอใหม่
+
+    # เมื่อออกจากลูป แปลว่าเจอแล้ว -> สั่งคลิก
     if not find_and_click_with_rotate_logic(main_window, target_service_id):
-        log(f"[Error] หาปุ่มบริการไม่เจอ ({target_service_id})")
+        log(f"[Error] หาปุ่มบริการไม่เจอ ({target_service_id}) แม้จะรอจนโหลดเสร็จแล้ว")
         return
 
     main_window.type_keys("{ENTER}")
