@@ -717,24 +717,59 @@ def run_smart_scenario(main_window, config):
         except: pass
         time.sleep(0.5)
 
-    log("...รอหน้าบริการหลัก...")
+    # --- โค้ดใหม่ (วางทับ) ---
+    log("...รอหน้าบริการหลัก (Infinite Wait)...")
+    target_service_id = "ShippingService_358355" # ID ตามที่คุณแปะมาล่าสุด
     
-    wait_until_id_appears(main_window, "ShippingService_358355", timeout=15)
-    if find_and_click_with_rotate_logic(main_window, "ShippingService_358355"):
-        main_window.type_keys("{ENTER}")
+    # 1. รอจนกว่าจะเจอปุ่มบริการ
+    while True:
+        if wait_until_id_appears(main_window, target_service_id, timeout=5):
+            log(f" -> [OK] เจอ ID: {target_service_id}")
+            break
+        if check_error_popup(main_window, delay=0): log("[WARN] ปิด Popup Error")
+        log(" ...รอโหลด...")
 
-    if add_insurance_flag.lower() in ['true', 'yes']:
-        log(f"...ใส่วงเงิน {insurance_amt}...")
-        if click_element_by_id(main_window, "CoverageButton"):
-            if wait_until_id_appears(main_window, "CoverageAmount", timeout=5):
-                for child in main_window.descendants():
-                    if child.element_info.automation_id == "CoverageAmount":
-                        child.click_input(); child.type_keys(str(insurance_amt), with_spaces=True); break
-                time.sleep(0.5)
-                submits = [c for c in main_window.descendants() if c.element_info.automation_id == "LocalCommand_Submit"]
-                submits.sort(key=lambda x: x.rectangle().top)
-                if submits: submits[0].click_input()
-                else: main_window.type_keys("{ENTER}")
+    # 2. คลิกบริการหลัก
+    if not find_and_click_with_rotate_logic(main_window, target_service_id):
+        log(f"[Error] หาปุ่มบริการไม่เจอ ({target_service_id})")
+        return
+    main_window.type_keys("{ENTER}") # ยืนยันบริการ
+    
+    # [สำคัญ] รอหน้าจอโหลดหลังจากกดบริการ (เผื่อ Animation หรือ Load Data)
+    log("...รอโหลดหน้าบริการ (2s)...")
+    time.sleep(2.0)
+
+    # 3. จัดการเรื่องประกัน (Insurance)
+    if add_insurance_flag.lower() in ['true', 'yes', 'on', '1']:
+        log(f"...ตรวจสอบปุ่มรับประกัน (CoverageButton)...")
+        
+        # รอให้ปุ่ม CoverageButton ปรากฏ (รอสูงสุด 10 วิ)
+        if wait_until_id_appears(main_window, "CoverageButton", timeout=10):
+            log(f"...พบปุ่มรับประกัน -> กำลังกดเพื่อใส่วงเงิน: {insurance_amt}...")
+            
+            # กดปุ่ม + (CoverageButton)
+            if click_element_by_id(main_window, "CoverageButton"):
+                # รอช่องกรอกเงินเด้งขึ้นมา
+                if wait_until_id_appears(main_window, "CoverageAmount", timeout=5):
+                    time.sleep(0.5)
+                    # กรอกเงิน
+                    for child in main_window.descendants():
+                        if child.element_info.automation_id == "CoverageAmount":
+                            child.click_input()
+                            child.type_keys(str(insurance_amt), with_spaces=True)
+                            break
+                    time.sleep(0.5)
+                    # กดตกลง (Submit)
+                    smart_next(main_window) 
+                    log(" -> ใส่วงเงินเรียบร้อย")
+                else:
+                    log("[WARN] กดปุ่มประกันแล้ว แต่ช่องกรอกเงินไม่เด้ง")
+            else:
+                log("[WARN] กดปุ่ม CoverageButton ไม่ติด")
+        else:
+            log("[WARN] หาปุ่ม CoverageButton ไม่เจอ (อาจจะไม่มีบริการเสริมนี้)")
+            
+    # --- จบโค้ดใหม่ ---
     
     time.sleep(1)
     smart_next(main_window)
