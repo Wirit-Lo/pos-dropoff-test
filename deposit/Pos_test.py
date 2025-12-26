@@ -544,41 +544,34 @@ def process_repeat_transaction(window, should_repeat):
     return is_repeat_intent
 
 def process_payment(window, payment_method, received_amount):
-    log("--- ขั้นตอนการชำระเงิน ---")
-    if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=1.0):
-        process_repeat_transaction(window, False)
-        time.sleep(2.0)
+    log("--- ขั้นตอนการชำระเงิน (โหมด Fast Cash) ---")
     
+    # 1. กดรับเงิน (หน้าหลัก)
     log("...ค้นหาปุ่ม 'รับเงิน'...")
     time.sleep(1.5)
+    
     if smart_click(window, "รับเงิน"):
-        time.sleep(1.5) 
+        log("...เข้าสู่หน้าชำระเงิน รอโหลด 1.5s...")
+        time.sleep(1.5)
     else:
-        log("[WARN] หาปุ่มรับเงินไม่เจอ")
+        log("[WARN] หาปุ่ม 'รับเงิน' ไม่เจอ")
         return
 
-    log(f"...เลือกวิธีชำระเงิน: {payment_method}...")
-    wait_for_text(window, "รับชำระเงิน", timeout=5)
-    if not smart_click(window, payment_method):
-        log(f"[WARN] ไม่เจอ '{payment_method}' -> เลือก 'เงินสด' แทน")
-        smart_click(window, "เงินสด")
-    time.sleep(1.0)
+    # 2. กดปุ่ม Fast Cash (ID: EnableFastCash)
+    # ปุ่มนี้คือการจ่ายเงินแบบด่วน (ช่อง 2) ไม่ต้องกรอกตัวเลข
+    log("...กำลังกดปุ่ม Fast Cash (ID: EnableFastCash)...")
+    
+    # ใช้ฟังก์ชัน click_element_by_id ที่มีอยู่แล้วในโค้ด
+    if click_element_by_id(window, "EnableFastCash", timeout=5):
+        log("[/] กดปุ่ม Fast Cash สำเร็จ -> ระบบดำเนินการตัดเงินทันที")
+    else:
+        log("[WARN] ไม่เจอปุ่ม ID 'EnableFastCash' -> ลองกด Enter เผื่อเข้าระบบอัตโนมัติ")
+        window.type_keys("{ENTER}")
 
-    log(f"...กรอกจำนวนเงิน: {received_amount}...")
-    try:
-        for _ in range(10):
-            edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
-            if edits:
-                edits[0].click_input()
-                edits[0].type_keys(str(received_amount), with_spaces=True)
-                break
-            time.sleep(0.5)
-        window.type_keys("{ENTER}") 
-    except: log("[!] Error กรอกเงิน")
-    time.sleep(1.5)
-
-    log("...หน้าเงินทอน -> กด Enter จบรายการ...")
-    wait_for_text(window, ["เปลี่ยนแปลงจำนวนเงิน", "เงินทอน"], timeout=5)
+    # 3. จบรายการ
+    # รอหน้าสรุป/เงินทอน แล้วกด Enter เพื่อปิดบิล
+    log("...รอหน้าสรุป/เงินทอน -> กด Enter ปิดรายการ...")
+    time.sleep(2.0) # รอ Animation จ่ายเงิน
     window.type_keys("{ENTER}")
     time.sleep(1)
 
@@ -729,8 +722,6 @@ def run_smart_scenario(main_window, config):
     time.sleep(1.0) # รอหน้าต่างปิด
     
     process_payment(main_window, pay_method, pay_amount)
-    log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
-
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
 # ================= 5. Start App =================
