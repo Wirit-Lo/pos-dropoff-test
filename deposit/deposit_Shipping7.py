@@ -689,7 +689,7 @@ def run_smart_scenario(main_window, config):
 
     log("...รอหน้าบริการหลัก (โหมดรอโหลดจนกว่าจะเสร็จ)...")
 
-    target_service_id = "ShippingService_363207" 
+    target_service_id = "ShippingService_358355" 
     
     # วนลูปรอไปเรื่อยๆ จนกว่าหน้าจอจะโหลดเสร็จ (ไม่ตัดจบที่ 60 วิ)
     while True:
