@@ -741,35 +741,33 @@ def run_smart_scenario(main_window, config):
 
     # 3. จัดการเรื่องประกัน (Insurance)
     if add_insurance_flag.lower() in ['true', 'yes', 'on', '1']:
-        log(f"...ตรวจสอบปุ่มรับประกัน (CoverageButton)...")
+        log(f"...[Insurance] ต้องการใส่วงเงิน: {insurance_amt}...")
+        log("...กำลังค้นหาและกดปุ่ม '+' (CoverageButton) แบบ Smart Scroll...")
         
-        # รอให้ปุ่ม CoverageButton ปรากฏ (รอสูงสุด 10 วิ)
-        if wait_until_id_appears(main_window, "CoverageButton", timeout=10):
-            log(f"...พบปุ่มรับประกัน -> กำลังกดเพื่อใส่วงเงิน: {insurance_amt}...")
+        # ใช้ฟังก์ชัน find_and_click_with_rotate_logic เพื่อเลื่อนหาปุ่มบวกให้เจอ (เผื่อมันตกขอบ)
+        if find_and_click_with_rotate_logic(main_window, "CoverageButton", max_rotations=10):
             
-            # กดปุ่ม + (CoverageButton)
-            if click_element_by_id(main_window, "CoverageButton"):
-                # รอช่องกรอกเงินเด้งขึ้นมา
-                if wait_until_id_appears(main_window, "CoverageAmount", timeout=5):
-                    time.sleep(0.5)
-                    # กรอกเงิน
-                    for child in main_window.descendants():
-                        if child.element_info.automation_id == "CoverageAmount":
-                            child.click_input()
-                            child.type_keys(str(insurance_amt), with_spaces=True)
-                            break
-                    time.sleep(0.5)
-                    # กดตกลง (Submit)
-                    smart_next(main_window) 
-                    log(" -> ใส่วงเงินเรียบร้อย")
-                else:
-                    log("[WARN] กดปุ่มประกันแล้ว แต่ช่องกรอกเงินไม่เด้ง")
+            # รอช่องกรอกเงินเด้งขึ้นมา
+            log("...กดปุ่มบวกแล้ว -> รอช่องกรอกเงิน...")
+            if wait_until_id_appears(main_window, "CoverageAmount", timeout=5):
+                time.sleep(0.5)
+                # กรอกเงิน
+                for child in main_window.descendants():
+                    if child.element_info.automation_id == "CoverageAmount":
+                        child.click_input()
+                        child.type_keys(str(insurance_amt), with_spaces=True)
+                        break
+                time.sleep(0.5)
+                
+                # กดตกลง (Submit)
+                log("...กรอกเงินเสร็จ -> กดตกลง...")
+                smart_next(main_window) 
+                log(" -> [SUCCESS] ใส่วงเงินเรียบร้อย")
             else:
-                log("[WARN] กดปุ่ม CoverageButton ไม่ติด")
+                log("[WARN] กดปุ่มประกันแล้ว แต่ช่องกรอกเงินไม่เด้ง (อาจจะไม่มีช่องให้กรอก หรือ Error)")
         else:
-            log("[WARN] หาปุ่ม CoverageButton ไม่เจอ (อาจจะไม่มีบริการเสริมนี้)")
+            log("[WARN] หาปุ่ม '+' (CoverageButton) ไม่เจอแม้จะเลื่อนหาแล้ว (อาจไม่มีบริการเสริมนี้)")
             
-    # --- จบโค้ดใหม่ ---
     
     time.sleep(1)
     smart_next(main_window)
