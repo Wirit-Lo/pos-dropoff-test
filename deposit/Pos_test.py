@@ -653,7 +653,7 @@ def run_smart_scenario(main_window, config):
     log("...รอหน้าบริการหลัก...")
     
     # [แก้ไข] เพิ่ม timeout เป็น 60 และใส่ if not เพื่อเช็คว่าถ้าไม่เจอให้หยุดทันที
-    target_service_id = "ShippingService_361916" 
+    target_service_id = "ShippingService_356420" 
     if not wait_until_id_appears(main_window, target_service_id, timeout=60):
         log("Error: รอนานเกิน 60 วินาทีแล้ว ยังไม่เข้าหน้าบริการหลัก")
         return 
@@ -664,20 +664,6 @@ def run_smart_scenario(main_window, config):
         return
     time.sleep(step_delay) 
 
-    if add_insurance_flag.lower() in ['true', 'yes']:
-        log(f"...ใส่วงเงิน {insurance_amt}...")
-        if click_element_by_id(main_window, "CoverageButton"):
-            if wait_until_id_appears(main_window, "CoverageAmount", timeout=5):
-                for child in main_window.descendants():
-                    if child.element_info.automation_id == "CoverageAmount":
-                        child.click_input(); child.type_keys(str(insurance_amt), with_spaces=True); break
-                time.sleep(0.5)
-                submits = [c for c in main_window.descendants() if c.element_info.automation_id == "LocalCommand_Submit"]
-                submits.sort(key=lambda x: x.rectangle().top)
-                if submits: submits[0].click_input()
-                else: main_window.type_keys("{ENTER}")
-    
-    time.sleep(1)
     smart_next(main_window) 
     time.sleep(step_delay)
     process_special_services(main_window, special_services)
@@ -704,24 +690,8 @@ def run_smart_scenario(main_window, config):
         return # ออกจากฟังก์ชันทันที
     
     # 3. ถ้าไม่เข้าเงื่อนไขบน ก็จะลงมาทำชำระเงินต่อ
-    # วนลูปรอ Popup เด้งขึ้นมาสักครู่ (เผื่อเครื่องช้า)
-    found_repeat_popup = False
-    for _ in range(10): # รอประมาณ 5 วินาที
-        if wait_for_text(main_window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "เพิ่มธุรกรรม"], timeout=0.5):
-            found_repeat_popup = True
-            break
-        time.sleep(0.5)
-        
-    if found_repeat_popup:
-        log("   [Info] เจอ Popup ทำรายการซ้ำ -> กด ESC")
-        main_window.type_keys("{ESC}")
-    else:
-        log("   [Info] ไม่เจอ Popup (Timeout) -> กด ESC เผื่อไว้")
-        main_window.type_keys("{ESC}")
-        
-    time.sleep(1.0) # รอหน้าต่างปิด
-    
     process_payment(main_window, pay_method, pay_amount)
+
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
 # ================= 5. Start App =================
