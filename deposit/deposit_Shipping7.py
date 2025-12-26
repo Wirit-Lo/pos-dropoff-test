@@ -625,6 +625,8 @@ def run_smart_scenario(main_window, config):
         sender_postal = config['TEST_DATA'].get('SenderPostalCode', '10110')
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
         
+        add_insurance_flag = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
+        insurance_amt = config['DEPOSIT_ENVELOPE'].get('Insurance', '1000')
         register_flag = config['DEPOSIT_ENVELOPE'].get('RegisterOption', 'False') # Config ลงทะเบียน
         special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
         special_services = config['SPECIAL_SERVICES'].get('Services', '')
@@ -712,131 +714,66 @@ def run_smart_scenario(main_window, config):
 
     main_window.type_keys("{ENTER}")
     
-    # --- แยก Flow: ลงทะเบียน vs ไม่ลงทะเบียน ---
-    is_registered = str(register_flag).lower() in ['true', 'yes', 'on', '1']
-    
-    if is_registered:
-        log("...Config สั่งให้เลือก: ลงทะเบียน (Register)...")
-        if not click_element_by_id(main_window, "RegisteredToggleIcon", timeout=3):
-             log("[Warning] หาปุ่ม RegisteredToggleIcon ไม่เจอ (อาจจะติ๊กอยู่แล้ว)")
-    
-    time.sleep(0.5)
-    log("...กดถัดไป (Enter) เพื่อเข้าสู่ขั้นตอนต่อไป...")
-    main_window.type_keys("{ENTER}")
-
-    # ================= Logic แยกสายงาน =================
-    # --- โค้ดใหม่ (วางทับ) ---
-    if not is_registered:
-        log("...Config ไม่ได้เลือกลงทะเบียน -> เข้าสู่กระบวนการจัดการ Popup จำนวน...")
-
-        # 1. กด Enter (ถัดไป) เพื่อเรียก Popup
-        log("...กด Enter (ถัดไป) เพื่อเรียก Popup จำนวน...")
-        main_window.type_keys("{ENTER}")
-
-        # 2. เตรียมข้อมูล (ดึงจาก Config ตามที่ขอ)
-        qty = config['PRODUCT_QUANTITY'].get('Quantity', '1') if 'PRODUCT_QUANTITY' in config else '1'
-        log(f"...เริ่มค้นหาช่องกรอกจำนวน ID: 'QuantityChange' (ค่าจาก Config: {qty})...")
-        
-        target_edit = None
-        max_retries = 30 # รอ 15 วินาที
-        
-        # 3. วนลูปหาช่องกรอกด้วย ID 'QuantityChange' โดยตรง (แม่นยำที่สุด)
-        for i in range(max_retries):
-            try:
-                # ค้นหา Edit Control ที่มี ID = 'QuantityChange' 
-                # วิธีนี้จะเจอตัวมันไม่ว่ามันจะซ่อนอยู่ใน Layer ไหน หรือจอขนาดเท่าไหร่
-                found_edits = [
-                    c for c in main_window.descendants(control_type="Edit") 
-                    if c.element_info.automation_id == "QuantityChange" and c.is_visible()
-                ]
-                
-                if found_edits:
-                    target_edit = found_edits[0]
-                    log(f"-> [Attempt {i+1}] เจอเป้าหมาย ID 'QuantityChange' แล้ว!")
-                    break
-            except: pass
-            
-            time.sleep(0.5)
-
-        # 4. ดำเนินการพิมพ์ข้อมูล
-        if target_edit:
-            try:
-                # 4.1 Focus และ Click
-                try: target_edit.set_focus()
-                except: pass
-                target_edit.click_input()
-                time.sleep(0.2)
-                
-                # 4.2 ล้างค่าเก่า (Select All -> Delete)
-                target_edit.type_keys("^a", pause=0.1)
-                target_edit.type_keys("{DELETE}", pause=0.1)
-                
-                # 4.3 พิมพ์ค่าใหม่ (จากตัวแปร qty)
-                target_edit.type_keys(str(qty), with_spaces=True)
-                log(f"-> พิมพ์เลข {qty} เรียบร้อย")
+    if add_insurance_flag.lower() in ['true', 'yes']:
+        log(f"...ใส่วงเงิน {insurance_amt}...")
+        if click_element_by_id(main_window, "CoverageButton"):
+            if wait_until_id_appears(main_window, "CoverageAmount", timeout=5):
+                for child in main_window.descendants():
+                    if child.element_info.automation_id == "CoverageAmount":
+                        child.click_input(); child.type_keys(str(insurance_amt), with_spaces=True); break
                 time.sleep(0.5)
-                
-                # 4.4 กด Enter เพื่อยืนยัน
-                target_edit.type_keys("{ENTER}")
-                log("-> กด Enter (ถัดไป) เรียบร้อย")
-                
-            except Exception as e:
-                log(f"[Error] เกิดข้อผิดพลาดขณะพิมพ์: {e}")
-                # Fallback: ถ้า Error ให้ลองยิง Enter ใส่หน้าจอหลักดู
-                main_window.type_keys("{ENTER}")
-        else:
-            log("[WARN] หา ID 'QuantityChange' ไม่เจอ (Timeout) -> ลอง Blind Type")
-            # Fallback สุดท้าย: ถ้าหา ID ไม่เจอจริงๆ ให้พิมพ์ยัดไปเลย
-            main_window.type_keys(str(qty), with_spaces=True)
-            main_window.type_keys("{ENTER}")
-        
-        log("...จบขั้นตอน Popup จำนวน...")
-        log("...ข้ามขั้นตอนกรอกรายละเอียด (เนื่องจากไม่ได้ลงทะเบียน) -> ไปจัดการหน้าทำรายการซ้ำทันที...")
+                submits = [c for c in main_window.descendants() if c.element_info.automation_id == "LocalCommand_Submit"]
+                submits.sort(key=lambda x: x.rectangle().top)
+                if submits: submits[0].click_input()
+                else: main_window.type_keys("{ENTER}")
+    
+    time.sleep(1)
+    smart_next(main_window)
+    time.sleep(step_delay)
 
+    process_special_services(main_window, special_services)
+    time.sleep(step_delay)
+
+    process_sender_info_page(main_window)
+    time.sleep(step_delay)
+    
+    is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
+    time.sleep(step_delay)
+    
+    process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
+    time.sleep(step_delay)
+    
+    log("--- หน้า: ทำรายการซ้ำ (บังคับจบรายการ: กด ESC) ---")
+    
+    # วนลูปรอ Popup เด้งขึ้นมาสักครู่ (เผื่อเครื่องช้า)
+    found_repeat_popup = False
+    for _ in range(10): # รอประมาณ 5 วินาที
+        if wait_for_text(main_window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "เพิ่มธุรกรรม"], timeout=0.5):
+            found_repeat_popup = True
+            break
+        time.sleep(0.5)
+        
+    if found_repeat_popup:
+        log("   [Info] เจอ Popup ทำรายการซ้ำ -> กด ESC")
+        main_window.type_keys("{ESC}")
     else:
-        # กรณีลงทะเบียน (Register = True) -> ทำตามขั้นตอนปกติ
-        time.sleep(step_delay)
+        log("   [Info] ไม่เจอ Popup (Timeout) -> กด ESC เผื่อไว้")
+        main_window.type_keys("{ESC}")
         
-        # 1. บริการพิเศษ (EMS, ประกัน ฯลฯ)
-        process_special_services(main_window, special_services)
-        time.sleep(step_delay)
-        
-        # 2. ข้อมูลผู้ส่ง (มักจะข้าม)
-        process_sender_info_page(main_window)
-        time.sleep(step_delay)
-        
-        # 3. เลือกที่อยู่ผู้รับ
-        process_receiver_address_selection(main_window, addr_keyword, manual_data)
-        time.sleep(step_delay)
-        
-        # 4. กรอกชื่อผู้รับและเบอร์โทร
-        process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone)
-        time.sleep(step_delay)
+    time.sleep(1.0) # รอหน้าต่างปิด
     
-    # -------------------------------------------------------------------------
-
-    # 1. เรียกฟังก์ชัน และรับค่ากลับมา (ตัวแปรนี้จะได้ค่า True/False จากจุดที่ 1)
-    is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
-    
-    # 2. เช็คเลยว่า ถ้าเป็นจริง -> จบการทำงาน
-    if is_repeat_mode:
-        log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที")
-        return # ออกจากฟังก์ชันทันที
-    
-    # 3. ถ้าไม่เข้าเงื่อนไขบน ก็จะลงมาทำชำระเงินต่อ
     process_payment(main_window, pay_method, pay_amount)
-
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
-# ================= 5. Start App =================
 if __name__ == "__main__":
-    conf = load_config()
+    target_config = 'config.ini' 
+    conf = load_config(target_config)
     if conf:
-        log("Connecting...")
+        log(f"Connecting... (Using Config: {target_config})")
         try:
             wait = int(conf['SETTINGS'].get('ConnectTimeout', 10))
             app_title = conf['APP']['WindowTitle']
-            log(f"Connecting to Title: {app_title} (Wait: {wait}s)")
+            log(f"Connecting to Title: {app_title}")
             app = Application(backend="uia").connect(title_re=app_title, timeout=wait)
             main_window = app.top_window()
             if main_window.exists():
