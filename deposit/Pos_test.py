@@ -573,8 +573,8 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
 
     # 2. EMS สินค้าสำเร็จรูป
-    if not smart_click_with_scroll(main_window, "EMS สินค้าสำเร็จรูป", scroll_dist=scroll_dist): 
-        log("[Error] ไม่เจอเมนู EMS สินค้าสำเร็จรูป")
+    if not smart_click_with_scroll(main_window, "ซองจดหมาย", scroll_dist=scroll_dist): 
+        log("[Error] ไม่เจอเมนู ซองจดหมาย")
         return
     time.sleep(step_delay)
 
