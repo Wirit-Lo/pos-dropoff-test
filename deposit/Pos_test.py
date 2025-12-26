@@ -520,8 +520,6 @@ def process_payment(window, payment_method, received_amount):
 def run_smart_scenario(main_window, config):
     try:
         category_name = "ซองจดหมาย" 
-        category_id_fallback = "MailPieceShape_SubParent_CockFightingEquipments"
-        
         
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
         width = config['DEPOSIT_ENVELOPE'].get('Width', '10')
@@ -587,9 +585,6 @@ def run_smart_scenario(main_window, config):
     if smart_click_with_scroll(main_window, category_name, max_scrolls=10, scroll_dist=scroll_dist):
         found_category = True
         time.sleep(1.5) 
-    elif smart_click_with_scroll(main_window, category_id_fallback, max_scrolls=10, scroll_dist=scroll_dist):
-        found_category = True
-        time.sleep(1.5)
         
     if not found_category:
         log(f"[WARN] หาหมวดหมู่ '{category_name}' ไม่เจอ -> จะพยายามกดถัดไป (เผื่อเลือก default)")
