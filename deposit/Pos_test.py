@@ -519,9 +519,8 @@ def process_payment(window, payment_method, received_amount):
 # ================= 4. Workflow Main =================
 def run_smart_scenario(main_window, config):
     try:
-        category_name = "อุปกรณ์ไก่ชน" 
+        category_name = "ซองจดหมาย" 
         category_id_fallback = "MailPieceShape_SubParent_CockFightingEquipments"
-        product_detail = "อุปกรณ์ไก่ชน ถังกระโดดไก่ชน 1 ชิ้น"
         
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
         width = config['DEPOSIT_ENVELOPE'].get('Width', '10')
@@ -603,45 +602,9 @@ def run_smart_scenario(main_window, config):
 
     time.sleep(step_delay)
 
-    # 4. เลือกรุปร่างชิ้นจดหมาย (รูป 2)
-    log(f"...[Step 4] เลือกสินค้า: {product_detail}")
-    # [แก้ไขจุดที่ 1 เพิ่มเติม] รอจนกว่าข้อความสินค้าจะขึ้นจริงๆ ก่อนกด เพื่อป้องกันการกดพลาด
-    wait_for_text(main_window, product_detail[:10], timeout=5) 
-    time.sleep(1.5)
-    
-    found_product = smart_click_with_scroll(main_window, product_detail, max_scrolls=20, scroll_dist=scroll_dist)
-    if found_product:
-        time.sleep(1.0) 
-        log("[OK] เลือกสินค้าสำเร็จ -> กดถัดไป")
-        smart_next(main_window)
-    else:
-        log(f"[WARN] หาสินค้า '{product_detail}' ไม่เจอ")
-        # ถ้าหาไม่เจอ ก็กดถัดไปเผื่อฟลุ๊ค
-        smart_next(main_window)
-    
-    time.sleep(step_delay)
-
     # 5. หน้า น้ำหนัก (รูป 3)
     log(f"...[Step 5] กรอกน้ำหนัก: {weight}")
     smart_input_generic(main_window, weight, "น้ำหนัก")
-    smart_next(main_window)
-    time.sleep(step_delay)
-
-    # 6. หน้า ปริมาตร (รูป 4)
-    log(f"...[Step 6] กรอกปริมาตร (กว้าง: {width}, ยาว: {length}, สูง: {height})")
-    try:
-        main_window.set_focus()
-        edits = [e for e in main_window.descendants(control_type="Edit") if e.is_visible()]
-        if edits:
-            edits[0].click_input()
-            log("   -> เจอช่องแรก -> เริ่มกรอกและ Tab")
-            main_window.type_keys(f"{width}{{TAB}}{length}{{TAB}}{height}", with_spaces=True)
-        else:
-            log("   [WARN] ไม่เจอ Edit box -> ลองพิมพ์ Blind Type")
-            main_window.type_keys(f"{width}{{TAB}}{length}{{TAB}}{height}", with_spaces=True)
-    except:
-         log("   [!] Error กรอกปริมาตร")
-
     smart_next(main_window)
     time.sleep(step_delay)
 
@@ -746,24 +709,10 @@ def run_smart_scenario(main_window, config):
     process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
     time.sleep(step_delay)
     
-    log("--- หน้า: ทำรายการซ้ำ (บังคับจบรายการ: กด ESC) ---")
-    
-    # วนลูปรอ Popup เด้งขึ้นมาสักครู่ (เผื่อเครื่องช้า)
-    found_repeat_popup = False
-    for _ in range(10): # รอประมาณ 5 วินาที
-        if wait_for_text(main_window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "เพิ่มธุรกรรม"], timeout=0.5):
-            found_repeat_popup = True
-            break
-        time.sleep(0.5)
-        
-    if found_repeat_popup:
-        log("   [Info] เจอ Popup ทำรายการซ้ำ -> กด ESC")
-        main_window.type_keys("{ESC}")
-    else:
-        log("   [Info] ไม่เจอ Popup (Timeout) -> กด ESC เผื่อไว้")
-        main_window.type_keys("{ESC}")
-        
-    time.sleep(1.0) # รอหน้าต่างปิด
+    is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
+    if is_repeat_mode:
+        log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที")
+        return
     
     process_payment(main_window, pay_method, pay_amount)
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
