@@ -571,10 +571,8 @@ def run_smart_scenario(main_window, config):
     process_sender_info_popup(main_window, phone, sender_postal)
     time.sleep(step_delay)
 
-    # 2. EMS สินค้าสำเร็จรูป
-    if not smart_click_with_scroll(main_window, "ซองจดหมาย", scroll_dist=scroll_dist): 
-        log("[Error] ไม่เจอเมนู ซองจดหมาย")
-        return
+    time.sleep(step_delay)
+    if not smart_click_with_scroll(main_window, "ซองจดหมาย", scroll_dist=scroll_dist): return
     time.sleep(step_delay)
 
     # 5. หน้า น้ำหนัก (รูป 3)
