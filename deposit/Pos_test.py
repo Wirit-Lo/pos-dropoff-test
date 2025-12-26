@@ -522,6 +522,7 @@ def run_smart_scenario(main_window, config):
         category_name = "ซองจดหมาย" 
         category_id_fallback = "MailPieceShape_SubParent_CockFightingEquipments"
         
+        
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
         width = config['DEPOSIT_ENVELOPE'].get('Width', '10')
         length = config['DEPOSIT_ENVELOPE'].get('Length', '20')
@@ -607,11 +608,6 @@ def run_smart_scenario(main_window, config):
     smart_input_generic(main_window, weight, "น้ำหนัก")
     smart_next(main_window)
     time.sleep(step_delay)
-
-    # [แก้ไขจุดที่ 2] ลบ smart_next(main_window) ที่ซ้ำซ้อนตรงนี้ออก 
-    # เพราะมันทำให้กดข้ามไปหน้า เลข ปณ (Step 7) ทันทีโดยไม่ได้ตั้งตัว
-    # smart_next(main_window) <--- ลบออกแล้ว
-    # time.sleep(step_delay)
 
     # 7. หน้า เลข ปณ ปลายทาง (รูป 4/5)
     log(f"...[Step 7] กรอก ปณ ปลายทาง: {receiver_postal}")
