@@ -714,96 +714,50 @@ def run_smart_scenario(main_window, config):
     time.sleep(1.0)
 
     # ================= แยกสายงาน (Flow Control) =================
-    if is_registered:
-        # >>> CASE: ลงทะเบียน (Register) <<<
-        log("...[Flow] เลือก: ลงทะเบียน -> เปิด Toggle และใส่วงเงิน...")
+    # --- โค้ดใหม่ (วางทับ) ---
+    # ================= Logic รับประกัน & กรอกข้อมูล (Linear Flow) =================
+    # ตัดเงื่อนไข is_registered และตัด Popup จำนวนออก ตามที่ขอ
+    
+    # 1. เช็คว่าต้องใส่วงเงินประกันหรือไม่ (ดูจาก Config: AddInsurance)
+    if str(add_insurance_flag).lower() in ['true', 'yes', 'on', '1']:
+        log(f"...[Option] ต้องการใส่วงเงินประกัน: {insurance_amt}...")
         
-        # A. กดปุ่มลงทะเบียน
-        if not click_element_by_id(main_window, "RegisteredToggleIcon", timeout=3):
-             log("[Warning] หาปุ่ม RegisteredToggleIcon ไม่เจอ (อาจจะติ๊กอยู่แล้ว)")
-        time.sleep(0.5)
-        
-        # B. ใส่วงเงินประกัน (Insurance) - ทำตรงนี้ถึงจะถูก
-        if str(add_insurance_flag).lower() in ['true', 'yes', 'on', '1']:
-            log(f"...[Option] ต้องการใส่วงเงินประกัน: {insurance_amt}...")
-            # กดปุ่มเปิด popup วงเงิน
-            if click_element_by_id(main_window, "CoverageButton", timeout=3):
-                time.sleep(0.5)
-                # รอช่องกรอกเงินเด้งขึ้นมา
-                if wait_until_id_appears(main_window, "CoverageAmount", timeout=5):
-                    # กรอกเงิน
-                    for child in main_window.descendants():
-                        if child.element_info.automation_id == "CoverageAmount":
-                            child.click_input()
-                            child.type_keys(str(insurance_amt), with_spaces=True)
-                            break
-                    time.sleep(0.5)
-                    # กดตกลง (Submit)
-                    smart_next(main_window) 
-                else:
-                    log("[WARN] Popup วงเงินไม่เด้ง หรือหา ID CoverageAmount ไม่เจอ")
-            else:
-                log("[WARN] หาปุ่ม CoverageButton ไม่เจอ")
-        
-        # C. ไปหน้าถัดไป (ข้อมูลผู้รับ)
-        log("...กดถัดไป เพื่อกรอกข้อมูลผู้รับ...")
-        main_window.type_keys("{ENTER}")
-        time.sleep(step_delay)
-
-        # D. กรอกข้อมูลตาม Step ปกติ
-        process_special_services(main_window, special_services)
-        process_sender_info_page(main_window)
-        
-        # Manual Mode 1: ที่อยู่
-        is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
-        time.sleep(step_delay)
-        
-        # Manual Mode 2: รายละเอียด
-        process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
-        time.sleep(step_delay)
-
-    else:
-        # >>> CASE: ไม่ลงทะเบียน (Popup Quantity) <<<
-        log("...[Flow] เลือก: ไม่ลงทะเบียน -> ทำ Popup จำนวน...")
-        
-        # 1. กด Enter (ถัดไป) เพื่อเรียก Popup
-        log("...กด Enter (ถัดไป) เพื่อเรียก Popup จำนวน...")
-        main_window.type_keys("{ENTER}")
-
-        # 2. เตรียมข้อมูล (ดึงจาก Config)
-        qty = config['PRODUCT_QUANTITY'].get('Quantity', '1') if 'PRODUCT_QUANTITY' in config else '1'
-        log(f"...เริ่มค้นหาช่องกรอกจำนวน ID: 'QuantityChange' (ค่าจาก Config: {qty})...")
-        
-        target_edit = None
-        max_retries = 30 
-        
-        # 3. วนลูปหาช่องกรอกด้วย ID 'QuantityChange'
-        for i in range(max_retries):
-            try:
-                found_edits = [c for c in main_window.descendants(control_type="Edit") 
-                               if c.element_info.automation_id == "QuantityChange" and c.is_visible()]
-                if found_edits:
-                    target_edit = found_edits[0]; break
-            except: pass
+        # กดปุ่มเปิด popup วงเงิน (CoverageButton)
+        if click_element_by_id(main_window, "CoverageButton", timeout=3):
             time.sleep(0.5)
-
-        # 4. พิมพ์ข้อมูล
-        if target_edit:
-            try:
-                target_edit.set_focus(); target_edit.click_input()
-                time.sleep(0.2)
-                target_edit.type_keys("^a"); target_edit.type_keys("{DELETE}")
-                target_edit.type_keys(str(qty), with_spaces=True)
+            # รอช่องกรอกเงินเด้งขึ้นมา
+            if wait_until_id_appears(main_window, "CoverageAmount", timeout=5):
+                # กรอกเงิน
+                for child in main_window.descendants():
+                    if child.element_info.automation_id == "CoverageAmount":
+                        child.click_input()
+                        child.type_keys(str(insurance_amt), with_spaces=True)
+                        break
                 time.sleep(0.5)
-                target_edit.type_keys("{ENTER}")
-            except Exception as e:
-                log(f"[Error] พิมพ์จำนวนไม่สำเร็จ: {e}")
-                main_window.type_keys("{ENTER}")
+                # กดตกลง (Submit)
+                smart_next(main_window) 
+            else:
+                log("[WARN] Popup วงเงินไม่เด้ง หรือหา ID CoverageAmount ไม่เจอ")
         else:
-            log("[WARN] หาช่องจำนวนไม่เจอ -> Blind Type")
-            main_window.type_keys(str(qty) + "{ENTER}")
-        
-        log("...จบขั้นตอน Popup จำนวน...")
+            log("[WARN] หาปุ่ม CoverageButton ไม่เจอ (ตรวจสอบว่าบริการนี้รองรับประกันหรือไม่)")
+    
+    # 2. ไปหน้าถัดไป (ข้อมูลผู้รับ)
+    log("...กดถัดไป เพื่อกรอกข้อมูลผู้รับ...")
+    main_window.type_keys("{ENTER}")
+    time.sleep(step_delay)
+
+    # 3. กรอกข้อมูลตาม Step ปกติ
+    process_special_services(main_window, special_services)
+    process_sender_info_page(main_window)
+    
+    # Manual Mode 1: ที่อยู่
+    is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
+    time.sleep(step_delay)
+    
+    # Manual Mode 2: รายละเอียด
+    process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
+    time.sleep(step_delay)
+    # --- จบโค้ดใหม่ ---
 
 
     # ================= จัดการ Repeat Transaction =================
