@@ -653,16 +653,49 @@ def run_smart_scenario(main_window, config):
     log("...รอหน้าบริการหลัก...")
     
     # [แก้ไข] เพิ่ม timeout เป็น 60 และใส่ if not เพื่อเช็คว่าถ้าไม่เจอให้หยุดทันที
+    # --- โค้ดใหม่ (วางทับ) ---
     target_service_id = "ShippingService_366516" 
-    if not wait_until_id_appears(main_window, target_service_id, timeout=60):
-        log("Error: รอนานเกิน 60 วินาทีแล้ว ยังไม่เข้าหน้าบริการหลัก")
-        return 
+    log(f"...กำลังค้นหาบริการ ID: {target_service_id} (โหมด Adaptive Speed)...")
+    
+    found_service = False
+    
+    # วนลูปสูงสุด 30 รอบ (เผื่อรายการยาวมาก)
+    for i in range(30):
+        # 1. พยายามหาปุ่มและกดทันทีถ้าเจอ
+        try:
+            service_btn = [c for c in main_window.descendants() 
+                           if c.element_info.automation_id == target_service_id and c.is_visible()]
+            if service_btn:
+                log(f" -> [เจอแล้ว!] ที่รอบ {i+1} กำลังคลิก...")
+                service_btn[0].click_input()
+                found_service = True
+                break
+        except: pass
+        
+        # 2. คำนวณความเร็วการเลื่อน (Adaptive Speed)
+        # - รอบที่ 1-8 : เลื่อนเร็ว (กดขวา 5 ครั้ง) -> เพื่อไปให้ถึงโซนท้ายๆ ไวๆ
+        # - รอบที่ 9++ : เลื่อนช้า (กดขวา 2 ครั้ง) -> เพื่อความแม่นยำ ไม่ให้เลยป้าย
+        scroll_speed = 5 if i < 8 else 2
+        mode_text = "Fast" if i < 8 else "Slow"
+        
+        log(f"   [{i+1}] ยังไม่เจอ -> เลื่อนขวา ({mode_text}: {scroll_speed} ครั้ง)...")
+        
+        try:
+            # โฟกัสที่รายการสินค้าแล้วสั่งเลื่อน
+            group = [c for c in main_window.descendants() if c.element_info.automation_id == "ShippingServiceList"]
+            if group: group[0].set_focus()
+            else: main_window.set_focus()
+            
+            # ส่งปุ่มกดขวาตามจำนวนที่คำนวณได้
+            main_window.type_keys("{RIGHT}" * scroll_speed)
+        except: pass
+        
+        time.sleep(0.8) # รอภาพขยับ
 
-    # คลิก 1 ครั้ง
-    if not find_and_click_with_rotate_logic(main_window, target_service_id):
-        log(f"[Error] หาปุ่มบริการไม่เจอ ({target_service_id})")
+    if not found_service:
+        log(f"[Error] หาปุ่มบริการ {target_service_id} ไม่เจอ (หมดรอบหา)")
         return
-    time.sleep(step_delay) 
+    # --- จบโค้ดใหม่ ---
 
     if add_insurance_flag.lower() in ['true', 'yes']:
         log(f"...ใส่วงเงิน {insurance_amt}...")
