@@ -711,36 +711,48 @@ def run_smart_scenario(main_window, config):
         # CASE 1: ไม่ลงทะเบียน (Register = False)
         # ==========================================
         log("...Config ไม่ได้เลือกลงทะเบียน -> เข้าสู่กระบวนการจัดการ Popup จำนวน...")
-        main_window.type_keys("{ENTER}") # เรียก Popup
         
-        # --- จัดการ Popup จำนวน ---
+        # 1. กด Enter เพื่อเรียก Popup
+        main_window.type_keys("{ENTER}") 
+        time.sleep(1.5) # รอ Popup เด้ง
+        
+        # 2. เตรียมข้อมูล
         qty = config['PRODUCT_QUANTITY'].get('Quantity', '1') if 'PRODUCT_QUANTITY' in config else '1'
-        log(f"...เริ่มค้นหา Popup 'จำนวน' (ค่า: {qty})...")
-        
-        popup_window = None
-        for i in range(30):
-            try:
-                app_top = Application(backend="uia").connect(active_only=True).top_window()
-                if app_top != main_window or "จำนวน" in app_top.window_text():
-                    edits = app_top.descendants(control_type="Edit")
-                    if edits and any(e.is_visible() for e in edits):
-                        popup_window = app_top; break
-            except: pass
-            time.sleep(0.5)
+        log(f"...จำนวนที่ต้องกรอก: {qty}...")
 
-        if popup_window:
-            try:
-                edits = [e for e in popup_window.descendants(control_type="Edit") if e.is_visible()]
-                if edits:
-                    target = edits[0]
-                    target.click_input(); target.type_keys("^a"); target.type_keys("{DELETE}")
-                    target.type_keys(str(qty), with_spaces=True)
-                    popup_window.type_keys("{ENTER}")
-                    log(f"-> พิมพ์จำนวน {qty} และกด Enter เรียบร้อย")
-            except: pass
-        else:
-            log("[WARN] หา Popup ไม่เจอ -> พิมพ์ใส่หน้าหลัก")
-            main_window.type_keys(str(qty), with_spaces=True); main_window.type_keys("{ENTER}")
+        # 3. ค้นหาช่อง Edit (โดยไม่สนใจว่าเป็นหน้าต่างใหม่หรือไม่)
+        found_edit = False
+        try:
+            # หา Edit ทั้งหมดที่มองเห็นในหน้าจอตอนนี้
+            edits = [e for e in main_window.descendants(control_type="Edit") if e.is_visible()]
+            
+            if edits:
+                # เจอช่อง Edit (ปกติ Popup จะมีช่องเดียว หรือเป็นช่องที่ Active อยู่)
+                target = edits[0]
+                log(" -> เจอช่องกรอกข้อมูล (Edit) -> กำลังพิมพ์...")
+                
+                # พยายาม Focus และพิมพ์
+                try: target.set_focus()
+                except: pass
+                
+                target.click_input()
+                target.type_keys("^a") # Select All (เผื่อมีเลขเดิม)
+                target.type_keys("{DELETE}") # ลบ
+                target.type_keys(str(qty), with_spaces=True)
+                found_edit = True
+            else:
+                log("[WARN] ไม่เจอช่อง Edit ในหน้าจอ (อาจจะเป็น Popup แบบไม่มี ID)")
+        except Exception as e:
+            log(f"[WARN] Error ขณะพยายามกรอก: {e}")
+
+        # 4. Fallback: ถ้าหาไม่เจอ หรือ Error ให้พิมพ์กดไปเลย (Blind Typing)
+        if not found_edit:
+            log(" -> [Fallback] หาช่องไม่เจอ -> พิมพ์ตัวเลขส่งไปตรงๆ (Blind Mode)")
+            main_window.type_keys(str(qty), with_spaces=True)
+
+        # 5. กด Enter เพื่อยืนยัน Popup
+        time.sleep(0.5)
+        main_window.type_keys("{ENTER}")
             
         log("...จบขั้นตอน Popup จำนวน -> เตรียมไปหน้าทำรายการซ้ำ...")
 
