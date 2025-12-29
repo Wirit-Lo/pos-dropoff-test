@@ -58,52 +58,56 @@ def click_scroll_arrow_smart(window, direction='right', repeat=5):
 
 def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
     """
-    [Fixed] ค้นหาปุ่มบริการแบบวนลูป - แก้ไขปัญหาเจอปุ่มท้ายสุดแล้วเลื่อนเลย
+    [Turbo] ค้นหาปุ่มบริการแบบวนลูป (เร่งความเร็วการเลื่อน + ลด Delay)
     """
-    log(f"...กำลังค้นหาปุ่มบริการ ID: '{target_id}' (โหมด Scroll, Limit={max_rotations} รอบ)...")
+    log(f"...ค้นหาปุ่ม ID: '{target_id}' (Fast Scroll Mode)...")
     
+    # พยายามโฟกัสหน้าจอหลักก่อนเริ่ม
+    try: window.set_focus()
+    except: pass
+
     for i in range(1, max_rotations + 1):
-        # 1. สแกนหาปุ่มเป้าหมายในหน้าจอปัจจุบัน
+        # 1. สแกนหาปุ่มเป้าหมาย
         found_elements = [c for c in window.descendants() if str(c.element_info.automation_id) == target_id and c.is_visible()]
         
-        should_scroll = False # ตัวแปรควบคุมการเลื่อน
+        should_scroll = False
 
         if found_elements:
             target = found_elements[0]
             rect = target.rectangle()
             win_rect = window.rectangle()
             
-            # [Fix 1] ขยาย Safe Zone ให้เต็มจอ (ลบ Logic 70% ทิ้ง)
-            # ตรวจสอบแค่ว่า ขอบซ้ายของปุ่มยังอยู่ในหน้าจอหรือไม่ (ยังไม่ตกขอบขวาไปจนหมด)
-            is_visible_on_screen = rect.left < win_rect.right - 10 
+            # เช็คว่าปุ่มโผล่มาในจอหรือยัง (Safe Zone = เกือบเต็มจอ)
+            is_visible_on_screen = rect.left < win_rect.right - 5
             
             if is_visible_on_screen:
-                 log(f"   [{i}] ✅ เจอปุ่ม '{target_id}' -> กดทันที (ไม่เลื่อนต่อ)")
+                 log(f"   [{i}] ✅ เจอปุ่ม '{target_id}' -> CLICK!")
                  try: 
                     target.set_focus()
                     target.click_input()
                  except: 
-                    # กรณีคลิกไม่ได้ ให้ลอง Enter
-                    log(f"   [{i}] คลิกไม่ได้ -> ลองกด Enter")
                     window.type_keys("{ENTER}")
                  return True
             else:
-                 # ถ้าเจอปุ่มแต่อยู่ไกลเกินขอบขวามากๆ (มองไม่เห็นจริงๆ) ค่อยเลื่อน
-                 log(f"   [{i}] ⚠️ เจอปุ่มแต่อยู่ล้นขอบจอ -> เลื่อนขวาต่อ")
-                 should_scroll = True
+                 # เจอปุ่มแต่อยู่ขวาสุดๆ -> เลื่อนนิดหน่อยพอ (3 ครั้ง)
+                 log(f"   [{i}] เจอปุ่ม (ตกขอบ) -> เลื่อนขวานิดหน่อย")
+                 window.type_keys("{RIGHT}" * 3, pause=0.05)
+                 time.sleep(0.2)
+                 continue # วนลูปเช็คใหม่ทันที
         else:
-            # ถ้าหาไม่เจอเลย ให้สั่งเลื่อน
-            log(f"   [{i}] ไม่เจอปุ่มในหน้านี้ -> เลื่อนขวา...")
             should_scroll = True
         
-        # 2. สั่งเลื่อนหน้าจอ
+        # 2. สั่งเลื่อนหน้าจอ (ถ้ายังไม่เจอ)
         if should_scroll:
-            # [Fix 2] ลดจำนวนครั้งการกดลูกศรขวาลง (จาก 5 เหลือ 3) เพื่อกันเลื่อนเลย
-            if not click_scroll_arrow_smart(window, repeat=3):
-                window.type_keys("{RIGHT}")
-            time.sleep(1.0) # รอโหลดหลังเลื่อน
+            # ใช้การส่งปุ่มแบบรวดเร็ว (pause=0.05) และเลื่อนทีละ 7 ช่อง
+            # หมายเหตุ: ไม่เรียก click_scroll_arrow_smart เพราะตัวนั้นหน่วงเวลาเยอะ
+            log(f"   [{i}] ไม่เจอ -> เลื่อนขวาเร็ว (7x)")
+            window.type_keys("{RIGHT}" * 7, pause=0.05)
+            
+            # รอหน้าจอขยับแค่ 0.3 วิ (จากเดิม 1.0 วิ)
+            time.sleep(0.3)
         
-    log(f"[X] หมดความพยายามในการหาปุ่ม '{target_id}'")
+    log(f"[X] หาไม่เจอหลังเลื่อน {max_rotations} รอบ")
     return False
 
 
