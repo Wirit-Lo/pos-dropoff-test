@@ -594,6 +594,9 @@ def run_smart_scenario(main_window, config):
         rcv_phone = config['RECEIVER_DETAILS'].get('PhoneNumber', '081')
         repeat_flag = config['REPEAT_TRANSACTION'].get('Repeat', 'False')
         
+        # [เพิ่ม] อ่านค่าจำนวนสินค้า (สำหรับกรณีไม่ทำประกัน)
+        qty = config['PRODUCT_QUANTITY'].get('Quantity', '1') if 'PRODUCT_QUANTITY' in config else '1'
+
         # Payment Config
         pay_method = config['PAYMENT'].get('Method', 'เงินสด') if 'PAYMENT' in config else 'เงินสด'
         pay_amount = config['PAYMENT'].get('ReceivedAmount', '1000') if 'PAYMENT' in config else '1000'
@@ -664,34 +667,121 @@ def run_smart_scenario(main_window, config):
         return
     time.sleep(step_delay) 
 
-    if add_insurance_flag.lower() in ['true', 'yes']:
-        log(f"...ใส่วงเงิน {insurance_amt}...")
-        if click_element_by_id(main_window, "CoverageButton"):
+    # --- เริ่ม Logic ใหม่แยกตาม AddInsurance ---
+    use_insurance_flow = str(add_insurance_flag).lower() in ['true', 'yes', 'on', '1']
+
+    if use_insurance_flow:
+        # ==========================================
+        # CASE 1: มีประกัน (AddInsurance = True)
+        # ==========================================
+        log(f"...Config เลือกทำประกัน -> กดปุ่ม (+) และกรอกวงเงิน {insurance_amt}...")
+        
+        # 1. กดปุ่ม CoverageButton (+)
+        if click_element_by_id(main_window, "CoverageButton", timeout=5):
+            # รอช่อง CoverageAmount
             if wait_until_id_appears(main_window, "CoverageAmount", timeout=5):
+                # หาและกรอกจำนวนเงิน
                 for child in main_window.descendants():
                     if child.element_info.automation_id == "CoverageAmount":
-                        child.click_input(); child.type_keys(str(insurance_amt), with_spaces=True); break
+                        child.click_input()
+                        child.type_keys(str(insurance_amt), with_spaces=True)
+                        break
                 time.sleep(0.5)
+                # กดปุ่มตกลง (Submit) ใน Popup
                 submits = [c for c in main_window.descendants() if c.element_info.automation_id == "LocalCommand_Submit"]
-                submits.sort(key=lambda x: x.rectangle().top)
-                if submits: submits[0].click_input()
-                else: main_window.type_keys("{ENTER}")
+                if submits: 
+                    submits.sort(key=lambda x: x.rectangle().top)
+                    submits[0].click_input()
+                else: 
+                    main_window.type_keys("{ENTER}")
+            else:
+                log("[Warn] ไม่พบช่องกรอก CoverageAmount")
+        else:
+            log("[Warn] หาปุ่ม CoverageButton ไม่เจอ")
+        
+        time.sleep(1.0)
+        
+        # 2. ไปขั้นตอนถัดไป (กรอกรายละเอียดผู้รับ)
+        smart_next(main_window) 
+        time.sleep(step_delay)
+        
+        process_special_services(main_window, special_services)
+        time.sleep(step_delay)
+        process_sender_info_page(main_window)
+        time.sleep(step_delay)
+        
+        # ค้นหาที่อยู่
+        is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
+        time.sleep(step_delay)
+        
+        # กรอกรายละเอียดผู้รับ
+        process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
     
-    time.sleep(1)
-    smart_next(main_window) 
-    time.sleep(step_delay)
-    process_special_services(main_window, special_services)
-    time.sleep(step_delay)
-    process_sender_info_page(main_window)
-    time.sleep(step_delay)
-    
-    # 1. ค้นหาที่อยู่ และรับค่าสถานะว่าเป็น Manual Mode หรือไม่?
-    is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
-    
-    time.sleep(step_delay)
-    
-    # 2. กรอกรายละเอียดผู้รับ (ส่ง is_manual_mode และ manual_data เข้าไป)
-    process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
+    else:
+        # ==========================================
+        # CASE 2: ไม่ทำประกัน (AddInsurance = False)
+        # ==========================================
+        log("...Config ไม่ทำประกัน -> กด Next เพื่อเข้าสู่ Popup จำนวน...")
+        
+        # 1. กด Enter (Next) เพื่อเรียก Popup จำนวน
+        main_window.type_keys("{ENTER}")
+        
+        # 2. จัดการ Popup จำนวน
+        log(f"...ค้นหา Popup 'จำนวน' (ใส่ค่า: {qty})...")
+        popup_window = None
+        for i in range(30): # รอ Popup 15 วิ
+            # หา Popup แบบ Window
+            try:
+                children = main_window.children(control_type="Window")
+                if children: popup_window = children[0]
+            except: pass
+            
+            # ถ้าเจอแล้ว ต้องเช็คว่ามี Edit ไหม
+            if popup_window:
+                try:
+                    edits = popup_window.descendants(control_type="Edit")
+                    if edits and any(e.is_visible() for e in edits):
+                        log(f"-> เจอ Popup จำนวนแล้ว: {popup_window.window_text()}")
+                        break 
+                except: pass
+                popup_window = None # ถ้าไม่มี Edit ให้หาใหม่
+
+            # Fallback: เช็ค Top Window
+            if not popup_window:
+                try:
+                    app_top = Application(backend="uia").connect(active_only=True).top_window()
+                    if app_top != main_window: popup_window = app_top
+                except: pass
+            
+            time.sleep(0.5)
+
+        # 3. กรอกจำนวน
+        if popup_window:
+            try:
+                popup_window.set_focus()
+                edits = [e for e in popup_window.descendants(control_type="Edit") if e.is_visible()]
+                valid_edits = [e for e in edits if e.rectangle().width() > 30] # กรองปุ่มเล็กๆทิ้ง
+                
+                if valid_edits:
+                    target_edit = valid_edits[0]
+                    target_edit.click_input()
+                    target_edit.type_keys("^a"); target_edit.type_keys("{DELETE}") # เคลียร์ค่าเก่า
+                    target_edit.type_keys(str(qty), with_spaces=True)
+                    time.sleep(0.5)
+                    popup_window.type_keys("{ENTER}")
+                    log(f"-> กรอกจำนวน {qty} เรียบร้อย")
+                else:
+                    # พิมพ์สดถ้าหาช่องไม่เจอ
+                    popup_window.type_keys(str(qty), with_spaces=True)
+                    popup_window.type_keys("{ENTER}")
+            except Exception as e:
+                log(f"[Error] กรอกจำนวนไม่สำเร็จ: {e}")
+        else:
+            log("[Warn] หา Popup จำนวนไม่เจอ (ระบบอาจข้ามไปเอง)")
+        
+        log("...ข้ามขั้นตอนรายละเอียดผู้รับ (Skip Detail)...")
+
+    # --- จบ Logic ---
     
     time.sleep(step_delay)
     
