@@ -664,103 +664,33 @@ def run_smart_scenario(main_window, config):
         return
     time.sleep(step_delay) 
 
-    is_registered = str(register_flag).lower() in ['true', 'yes', 'on', '1']
-
-    if is_registered:
-        log("...Config สั่งให้เลือก: ลงทะเบียน (Register)...")
-        if not click_element_by_id(main_window, "RegisteredToggleIcon", timeout=3):
-             log("[Warning] หาปุ่ม ID: 'RegisteredToggleIcon' ไม่เจอ")
+    smart_next(main_window) 
+    time.sleep(step_delay)
+    process_special_services(main_window, special_services)
+    time.sleep(step_delay)
+    process_sender_info_page(main_window)
+    time.sleep(step_delay)
     
-    time.sleep(0.5)
+    # 1. ค้นหาที่อยู่ และรับค่าสถานะว่าเป็น Manual Mode หรือไม่?
+    is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
     
-    # [สำคัญ] กด Enter เพื่อไปขั้นตอนถัดไป
-    log("...กดถัดไป (Enter) เพื่อเข้าสู่ขั้นตอนต่อไป...")
-    main_window.type_keys("{ENTER}")
+    time.sleep(step_delay)
     
-    # -------------------------------------------------------------------------
-    # Flow แยก:
-    # 1. ไม่ลงทะเบียน -> กรอกจำนวน -> ข้ามรายละเอียด -> ทำรายการซ้ำ
-    # 2. ลงทะเบียน -> กรอกรายละเอียดครบ -> ทำรายการซ้ำ
-    # -------------------------------------------------------------------------
+    # 2. กรอกรายละเอียดผู้รับ (ส่ง is_manual_mode และ manual_data เข้าไป)
+    process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
     
-    # --- โค้ดใหม่ (วางทับ) ---
-    if not is_registered:
-        # ==========================================
-        # CASE 1: ไม่ลงทะเบียน (Register = False)
-        # ==========================================
-        log("...Config ไม่ได้เลือกลงทะเบียน -> เข้าสู่กระบวนการจัดการ Popup จำนวน...")
-        main_window.type_keys("{ENTER}") # เรียก Popup
-        
-        # --- จัดการ Popup จำนวน ---
-        qty = config['PRODUCT_QUANTITY'].get('Quantity', '1') if 'PRODUCT_QUANTITY' in config else '1'
-        log(f"...เริ่มค้นหา Popup 'จำนวน' (ค่า: {qty})...")
-        
-        popup_window = None
-        for i in range(30):
-            try:
-                app_top = Application(backend="uia").connect(active_only=True).top_window()
-                if app_top != main_window or "จำนวน" in app_top.window_text():
-                    edits = app_top.descendants(control_type="Edit")
-                    if edits and any(e.is_visible() for e in edits):
-                        popup_window = app_top; break
-            except: pass
-            time.sleep(0.5)
-
-        if popup_window:
-            try:
-                edits = [e for e in popup_window.descendants(control_type="Edit") if e.is_visible()]
-                if edits:
-                    target = edits[0]
-                    target.click_input(); target.type_keys("^a"); target.type_keys("{DELETE}")
-                    target.type_keys(str(qty), with_spaces=True)
-                    popup_window.type_keys("{ENTER}")
-                    log(f"-> พิมพ์จำนวน {qty} และกด Enter เรียบร้อย")
-            except: pass
-        else:
-            log("[WARN] หา Popup ไม่เจอ -> พิมพ์ใส่หน้าหลัก")
-            main_window.type_keys(str(qty), with_spaces=True); main_window.type_keys("{ENTER}")
-            
-        log("...จบขั้นตอน Popup จำนวน -> เตรียมไปหน้าทำรายการซ้ำ...")
-
-    else:
-        # ==========================================
-        # CASE 2: ลงทะเบียน (Register = True)
-        # ==========================================
-        log("...Config เลือกลงทะเบียน -> ทำขั้นตอนกรอกข้อมูล...")
-        time.sleep(step_delay)
-        
-        # 1. บริการพิเศษ
-        process_special_services(main_window, special_services)
-        time.sleep(step_delay)
-        
-        # 2. ข้อมูลผู้ส่ง
-        process_sender_info_page(main_window)
-        time.sleep(step_delay)
-        
-        # 3. ค้นหาที่อยู่ (ย้ายเข้ามาใน else แล้ว)
-        is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
-        time.sleep(step_delay)
-        
-        # 4. กรอกรายละเอียดผู้รับ (ย้ายเข้ามาใน else แล้ว)
-        process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
-        time.sleep(step_delay)
-
-    # --- จบโค้ดใหม่ (ถึงตรงนี้) ---
+    time.sleep(step_delay)
     
-    # -------------------------------------------------------------------------
-    # ฟังก์ชันนี้จะคอยดักจับ Popup และกด "ไม่" ให้ (ถ้า Config=False)
-    log("...รอ Popup ทำรายการซ้ำ (เพื่อกด 'ไม่')...")
+    # 1. เรียกฟังก์ชัน และรับค่ากลับมา (ตัวแปรนี้จะได้ค่า True/False จากจุดที่ 1)
     is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
     
+    # 2. เช็คเลยว่า ถ้าเป็นจริง -> จบการทำงาน
     if is_repeat_mode:
-        log("[Logic] เลือกทำรายการซ้ำ -> จบการทำงานเพื่อเริ่มรอบใหม่")
-        return 
-
-    # 2. หลังจากกด "ไม่" ที่ Popup แล้ว -> มาเช็คว่าจะไปทางไหนต่อ
-    if is_registered:
-        # กรณีลงทะเบียน (Register=True) -> ต้องไปหน้าชำระเงิน
-        log("...[Logic] ลงทะเบียน -> ไปขั้นตอนชำระเงิน (Fast Cash)...")
-        process_payment(main_window, pay_method, pay_amount)
+        log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที")
+        return # ออกจากฟังก์ชันทันที
+    
+    # 3. ถ้าไม่เข้าเงื่อนไขบน ก็จะลงมาทำชำระเงินต่อ
+    process_payment(main_window, pay_method, pay_amount)
 
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
