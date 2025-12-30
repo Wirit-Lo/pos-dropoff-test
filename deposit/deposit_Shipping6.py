@@ -584,6 +584,7 @@ def run_smart_scenario(main_window, config):
         sender_postal = config['TEST_DATA'].get('SenderPostalCode', '10110') # ต้นทาง (อ่านจาก [TEST_DATA])
         
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
+        register_flag = config['DEPOSIT_ENVELOPE'].get('RegisterOption', 'False')
         special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
         add_insurance_flag = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
         insurance_amt = config['DEPOSIT_ENVELOPE'].get('Insurance', '1000')
@@ -653,7 +654,7 @@ def run_smart_scenario(main_window, config):
     log("...รอหน้าบริการหลัก...")
     
     # [แก้ไข] เพิ่ม timeout เป็น 60 และใส่ if not เพื่อเช็คว่าถ้าไม่เจอให้หยุดทันที
-    target_service_id = "ShippingService_358355" 
+    target_service_id = "ShippingService_357604" 
     if not wait_until_id_appears(main_window, target_service_id, timeout=60):
         log("Error: รอนานเกิน 60 วินาทีแล้ว ยังไม่เข้าหน้าบริการหลัก")
         return 
@@ -663,8 +664,56 @@ def run_smart_scenario(main_window, config):
         log(f"[Error] หาปุ่มบริการไม่เจอ ({target_service_id})")
         return
     time.sleep(step_delay) 
-
+    
+    # 1. กดถัดไป (Enter) เพื่อเรียก Popup จำนวน
     smart_next(main_window) 
+    
+    # ==========================================
+    # [NEW] ส่วนจัดการ Popup จำนวน (ID: QuantityChange)
+    # ==========================================
+    log("...รอ Popup จำนวน (ID: QuantityChange)...")
+    time.sleep(2.0) # รอ Popup เด้งและโหลด Element
+
+    # 2. ดึงค่าจำนวนจาก Config
+    qty = config['PRODUCT_QUANTITY'].get('Quantity', '1') if 'PRODUCT_QUANTITY' in config else '1'
+    log(f"...ค่าจำนวนที่ต้องกรอก (จาก Config): {qty}...")
+
+    # 3. ค้นหาช่องกรอก ID: QuantityChange
+    found_id = False
+    try:
+        # ค้นหา Element ที่มี ID 'QuantityChange' (รวมถึงใน Popup)
+        targets = [c for c in main_window.descendants(control_type="Edit") 
+                   if c.element_info.automation_id == "QuantityChange" and c.is_visible()]
+
+        if targets:
+            target_edit = targets[0]
+            log(f" -> [OK] เจอช่อง ID: 'QuantityChange' แล้ว -> กำลังแก้ไขข้อมูล...")
+
+            try: target_edit.set_focus()
+            except: pass
+
+            target_edit.click_input()
+            target_edit.type_keys("^a", pause=0.1)       # Ctrl+A เลือกทั้งหมด
+            target_edit.type_keys("{DELETE}", pause=0.1) # ลบค่าเก่า
+            target_edit.type_keys(str(qty), with_spaces=True) # พิมพ์ค่าใหม่จาก Config
+            found_id = True
+        else:
+            log("[WARN] ไม่เจอช่อง ID: 'QuantityChange' บนหน้าจอ")
+
+    except Exception as e:
+        log(f"[Error] เกิดข้อผิดพลาดขณะหาช่อง QuantityChange: {e}")
+
+    # 4. Fallback (ถ้าหา ID ไม่เจอ ให้พิมพ์ใส่หน้าจอตรงๆ)
+    if not found_id:
+        log(" -> [Fallback] หา ID ไม่เจอ -> พิมพ์ตัวเลขใส่หน้าจอโดยตรง")
+        main_window.type_keys(str(qty), with_spaces=True)
+
+    # 5. กด Enter เพื่อยืนยัน (ปิด Popup)
+    time.sleep(0.5)
+    main_window.type_keys("{ENTER}")
+    log("...จบขั้นตอน Popup จำนวน...")
+    # ==========================================
+
     time.sleep(step_delay)
     process_special_services(main_window, special_services)
     time.sleep(step_delay)
