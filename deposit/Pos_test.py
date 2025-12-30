@@ -848,11 +848,13 @@ def run_smart_scenario(main_window, config):
         time.sleep(step_delay)
         
         # 3. เลือกที่อยู่ผู้รับ
-        process_receiver_address_selection(main_window, addr_keyword, manual_data)
+        is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
+    
         time.sleep(step_delay)
         
-        # 4. กรอกชื่อผู้รับและเบอร์โทร
-        process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone)
+        # 2. กรอกรายละเอียดผู้รับ (ส่ง is_manual_mode และ manual_data เข้าไป)
+        process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
+        
         time.sleep(step_delay)
     
     # -------------------------------------------------------------------------
