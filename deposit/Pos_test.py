@@ -785,16 +785,45 @@ def run_smart_scenario(main_window, config):
     
     time.sleep(step_delay)
     
-    # 1. เรียกฟังก์ชัน และรับค่ากลับมา (ตัวแปรนี้จะได้ค่า True/False จากจุดที่ 1)
+     # ฟังก์ชันนี้จะคอยดักจับ Popup และกด "ไม่" ให้ (ถ้า Config=False)
+    log("...รอ Popup ทำรายการซ้ำ (เพื่อกด 'ไม่')...")
     is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
     
-    # 2. เช็คเลยว่า ถ้าเป็นจริง -> จบการทำงาน
+    # ถ้า Config ตั้งใจให้ทำซ้ำ (กด "ใช่") -> จบการทำงานตรงนี้เลย
     if is_repeat_mode:
-        log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที")
-        return # ออกจากฟังก์ชันทันที
-    
-    # 3. ถ้าไม่เข้าเงื่อนไขบน ก็จะลงมาทำชำระเงินต่อ
-    process_payment(main_window, pay_method, pay_amount)
+        log("[Logic] เลือกทำรายการซ้ำ -> จบการทำงานเพื่อเริ่มรอบใหม่")
+        return 
+
+    # 2. หลังจากกด "ไม่" ที่ Popup แล้ว -> มาเช็คว่าจะไปทางไหนต่อ
+    if use_insurance_flow:
+        # กรณีลงทะเบียน (Register=True) -> ต้องไปหน้าชำระเงิน
+        log("...[Logic] ลงทะเบียน -> ไปขั้นตอนชำระเงิน (Fast Cash)...")
+        process_payment(main_window, pay_method, pay_amount)
+   
+    # --- โค้ดใหม่ (วางทับ) ---
+    else:
+        # กรณีไม่ลงทะเบียน (Register=False) -> จบที่หน้าสรุป -> ต้องกดเสร็จสิ้น
+        log("...[Logic] ไม่ลงทะเบียน -> เตรียมกดปุ่ม 'Settle' (เสร็จสิ้น)...")
+        
+        # 1. รอให้หน้าจอคืนสภาพหลัง Popup "ทำรายการซ้ำ" ปิดไป
+        time.sleep(2.0) 
+        
+        # 2. ดึง Focus กลับมาที่หน้าหลัก (ใช้แค่ set_focus พอ ไม่คลิกมั่วแล้ว)
+        try: main_window.set_focus()
+        except: pass
+        
+        # 3. กดปุ่ม "เสร็จสิ้น" (ID: SettleCommand) โดยตรง
+        log("...กำลังค้นหาและกดปุ่ม ID: 'SettleCommand'...")
+        
+        # เรียกใช้ฟังก์ชัน click_element_by_id ที่มีอยู่แล้ว
+        if click_element_by_id(main_window, "SettleCommand", timeout=5):
+            log(" -> [SUCCESS] กดปุ่ม Settle (เสร็จสิ้น) เรียบร้อย")
+        else:
+            # Fallback: ถ้าหาปุ่มไม่เจอจริงๆ ค่อยกด Enter (เป็นแผนสำรอง)
+            log(" -> [WARN] หาปุ่ม SettleCommand ไม่เจอ -> ลองกด Enter แทน")
+            main_window.type_keys("{ENTER}")
+            
+        time.sleep(1.0)
 
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
