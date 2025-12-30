@@ -594,6 +594,7 @@ def run_smart_scenario(main_window, config):
         sender_postal = config['TEST_DATA'].get('SenderPostalCode', '10110') # ต้นทาง (อ่านจาก [TEST_DATA])
         
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
+        register_flag = config['DEPOSIT_ENVELOPE'].get('RegisterOption', 'False')
         special_options_str = config['DEPOSIT_ENVELOPE'].get('SpecialOptions', '')
         add_insurance_flag = config['DEPOSIT_ENVELOPE'].get('AddInsurance', 'False')
         insurance_amt = config['DEPOSIT_ENVELOPE'].get('Insurance', '1000')
