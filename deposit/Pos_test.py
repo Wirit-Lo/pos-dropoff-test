@@ -687,6 +687,16 @@ def run_smart_scenario(main_window, config):
     # [สำคัญ] กด Enter เพื่อไปขั้นตอนถัดไป
     log("...กดถัดไป (Enter) เพื่อเข้าสู่ขั้นตอนต่อไป...")
     main_window.type_keys("{ENTER}")
+
+    # 1. ค้นหาที่อยู่ และรับค่าสถานะว่าเป็น Manual Mode หรือไม่?
+    is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
+    
+    time.sleep(step_delay)
+    
+    # 2. กรอกรายละเอียดผู้รับ (ส่ง is_manual_mode และ manual_data เข้าไป)
+    process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
+    
+    time.sleep(step_delay)
     
     # -------------------------------------------------------------------------
     # Flow แยก:
