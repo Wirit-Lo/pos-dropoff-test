@@ -20,8 +20,6 @@ def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
 # ================= 2. Helper Functions =================
-# ฟังก์ชันใหม่: ค้นหา Element แบบ Smart (Text หรือ ID)
-# ***** แปะเพิ่มเข้าไปในไฟล์ main.py (เช่น ไว้ต่อจาก smart_click_with_scroll) *****
 def find_and_fill_smart(window, target_name, target_id_keyword, value):
     try:
         # [แก้ไข] ถ้าค่าว่าง ให้ข้ามเลย ไม่ต้องหาและไม่ต้องคลิก (เพื่อความเร็ว)
@@ -70,7 +68,8 @@ def find_and_fill_smart(window, target_name, target_id_keyword, value):
     except Exception as e:
         log(f"[!] Error find_and_fill: {e}")
         return False
-    
+
+
 def click_scroll_arrow_smart(window, direction='right', repeat=5):
     """
     ฟังก์ชันเลื่อนหน้าจอโดยใช้ "แป้นพิมพ์" (Keyboard Arrow Keys) ล้วน 100%
@@ -450,6 +449,7 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
 
     return is_manual_mode
 
+
 def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, manual_data):
     """
     หน้ากรอกรายละเอียด: กรอกข้อมูลตามลำดับ 1-8 ที่ระบุมา
@@ -517,6 +517,7 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
     for i in range(3):
         log(f"   -> Enter ครั้งที่ {i+1}")
         smart_next(window); time.sleep(1.8)
+
 
 def process_repeat_transaction(window, should_repeat):
     """
@@ -596,7 +597,6 @@ def process_payment(window, payment_method, received_amount):
 def run_smart_scenario(main_window, config):
     try:
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
-        postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
         receiver_postal = config['DEPOSIT_ENVELOPE'].get('ReceiverPostalCode', '10110') # ปลายทาง
         sender_postal = config['TEST_DATA'].get('SenderPostalCode', '10110') # ต้นทาง
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
@@ -625,6 +625,7 @@ def run_smart_scenario(main_window, config):
             'District': config['MANUAL_ADDRESS_FALLBACK'].get('District', '') if 'MANUAL_ADDRESS_FALLBACK' in config else '',
             'SubDistrict': config['MANUAL_ADDRESS_FALLBACK'].get('SubDistrict', '') if 'MANUAL_ADDRESS_FALLBACK' in config else ''
         }
+
     except: log("[Error] อ่าน Config ไม่สำเร็จ"); return
 
     log(f"--- เริ่มต้นการทำงาน ---")
@@ -632,7 +633,7 @@ def run_smart_scenario(main_window, config):
 
     if not smart_click(main_window, "รับฝากสิ่งของ"): return
     time.sleep(step_delay)
-    process_sender_info_popup(main_window, phone, sender_postal)
+    process_sender_info_popup(main_window, phone, sender_postal) 
     time.sleep(step_delay)
     if not smart_click_with_scroll(main_window, "ซอง A4 เอกสาร", scroll_dist=scroll_dist): return
     time.sleep(step_delay)
@@ -671,14 +672,30 @@ def run_smart_scenario(main_window, config):
         return
 
     main_window.type_keys("{ENTER}")
+
+    if add_insurance_flag.lower() in ['true', 'yes']:
+        log(f"...ใส่วงเงิน {insurance_amt}...")
+        if click_element_by_id(main_window, "CoverageButton"):
+            if wait_until_id_appears(main_window, "CoverageAmount", timeout=5):
+                for child in main_window.descendants():
+                    if child.element_info.automation_id == "CoverageAmount":
+                        child.click_input(); child.type_keys(str(insurance_amt), with_spaces=True); break
+                time.sleep(0.5)
+                submits = [c for c in main_window.descendants() if c.element_info.automation_id == "LocalCommand_Submit"]
+                submits.sort(key=lambda x: x.rectangle().top)
+                if submits: submits[0].click_input()
+                else: main_window.type_keys("{ENTER}")
     
     time.sleep(1)
-    smart_next(main_window) 
+    smart_next(main_window)
     time.sleep(step_delay)
+
     process_special_services(main_window, special_services)
     time.sleep(step_delay)
+
     process_sender_info_page(main_window)
     time.sleep(step_delay)
+    
     # 1. ค้นหาที่อยู่ และรับค่าสถานะว่าเป็น Manual Mode หรือไม่?
     is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
     
@@ -688,32 +705,39 @@ def run_smart_scenario(main_window, config):
     process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
     
     time.sleep(step_delay)
-    
-    # ----------------------------------------------------
-    # 1. เรียกฟังก์ชัน และรับค่ากลับมาด้วยว่า "ตกลงเมื่อกี้ตั้งใจจะ Repeat ใช่ไหม"
-    is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
-    
-    # 2. เช็คเลยว่า ถ้าฟังก์ชันบอกว่าใช่ (is_repeat_mode = True) -> ให้จบการทำงานตรงนี้ทันที
-    if is_repeat_mode:
-        log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที (Safe Exit)")
-        log("\n[SUCCESS] จบการทำงาน (Repeat Mode)")
-        return # ออกจากฟังก์ชันหลักทันที
-    
-    # ถ้าไม่เข้าเงื่อนไขด้านบน (คือ is_repeat_mode = False) ถึงจะลงมาทำบรรทัดนี้
-    # 2. ชำระเงิน (จะทำงานก็ต่อเมื่อเงื่อนไขข้างบนไม่เป็นจริง)
-    process_payment(main_window, pay_method, pay_amount)
 
+    
+    log("--- หน้า: ทำรายการซ้ำ (บังคับจบรายการ: กด ESC) ---")
+    
+    # วนลูปรอ Popup เด้งขึ้นมาสักครู่ (เผื่อเครื่องช้า)
+    found_repeat_popup = False
+    for _ in range(10): # รอประมาณ 5 วินาที
+        if wait_for_text(main_window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "เพิ่มธุรกรรม"], timeout=0.5):
+            found_repeat_popup = True
+            break
+        time.sleep(0.5)
+        
+    if found_repeat_popup:
+        log("   [Info] เจอ Popup ทำรายการซ้ำ -> กด ESC")
+        main_window.type_keys("{ESC}")
+    else:
+        log("   [Info] ไม่เจอ Popup (Timeout) -> กด ESC เผื่อไว้")
+        main_window.type_keys("{ESC}")
+        
+    time.sleep(1.0) # รอหน้าต่างปิด
+    
+    process_payment(main_window, pay_method, pay_amount)
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
-# ================= 5. Start App =================
 if __name__ == "__main__":
-    conf = load_config()
+    target_config = 'config.ini' 
+    conf = load_config(target_config)
     if conf:
-        log("Connecting...")
+        log(f"Connecting... (Using Config: {target_config})")
         try:
             wait = int(conf['SETTINGS'].get('ConnectTimeout', 10))
             app_title = conf['APP']['WindowTitle']
-            log(f"Connecting to Title: {app_title} (Wait: {wait}s)")
+            log(f"Connecting to Title: {app_title}")
             app = Application(backend="uia").connect(title_re=app_title, timeout=wait)
             main_window = app.top_window()
             if main_window.exists():
