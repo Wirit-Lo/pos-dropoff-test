@@ -544,34 +544,36 @@ def process_repeat_transaction(window, should_repeat):
     return is_repeat_intent
 
 def process_payment(window, payment_method, received_amount):
-    log("--- ขั้นตอนการชำระเงิน (โหมด Fast Cash) ---")
+    log("--- ขั้นตอนการชำระเงิน (โหมด Fast Cash แก้ไข Timing) ---")
     
     # 1. กดรับเงิน (หน้าหลัก)
     log("...ค้นหาปุ่ม 'รับเงิน'...")
-    time.sleep(1.5)
+    time.sleep(2.0) # [เพิ่ม] หน่วงก่อนกดรับเงินเล็กน้อย
     
     if smart_click(window, "รับเงิน"):
-        log("...เข้าสู่หน้าชำระเงิน รอโหลด 1.5s...")
-        time.sleep(1.5)
+        log("...กดรับเงินสำเร็จ -> รอหน้าจอชำระเงินโหลด (รอปุ่ม EnableFastCash)...")
+        # [แก้ไข] ไม่ใช้ sleep ตายตัว แต่ใช้การรอจนกว่าปุ่มจะขึ้น
     else:
         log("[WARN] หาปุ่ม 'รับเงิน' ไม่เจอ")
         return
 
-    # 2. กดปุ่ม Fast Cash (ID: EnableFastCash)
-    # ปุ่มนี้คือการจ่ายเงินแบบด่วน (ช่อง 2) ไม่ต้องกรอกตัวเลข
-    log("...กำลังกดปุ่ม Fast Cash (ID: EnableFastCash)...")
+    # [สำคัญ] บังคับรอจนกว่าปุ่ม Fast Cash จะโผล่มาจริงๆ (รอสูงสุด 10 วิ)
+    # วิธีนี้จะแก้ปัญหาเครื่องช้าหรือ Animation นานได้
+    wait_until_id_appears(window, "EnableFastCash", timeout=10)
+    time.sleep(0.5) # พักอีกนิดหลังปุ่มโผล่ เพื่อความชัวร์
+
+    # 2. กดปุ่ม Fast Cash
+    log("...เห็นปุ่มแล้ว -> กำลังกด Fast Cash (ID: EnableFastCash)...")
     
-    # ใช้ฟังก์ชัน click_element_by_id ที่มีอยู่แล้วในโค้ด
     if click_element_by_id(window, "EnableFastCash", timeout=5):
         log("[/] กดปุ่ม Fast Cash สำเร็จ -> ระบบดำเนินการตัดเงินทันที")
     else:
-        log("[WARN] ไม่เจอปุ่ม ID 'EnableFastCash' -> ลองกด Enter เผื่อเข้าระบบอัตโนมัติ")
+        log("[WARN] ไม่เจอปุ่ม ID 'EnableFastCash' (อาจจะคลิกไม่ติด) -> ลองกด Enter ช่วย")
         window.type_keys("{ENTER}")
 
     # 3. จบรายการ
-    # รอหน้าสรุป/เงินทอน แล้วกด Enter เพื่อปิดบิล
-    log("...รอหน้าสรุป/เงินทอน -> กด Enter ปิดรายการ...")
-    time.sleep(2.0) # รอ Animation จ่ายเงิน
+    log("...รอหน้าสรุป/เงินทอน (3s) -> กด Enter ปิดรายการ...")
+    time.sleep(3.0) # [เพิ่ม] เผื่อ Animation การตัดเงินนาน
     window.type_keys("{ENTER}")
     time.sleep(1)
 
