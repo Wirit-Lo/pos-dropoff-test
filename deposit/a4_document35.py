@@ -722,13 +722,12 @@ def run_smart_scenario(main_window, config):
     # เรียกใช้ฟังก์ชัน click_element_by_id ที่มีอยู่แล้ว เพื่อกดปุ่ม Settle
     if click_element_by_id(main_window, "SettleCommand", timeout=5):
         log(" -> [SUCCESS] กดปุ่ม Settle (เสร็จสิ้น) เรียบร้อย")
+        log("...[Logic] ดำเนินการชำระเงินต่อ (Fast Cash)...")
+        process_payment(main_window, pay_method, pay_amount)
     else:
         # Fallback: ถ้าหาปุ่มไม่เจอ ให้กด Enter แทน
         log(" -> [WARN] หาปุ่ม SettleCommand ไม่เจอ -> ลองกด Enter เพื่อจบรายการ")
         main_window.type_keys("{ENTER}")
-        # 4. [เพิ่มเติม] เรียกฟังก์ชันจ่ายเงินต่อทันที
-        log("...[Logic] ดำเนินการชำระเงินต่อ (Fast Cash)...")
-        process_payment(main_window, pay_method, pay_amount)
         
     time.sleep(1.0)
 
