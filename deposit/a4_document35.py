@@ -713,8 +713,21 @@ def run_smart_scenario(main_window, config):
         log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที")
         return # ออกจากฟังก์ชันทันที
     
-    # 3. ถ้าไม่เข้าเงื่อนไขบน ก็จะลงมาทำชำระเงินต่อ
-    process_payment(main_window, pay_method, pay_amount)
+    # 3. [แก้ไข] ตัดขั้นตอนชำระเงินออก -> กดปุ่ม 'เสร็จสิ้น' (SettleCommand) ทันที
+    log("...[Logic] ข้ามการชำระเงิน -> เตรียมกดปุ่ม 'เสร็จสิ้น' (SettleCommand)...")
+    
+    # รอให้หน้าจอคืนสภาพหลัง Popup ปิดไป
+    time.sleep(1.5)
+    
+    # เรียกใช้ฟังก์ชัน click_element_by_id ที่มีอยู่แล้ว เพื่อกดปุ่ม Settle
+    if click_element_by_id(main_window, "SettleCommand", timeout=5):
+        log(" -> [SUCCESS] กดปุ่ม Settle (เสร็จสิ้น) เรียบร้อย")
+    else:
+        # Fallback: ถ้าหาปุ่มไม่เจอ ให้กด Enter แทน
+        log(" -> [WARN] หาปุ่ม SettleCommand ไม่เจอ -> ลองกด Enter เพื่อจบรายการ")
+        main_window.type_keys("{ENTER}")
+        
+    time.sleep(1.0)
 
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
