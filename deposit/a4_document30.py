@@ -808,14 +808,13 @@ def run_smart_scenario(main_window, config):
         # 1. รอให้หน้าจอคืนสภาพหลัง Popup "ทำรายการซ้ำ" ปิดไป
         time.sleep(2.0) 
         
-        # 2. ดึง Focus กลับมาที่หน้าหลัก (ใช้แค่ set_focus พอ ไม่คลิกมั่วแล้ว)
+        # 2. ดึง Focus กลับมาที่หน้าหลัก
         try: main_window.set_focus()
         except: pass
         
         # 3. กดปุ่ม "เสร็จสิ้น" (ID: SettleCommand) โดยตรง
         log("...กำลังค้นหาและกดปุ่ม ID: 'SettleCommand'...")
         
-        # เรียกใช้ฟังก์ชัน click_element_by_id ที่มีอยู่แล้ว
         if click_element_by_id(main_window, "SettleCommand", timeout=5):
             log(" -> [SUCCESS] กดปุ่ม Settle (เสร็จสิ้น) เรียบร้อย")
         else:
@@ -824,6 +823,10 @@ def run_smart_scenario(main_window, config):
             main_window.type_keys("{ENTER}")
             
         time.sleep(1.0)
+
+        # 4. [เพิ่มเติม] เรียกฟังก์ชันจ่ายเงินต่อทันที
+        log("...[Logic] ดำเนินการชำระเงินต่อ (Fast Cash)...")
+        process_payment(main_window, pay_method, pay_amount)
 
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
