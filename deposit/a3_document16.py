@@ -733,8 +733,6 @@ def run_smart_scenario(main_window, config):
     process_payment(main_window, pay_method, pay_amount)
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
-    log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
-
 # ================= 5. Start App =================
 if __name__ == "__main__":
     conf = load_config()
