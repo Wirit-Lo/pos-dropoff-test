@@ -1,13 +1,52 @@
 # ไฟล์: helpers.py
 import time
+import sys
+import functools
+import datetime
 from pywinauto import mouse
 
-# --- ส่วน Log ---
 def log(message):
-    import datetime
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
+def stop_script_immediately(reason):
+    """
+    ฟังก์ชันสั่งตาย: หยุดโปรแกรมทันทีเมื่อถูกเรียก
+    """
+    log(f"\n{'='*40}")
+    log(f"[!!! CRITICAL ERROR - หยุดฉุกเฉิน !!!]")
+    log(f"สาเหตุ: {reason}")
+    log(f"{'='*40}\n")
+    
+    print("\a") # ส่งเสียงเตือน
+    input(">>> กด Enter เพื่อปิดโปรแกรม... <<<")
+    sys.exit(1)
+
+def strict_check(func):
+    """
+    🛡️ Decorator: ตัวคุมกัน Error อัตโนมัติ
+    วิธีใช้: แปะ @strict_check ไว้บนหัวฟังก์ชันที่ต้องการ
+    ผลลัพธ์: ถ้าฟังก์ชันนั้น return False ระบบจะสั่งหยุดทันที
+    """
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        # 1. เรียกใช้ฟังก์ชันจริง
+        result = func(*args, **kwargs)
+        
+        # 2. ตรวจสอบผลลัพธ์
+        if result is False:
+            # ดึงชื่อฟังก์ชันและข้อมูลมาโชว์ตอน Error
+            func_name = func.__name__
+            # พยายามดึงชื่อ Target (Argument ตัวที่ 2) มาโชว์เพื่อให้รู้ว่า error ที่ปุ่มไหน
+            target_info = f" (Target: {args[1]})" if len(args) > 1 else ""
+            
+            # เรียกสั่งตายทันที!
+            stop_script_immediately(f"ฟังก์ชัน '{func_name}' ทำงานไม่สำเร็จ{target_info}")
+            
+        return result
+    return wrapper
+
 # --- ส่วน Wait & Check ---
+@strict_check
 def wait_for_text(window, text_list, timeout=10):
     if isinstance(text_list, str): text_list = [text_list]
     start = time.time()
@@ -21,6 +60,7 @@ def wait_for_text(window, text_list, timeout=10):
         time.sleep(0.5)
     return False
 
+@strict_check
 def wait_until_id_appears(window, exact_id, timeout=10):
     start = time.time()
     while time.time() - start < timeout:
@@ -32,6 +72,7 @@ def wait_until_id_appears(window, exact_id, timeout=10):
     return False
 
 # --- ส่วน Click & Fill ---
+@strict_check
 def smart_click(window, criteria_list, timeout=5):
     if isinstance(criteria_list, str): criteria_list = [criteria_list]
     start = time.time()
@@ -47,6 +88,7 @@ def smart_click(window, criteria_list, timeout=5):
         time.sleep(0.3)
     return False
 
+@strict_check
 def click_element_by_id(window, exact_id, timeout=5):
     start = time.time()
     while time.time() - start < timeout:
@@ -60,6 +102,7 @@ def click_element_by_id(window, exact_id, timeout=5):
         time.sleep(0.5)
     return False
 
+@strict_check
 def find_and_fill_smart(window, target_name, target_id_keyword, value, timeout=15):
     if not value or str(value).strip() == "": return False
     log(f"...รอช่อง '{target_name}' (Max {timeout}s)...")
@@ -87,16 +130,21 @@ def find_and_fill_smart(window, target_name, target_id_keyword, value, timeout=1
     log(f"[WARN] หาช่อง '{target_name}' ไม่เจอ")
     return False
 
+@strict_check  
 def smart_next(window):
     submits = [c for c in window.descendants() if c.element_info.automation_id == "LocalCommand_Submit" and c.is_visible()]
     if submits:
         submits.sort(key=lambda x: x.rectangle().top)
         submits[-1].click_input()
         log("   [/] กดปุ่ม 'ถัดไป'")
+        return True # <--- ต้องเพิ่มบรรทัดนี้
     else:
         window.type_keys("{ENTER}")
+        log("   [/] กด Enter (แทนปุ่มถัดไป)") # เพิ่ม log เพื่อความชัดเจน
+        return True # <--- ต้องเพิ่มบรรทัดนี้
 
 # --- ฟังก์ชันเฉพาะทาง ---
+@strict_check
 def click_toggle_inside_parent(window, parent_id):
     parents = [c for c in window.descendants() if c.element_info.automation_id == parent_id]
     if parents:
@@ -105,7 +153,7 @@ def click_toggle_inside_parent(window, parent_id):
     return False
 
 # --- วางต่อท้ายไฟล์ helpers.py ---
-
+@strict_check
 def click_scroll_arrow_smart(window, direction='right', repeat=5):
     """ใช้ช่วยเลื่อนหน้าจอในฟังก์ชัน Rotate Logic"""
     try:
@@ -118,6 +166,7 @@ def click_scroll_arrow_smart(window, direction='right', repeat=5):
         return True
     except: return False
 
+@strict_check
 def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
     """(สำคัญ) ใช้หาปุ่มบริการ 'ธนาณัติธรรมดา' ที่อาจหลบอยู่"""
     log(f"...กำลังค้นหาปุ่มบริการ ID: '{target_id}'...")
@@ -144,7 +193,7 @@ def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
     return False
 
 # --- วางต่อท้ายใน helpers.py ---
-
+@strict_check
 def select_item_from_dropdown_list(window, combo_id, target_text):
     """
     ฟังก์ชันเลือก Dropdown (ฉบับใช้ F4 ล้วน): ตัดการคลิกเมาส์ออก เพื่อแก้ปัญหา Focus
@@ -203,7 +252,7 @@ def select_item_from_dropdown_list(window, combo_id, target_text):
     return False
 
 # --- วางต่อท้ายไฟล์ helpers.py ---
-
+@strict_check
 def select_first_list_item_in_group(window, group_id, timeout=5):
     """
     รอให้ Group (เช่น 'SpecificPostOffice') ปรากฏ
@@ -240,7 +289,7 @@ def select_first_list_item_in_group(window, group_id, timeout=5):
     return False
 
 # --- วางต่อท้ายไฟล์ helpers.py ---
-
+@strict_check
 def robust_fill_and_verify(window, target_id, value, timeout=15):
     """
     ฟังก์ชันกรอกแบบ 'กัดไม่ปล่อย' (100% Guarantee)
@@ -295,7 +344,7 @@ def robust_fill_and_verify(window, target_id, value, timeout=15):
     log(f"[X] หมดเวลา! ไม่สามารถกรอก '{value}' ได้")
     return False
 
-
+@strict_check
 def wait_and_select_first_item_strict(window, group_id, timeout=10):
     """
     รอจนกว่า 'รายการ' จะโผล่มาจริงๆ (ไม่ใช่แค่กรอบ Group)
@@ -335,3 +384,4 @@ def wait_and_select_first_item_strict(window, group_id, timeout=10):
         
     log("[X] รอนานเกินไป รายการไม่ขึ้น")
     return False
+

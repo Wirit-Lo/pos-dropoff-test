@@ -1,8 +1,8 @@
 import configparser
 import os
 import time
+from helpers import ensure, robust_fill_and_verify, wait_and_select_first_item_strict, find_and_fill_smart, smart_next, smart_click
 from pywinauto.application import Application
-from helpers import robust_fill_and_verify, wait_and_select_first_item_strict, wait_for_text, find_and_fill_smart, smart_next
 
 # --- ดึงฟังก์ชันจากไฟล์ helpers.py มาใช้ ---
 from helpers import (
