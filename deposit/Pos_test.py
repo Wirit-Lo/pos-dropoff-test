@@ -19,9 +19,34 @@ def load_config(filename='config.ini'):
 def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
-# ================= 2. Helper Functions (Core Tools) =================
 
 # ================= 2. Helper Functions (Auto-Wait Version) =================
+def click_toggle_inside_parent(window, parent_id):
+    """
+    ค้นหา Parent ก่อน แล้วเจาะจงคลิกที่ 'SwitchThumb' ด้านใน
+    """
+    # 1. หาตัวแม่ (Parent)
+    parents = [c for c in window.descendants() if c.element_info.automation_id == parent_id]
+    
+    if parents:
+        target_parent = parents[0]
+        
+        # 2. หาตัวลูกชื่อ 'SwitchThumb' ที่อยู่ภายในตัวแม่นี้เท่านั้น
+        thumbs = [c for c in target_parent.descendants() if c.element_info.automation_id == "SwitchThumb"]
+        
+        if thumbs:
+            log(f"   -> เจอ SwitchThumb ใน {parent_id} -> กำลังกด...")
+            thumbs[0].click_input() # สั่งกดที่ปุ่มสวิตช์โดยตรง
+            return True
+        else:
+            # สำรอง: ถ้าหาปุ่มสวิตช์ไม่เจอ ให้ลองกดที่ Label แทน
+            labels = [c for c in target_parent.descendants() if c.element_info.automation_id == "LabelForToggle"]
+            if labels:
+                labels[0].click_input()
+                return True
+                
+    log(f"[WARN] หา SwitchThumb ใน {parent_id} ไม่เจอ")
+    return False
 
 def find_and_fill_smart(window, target_name, target_id_keyword, value, timeout=15):
     """
@@ -393,20 +418,21 @@ def run_smart_scenario(main_window, config):
     wait_until_id_appears(main_window, "TransferOption_PaperNotice", timeout=10)
     
     if target_opt:
-        # 1. ตอบรับธรรมดา (Paper) -> ใช้ ID: TransferOption_PaperNotice
+        # 1. ตอบรับธรรมดา (Paper)
         if 'paper' in target_opt or 'ธรรมดา' in target_opt:
-            log("...กำลังเลือก: ตอบรับธรรมดา (ID: TransferOption_PaperNotice)...")
-            click_element_by_id(main_window, "TransferOption_PaperNotice")
+            log("...กำลังเลือก: ตอบรับธรรมดา...")
+            # แก้ตรงนี้: ใช้ฟังก์ชันเจาะจงกดลูก
+            click_toggle_inside_parent(main_window, "TransferOption_PaperNotice")
             
-        # 2. ตอบรับด่วน (EMS) -> ใช้ ID: TransferOption_EMSNotice
+        # 2. ตอบรับด่วน (EMS)
         elif 'ems' in target_opt or 'ด่วน' in target_opt:
-            log("...กำลังเลือก: ตอบรับด่วนพิเศษ (ID: TransferOption_EMSNotice)...")
-            click_element_by_id(main_window, "TransferOption_EMSNotice")
+            log("...กำลังเลือก: ตอบรับด่วนพิเศษ...")
+            click_toggle_inside_parent(main_window, "TransferOption_EMSNotice")
             
-        # 3. SMS -> ใช้ ID: TransferOption_SMSNotice
+        # 3. SMS
         elif 'sms' in target_opt:
-            log("...กำลังเลือก: ส่ง SMS (ID: TransferOption_SMSNotice)...")
-            click_element_by_id(main_window, "TransferOption_SMSNotice")
+            log("...กำลังเลือก: ส่ง SMS...")
+            click_toggle_inside_parent(main_window, "TransferOption_SMSNotice")
 
     # กดถัดไป
     smart_next(main_window)
