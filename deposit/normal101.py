@@ -34,7 +34,7 @@ def process_sender_info_popup(window, phone, sender_postal):
     """จัดการหน้าข้อมูลผู้ส่งแบบ Safe Mode (รอจนกว่าจะพร้อม)"""
     
     # 1. รอให้หน้า Popup ขึ้นมาก่อน (สังเกตจากคำว่า 'ที่อยู่' หรือ 'รหัสไปรษณีย์')
-    wait_for_text(window, ["ที่อยู่", "รหัสไปรษณีย์", "ข้อมูลผู้ส่ง"], timeout=10)
+    wait_for_text(window, ["ที่อยู่", "รหัสไปรษณีย์", "ข้อมูลผู้ส่ง"])
     
     # กดปุ่มอ่านบัตรประชาชน
     if smart_click(window, "อ่านบัตรประชาชน", timeout=5): 
@@ -43,10 +43,10 @@ def process_sender_info_popup(window, phone, sender_postal):
         time.sleep(5.0) 
 
         # 1. กรอกรหัสไปรษณีย์ (ฟังก์ชันนี้จะวนรอจนกว่าช่องจะโผล่และพิมพ์ได้)
-        find_and_fill_smart(window, "รหัสไปรษณีย์", "PostalCode", sender_postal, timeout=10)
+        find_and_fill_smart(window, "รหัสไปรษณีย์", "PostalCode", sender_postal)
         
         # 2. กรอกเบอร์โทรศัพท์ (ฟังก์ชันนี้จะวนรอจนกว่าช่องจะโผล่)
-        if not find_and_fill_smart(window, "เบอร์โทรศัพท์", "PhoneNumber", phone, timeout=10):
+        if not find_and_fill_smart(window, "เบอร์โทรศัพท์", "PhoneNumber", phone):
             # Fallback
             find_and_fill_smart(window, "หมายเลขโทรศัพท์", "Phone", phone, timeout=5)
         
@@ -65,7 +65,7 @@ def process_payment(window, payment_method, received_amount):
     # 1. กดรับเงิน (หน้าหลัก)
     log("...กำลังค้นหาปุ่ม 'รับเงิน'...")
     
-    wait_for_text(window, "รับเงิน", timeout=10)
+    wait_for_text(window, "รับเงิน")
     time.sleep(1.0) # รอ Animation นิ่งสนิท
     
     # กดปุ่ม
@@ -73,7 +73,7 @@ def process_payment(window, payment_method, received_amount):
         log("...กดปุ่มรับเงินสำเร็จ -> รอโหลดหน้าชำระเงิน...")
         
         # รอให้ปุ่ม Fast Cash (ID: EnableFastCash) 
-        if not wait_until_id_appears(window, "EnableFastCash", timeout=10):
+        if not wait_until_id_appears(window, "EnableFastCash"):
             log("[WARN] รอนานเกินไป หน้าชำระเงินไม่โหลด")
             return
             
@@ -124,12 +124,12 @@ def process_payment(window, payment_method, received_amount):
     log("--- ขั้นตอนการชำระเงิน (โหมด Fast Cash) ---")
     
     # รอจนกว่าปุ่ม 'รับเงิน' จะโผล่มา
-    wait_for_text(window, "รับเงิน", timeout=10)
+    wait_for_text(window, "รับเงิน")
     time.sleep(1.0) # รอ Animation หยุด
     
     if smart_click(window, "รับเงิน"):
         # รอเข้าหน้า Fast Cash
-        wait_until_id_appears(window, "EnableFastCash", timeout=10)
+        wait_until_id_appears(window, "EnableFastCash")
         time.sleep(1.0)
     else:
         log("[WARN] หาปุ่ม 'รับเงิน' ไม่เจอ")
@@ -170,13 +170,13 @@ def run_smart_scenario(main_window, config):
 
     # Step 1: เลือกเมนู "ธนาณัติในประเทศ"
     # ใช้ smart_click ซึ่งมีระบบรออยู่แล้ว (timeout=5)
-    if not smart_click(main_window, "ธนาณัติในประเทศ", timeout=10): 
+    if not smart_click(main_window, "ธนาณัติในประเทศ"): 
         log("[Error] หาเมนูไม่เจอ")
         return
     time.sleep(step_delay)
 
     # Step 2: เลือกเมนู "รับฝากธนาณัติ"
-    if not smart_click(main_window, "รับฝากธนาณัติ", timeout=10): return
+    if not smart_click(main_window, "รับฝากธนาณัติ"): return
     time.sleep(step_delay)
 
     # Step 3: เลือกบริการ
@@ -184,7 +184,7 @@ def run_smart_scenario(main_window, config):
     
     # [แก้ไข] เปลี่ยนจากรอ ShippingServiceList เป็นรอปุ่มบริการโดยตรง
     # จะได้ไม่รอเก้อ 10 วินาที ถ้าปุ่มมาแล้วก็กดเลย
-    wait_until_id_appears(main_window, target_service_id, timeout=10)
+    wait_until_id_appears(main_window, target_service_id)
     
     if not find_and_click_with_rotate_logic(main_window, target_service_id):
         log(f"[Error] ไม่เจอปุ่มบริการ {target_service_id}")
@@ -198,7 +198,7 @@ def run_smart_scenario(main_window, config):
     wait_for_text(main_window, ["ปลายทาง", "จำนวนเงิน"])
     
     # 1. กรอกจำนวนเงิน (ใช้แบบเดิมได้ เพราะถ้าพลาดไม่ได้ส่งผลต่อ List)
-    find_and_fill_smart(main_window, "จำนวนเงิน", "CurrencyAmount", amount, timeout=10)
+    find_and_fill_smart(main_window, "จำนวนเงิน", "CurrencyAmount", amount)
     
     # 2. กรอกรหัสไปรษณีย์ (ใช้ตัวใหม่: แบบตรวจสอบผลลัพธ์)
     # มันจะวนรอบจนกว่าเลข 10110 จะเข้าไปอยู่ในช่องจริงๆ
@@ -206,7 +206,7 @@ def run_smart_scenario(main_window, config):
         
         # 3. รอและเลือกรายการ (ใช้ตัวใหม่: รอจนกว่าลูกจะเกิด)
         # ระบบจะรอจนกว่า "พระโขนง" (หรือรายการแรก) จะโผล่มาให้กดจริงๆ
-        wait_and_select_first_item_strict(main_window, "SpecificPostOffice", timeout=10)
+        wait_and_select_first_item_strict(main_window, "SpecificPostOffice")
     
     else:
         log("[Error] กรอกรหัสไปรษณีย์ไม่สำเร็จ โปรแกรมจะหยุด")
@@ -221,7 +221,7 @@ def run_smart_scenario(main_window, config):
     log(f"--- หน้าเลือกบริการเสริม (Target: {target_opt}) ---")
     
     # รอให้หน้าจอโหลดเสร็จ (สังเกตจาก ID ของปุ่มแรก)
-    wait_until_id_appears(main_window, "TransferOption_PaperNotice", timeout=10)
+    wait_until_id_appears(main_window, "TransferOption_PaperNotice")
     
     if target_opt:
         # 1. ตอบรับธรรมดา (Paper)
@@ -246,15 +246,15 @@ def run_smart_scenario(main_window, config):
 
     # Step 7: หน้าข้อมูลผู้ส่ง (ยืนยัน)
     # รอให้ Header ขึ้น
-    wait_for_text(main_window, ["ผู้ฝากส่ง", "ข้อมูลผู้ส่ง"], timeout=10)
+    wait_for_text(main_window, ["ผู้ฝากส่ง", "ข้อมูลผู้ส่ง"])
     smart_next(main_window)
     time.sleep(step_delay)
 
     # Step 8: หน้าข้อมูลผู้รับ
-    wait_for_text(main_window, ["ผู้รับ", "ชื่อ", "นามสกุล"], timeout=10)
+    wait_for_text(main_window, ["ผู้รับ", "ชื่อ", "นามสกุล"])
     
-    find_and_fill_smart(main_window, "ชื่อ", "CustomerFirstName", rcv_fname, timeout=10)
-    find_and_fill_smart(main_window, "นามสกุล", "CustomerLastName", rcv_lname, timeout=10)
+    find_and_fill_smart(main_window, "ชื่อ", "CustomerFirstName", rcv_fname)
+    find_and_fill_smart(main_window, "นามสกุล", "CustomerLastName", rcv_lname)
     
     smart_next(main_window)
     time.sleep(step_delay)

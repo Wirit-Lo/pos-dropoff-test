@@ -2,6 +2,7 @@ import configparser
 import os
 import time
 from pywinauto.application import Application
+from helpers import robust_fill_and_verify, wait_and_select_first_item_strict, wait_for_text, find_and_fill_smart, smart_next
 
 # --- ดึงฟังก์ชันจากไฟล์ helpers.py มาใช้ ---
 from helpers import (
@@ -14,7 +15,7 @@ from helpers import (
     smart_next,
     click_toggle_inside_parent,
     find_and_click_with_rotate_logic,
-    select_item_from_dropdown_list
+    select_first_list_item_in_group
 )
 
 def load_config(filename='config.ini'):
@@ -179,7 +180,7 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
 
     # Step 3: เลือกบริการ
-    target_service_id = "PayOutDomesticSendMoneyPrison101"
+    target_service_id = "PayOutDomesticSendMoneyThailandPost102"
     
     # [แก้ไข] เปลี่ยนจากรอ ShippingServiceList เป็นรอปุ่มบริการโดยตรง
     # จะได้ไม่รอเก้อ 10 วินาที ถ้าปุ่มมาแล้วก็กดเลย
@@ -194,41 +195,30 @@ def run_smart_scenario(main_window, config):
     # (ใช้ฟังก์ชันใหม่ที่เขียนรอไว้แล้ว)
     process_sender_info_popup(main_window, sender_phone, sender_postal)
     
-    # Step 5: หน้าส่งเงิน
-    # รอให้แน่ใจว่าเข้าหน้าส่งเงินแล้ว (เช็คจากคำว่า 'จำนวนเงิน' หรือ ID ช่องกรอก)
-    wait_for_text(main_window, ["จำนวนเงิน"])
+    # Step 5
+    wait_for_text(main_window, ["ปลายทาง", "จำนวนเงิน"])
     
-    # กรอกจำนวนเงิน (Auto Wait)
+    # 1. กรอกจำนวนเงิน (ใช้แบบเดิมได้ เพราะถ้าพลาดไม่ได้ส่งผลต่อ List)
     find_and_fill_smart(main_window, "จำนวนเงิน", "CurrencyAmount", amount)
     
+    # 2. กรอกรหัสไปรษณีย์ (ใช้ตัวใหม่: แบบตรวจสอบผลลัพธ์)
+    # มันจะวนรอบจนกว่าเลข 10110 จะเข้าไปอยู่ในช่องจริงๆ
+    if robust_fill_and_verify(main_window, "SpecificPostOfficeFilter", dest_postal, timeout=15):
+        
+        # 3. รอและเลือกรายการ (ใช้ตัวใหม่: รอจนกว่าลูกจะเกิด)
+        # ระบบจะรอจนกว่า "พระโขนง" (หรือรายการแรก) จะโผล่มาให้กดจริงๆ
+        wait_and_select_first_item_strict(main_window, "SpecificPostOffice")
+    
+    else:
+        log("[Error] กรอกรหัสไปรษณีย์ไม่สำเร็จ โปรแกรมจะหยุด")
+        return
+
+    # กดถัดไป
     smart_next(main_window)
     time.sleep(step_delay)
 
-   # Step 6: เลือกบริการเสริม (Services Option)
-    target_opt = str(options_str).strip().lower()
-    log(f"--- หน้าเลือกบริการเสริม (Target: {target_opt}) ---")
-    
-    # รอให้หน้าจอโหลดเสร็จ (สังเกตจาก ID ของปุ่มแรก)
-    wait_until_id_appears(main_window, "TransferOption_PaperNotice")
-    
-    if target_opt:
-        # 1. ตอบรับธรรมดา (Paper)
-        if 'paper' in target_opt or 'ธรรมดา' in target_opt:
-            log("...กำลังเลือก: ตอบรับธรรมดา...")
-            # แก้ตรงนี้: ใช้ฟังก์ชันเจาะจงกดลูก
-            click_toggle_inside_parent(main_window, "TransferOption_PaperNotice")
-            
-        # 2. ตอบรับด่วน (EMS)
-        elif 'ems' in target_opt or 'ด่วน' in target_opt:
-            log("...กำลังเลือก: ตอบรับด่วนพิเศษ...")
-            click_toggle_inside_parent(main_window, "TransferOption_EMSNotice")
-            
-        # 3. SMS
-        elif 'sms' in target_opt:
-            log("...กำลังเลือก: ส่ง SMS...")
-            click_toggle_inside_parent(main_window, "TransferOption_SMSNotice")
-
-    # กดถัดไป
+   # Step 6: หน้ายอดเงินที่ส่ง กดถัดไป
+    wait_for_text(main_window, ["ยอดเงินที่ส่ง"])
     smart_next(main_window)
     time.sleep(step_delay)
 
@@ -238,28 +228,12 @@ def run_smart_scenario(main_window, config):
     smart_next(main_window)
     time.sleep(step_delay)
 
-    # Step 8: เลือกเรือนจำ และ กรอกชื่อผู้รับเงิน
-    log("--- หน้าข้อมูลผู้รับเงิน (เรือนจำ) ---")
+    # Step 8: หน้าข้อมูลผู้รับ
+    wait_for_text(main_window, ["ผู้รับ", "ชื่อ", "นามสกุล"])
     
-    # ดึงค่าจาก Config
-    prison_name = config['MO_PRISON'].get('PrisonName', 'ทัณฑสถาน')
-    prisoner_name = config['MO_PRISON'].get('PrisonerName', 'สมชาย')
-
-    # รอหน้าจอโหลด
-    wait_for_text(main_window, ["สน./สภ.", "รายชื่อเรือนจำ"])
-
-    # --- ส่วนที่แก้ไข ---
-    # เรียกฟังก์ชันใหม่: ส่ง ID ของ ComboBox ('SelectedSubList') ไปให้มันกดเอง
-    # ไม่ต้องกด smart_click("สน./สภ.") แยกแล้ว ให้ฟังก์ชันจัดการทีเดียว
-    if not select_item_from_dropdown_list(main_window, "SelectedSubList", prison_name):
-        log("[WARN] เลือกเรือนจำไม่สำเร็จ (อาจต้องเลือกเองด้วยมือ)")
+    find_and_fill_smart(main_window, "ชื่อ", "CustomerFirstName", rcv_fname)
+    find_and_fill_smart(main_window, "นามสกุล", "CustomerLastName", rcv_lname)
     
-    time.sleep(1.0) # รอ Pop-up ปิด
-
-    # 3. กรอกชื่อผู้รับเงิน
-    find_and_fill_smart(main_window, "", "Remarks", prisoner_name)
-    
-    # กดถัดไป
     smart_next(main_window)
     time.sleep(step_delay)
 
