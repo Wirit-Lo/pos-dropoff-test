@@ -201,3 +201,40 @@ def select_item_from_dropdown_list(window, combo_id, target_text):
             
     log(f"[X] หาไม่เจอ หรือ เลื่อนจนสุดแล้ว")
     return False
+
+# --- วางต่อท้ายไฟล์ helpers.py ---
+
+def select_first_list_item_in_group(window, group_id, timeout=5):
+    """
+    รอให้ Group (เช่น 'SpecificPostOffice') ปรากฏ
+    แล้วคลิก ListItem ตัวแรกสุดที่อยู่ข้างใน
+    """
+    log(f"...กำลังรอเลือกรายการแรกในกลุ่ม ID: '{group_id}'...")
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            # 1. หาตัวแม่ (Group)
+            groups = [c for c in window.descendants() if c.element_info.automation_id == group_id and c.is_visible()]
+            
+            if groups:
+                parent_group = groups[0]
+                # 2. หาตัวลูก (ListItem) ทั้งหมดในกลุ่มนี้
+                items = [c for c in parent_group.descendants() if c.element_info.control_type == 'ListItem']
+                
+                if items:
+                    target_item = items[0] # เลือกตัวแรกเสมอ [0]
+                    item_name = target_item.window_text()
+                    
+                    # คลิกเลย
+                    target_item.set_focus()
+                    target_item.click_input()
+                    log(f"   [/] เลือกรายการแรกสำเร็จ: '{item_name}'")
+                    return True
+        except Exception as e:
+            # กัน error กรณี ui เปลี่ยนกะทันหัน
+            pass
+        
+        time.sleep(0.5)
+        
+    log(f"[WARN] ไม่พบรายการให้เลือกในกลุ่ม '{group_id}' (หรืออาจเลือกไปแล้ว)")
+    return False

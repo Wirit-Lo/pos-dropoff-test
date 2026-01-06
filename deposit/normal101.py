@@ -13,7 +13,8 @@ from helpers import (
     find_and_fill_smart,
     smart_next,
     click_toggle_inside_parent,
-    find_and_click_with_rotate_logic
+    find_and_click_with_rotate_logic,
+    select_first_list_item_in_group
 )
 
 def load_config(filename='config.ini'):
@@ -201,8 +202,10 @@ def run_smart_scenario(main_window, config):
     find_and_fill_smart(main_window, "จำนวนเงิน", "CurrencyAmount", amount, timeout=10)
     
     # กรอกปลายทาง (Auto Wait)
-    find_and_fill_smart(main_window, "ปลายทาง", "SpecificPostOfficeFilter", dest_postal, timeout=10)
-    
+    if find_and_fill_smart(main_window, "ปลายทาง", "SpecificPostOfficeFilter", dest_postal, timeout=10):
+        
+        select_first_list_item_in_group(main_window, "SpecificPostOffice", timeout=5)
+
     smart_next(main_window)
     time.sleep(step_delay)
 
