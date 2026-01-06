@@ -195,7 +195,7 @@ def run_smart_scenario(main_window, config):
     # (ใช้ฟังก์ชันใหม่ที่เขียนรอไว้แล้ว)
     process_sender_info_popup(main_window, sender_phone, sender_postal)
     
-    wait_for_text(main_window, ["ปลายทาง", "จำนวนเงิน"], timeout=20) 
+    wait_for_text(main_window, ["ปลายทาง", "จำนวนเงิน"])
     
     # 1. กรอกจำนวนเงิน (ใช้แบบเดิมได้ เพราะถ้าพลาดไม่ได้ส่งผลต่อ List)
     find_and_fill_smart(main_window, "จำนวนเงิน", "CurrencyAmount", amount, timeout=10)

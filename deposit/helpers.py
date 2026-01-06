@@ -47,7 +47,7 @@ def strict_check(func):
 
 # --- ส่วน Wait & Check ---
 @strict_check
-def wait_for_text(window, text_list, timeout=10):
+def wait_for_text(window, text_list, timeout=60):
     if isinstance(text_list, str): text_list = [text_list]
     start = time.time()
     while time.time() - start < timeout:
@@ -61,7 +61,7 @@ def wait_for_text(window, text_list, timeout=10):
     return False
 
 @strict_check
-def wait_until_id_appears(window, exact_id, timeout=10):
+def wait_until_id_appears(window, exact_id, timeout=60):
     start = time.time()
     while time.time() - start < timeout:
         try:
