@@ -238,3 +238,100 @@ def select_first_list_item_in_group(window, group_id, timeout=5):
         
     log(f"[WARN] ไม่พบรายการให้เลือกในกลุ่ม '{group_id}' (หรืออาจเลือกไปแล้ว)")
     return False
+
+# --- วางต่อท้ายไฟล์ helpers.py ---
+
+def robust_fill_and_verify(window, target_id, value, timeout=15):
+    """
+    ฟังก์ชันกรอกแบบ 'กัดไม่ปล่อย' (100% Guarantee)
+    1. วนหาช่อง
+    2. สั่งพิมพ์
+    3. เช็คค่าในช่องว่าตรงกับที่พิมพ์ไหม ถ้าไม่ตรง -> พิมพ์ใหม่
+    """
+    log(f"...กำลังกรอก '{value}' ลงใน ID '{target_id}' (โหมดตรวจสอบ)...")
+    start = time.time()
+    
+    while time.time() - start < timeout:
+        try:
+            # 1. หา Element
+            elems = [c for c in window.descendants() if c.element_info.automation_id == target_id and c.is_visible()]
+            if not elems:
+                time.sleep(0.5) # ยังไม่เจอ ให้รอ
+                continue
+            
+            target = elems[0]
+            
+            # กรณีเจอ Edit Control ซ้อนข้างใน
+            if target.element_info.control_type != 'Edit':
+                edits = target.descendants(control_type="Edit")
+                if edits: target = edits[0]
+
+            # 2. เช็คค่าปัจจุบันก่อน (ถ้ามีอยู่แล้วและถูกแล้ว ก็จบเลย ไม่ต้องพิมพ์ซ้ำ)
+            current_val = target.window_text().strip()
+            if str(value) in current_val:
+                log(f"   [/] ข้อมูล '{value}' มีอยู่แล้วถูกต้อง")
+                return True
+
+            # 3. ถ้ายังไม่ถูก ให้ Focus และพิมพ์
+            target.set_focus()
+            target.click_input()
+            target.type_keys("^a{DELETE}", pause=0.1) # ลบของเก่า (Ctrl+A -> Del)
+            target.type_keys(str(value), with_spaces=True, pause=0.1) # พิมพ์ช้าๆ
+            
+            # 4. (สำคัญ) รอเช็คผลลัพธ์ทันที
+            time.sleep(0.5) 
+            if str(value) in target.window_text():
+                log(f"   [/] กรอกและตรวจสอบแล้ว: '{value}'")
+                return True
+            else:
+                log(f"   [Retry] พิมพ์ไปแล้วแต่ค่าไม่เข้า... ลองใหม่")
+        
+        except Exception as e:
+            log(f"   [Retry] เกิด Error ระหว่างกรอก: {e}")
+            pass
+            
+        time.sleep(1.0) # รอ 1 วิ ก่อนวนลูปใหม่
+
+    log(f"[X] หมดเวลา! ไม่สามารถกรอก '{value}' ได้")
+    return False
+
+
+def wait_and_select_first_item_strict(window, group_id, timeout=10):
+    """
+    รอจนกว่า 'รายการ' จะโผล่มาจริงๆ (ไม่ใช่แค่กรอบ Group)
+    แล้วกดเลือกตัวแรก
+    """
+    log(f"...รอรายการตัวเลือกใน '{group_id}'...")
+    start = time.time()
+    
+    while time.time() - start < timeout:
+        try:
+            # 1. หา Group แม่
+            groups = [c for c in window.descendants() if c.element_info.automation_id == group_id and c.is_visible()]
+            
+            if groups:
+                parent = groups[0]
+                # 2. นับจำนวนลูก (ListItem)
+                items = [c for c in parent.descendants() if c.element_info.control_type == 'ListItem']
+                
+                # ถ้าเจอรายการ (มากกว่า 0) แปลว่าโหลดเสร็จแล้ว
+                if len(items) > 0:
+                    target_item = items[0]
+                    target_text = target_item.window_text()
+                    
+                    # 3. กดเลือก
+                    target_item.set_focus()
+                    target_item.click_input()
+                    log(f"   [/] รายการโหลดเสร็จ -> เลือก: '{target_text}'")
+                    return True
+                else:
+                    # เจอ Group แต่ข้างในยังว่างเปล่า (กำลังหมุนติ้วๆ)
+                    # log("   ...รายการยังไม่มา (Loading)...")
+                    pass
+        except:
+            pass
+            
+        time.sleep(0.5) # รอแป๊บนึงแล้วเช็คใหม่
+        
+    log("[X] รอนานเกินไป รายการไม่ขึ้น")
+    return False

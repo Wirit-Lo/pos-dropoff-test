@@ -2,6 +2,7 @@ import configparser
 import os
 import time
 from pywinauto.application import Application
+from helpers import robust_fill_and_verify, wait_and_select_first_item_strict, wait_for_text, find_and_fill_smart, smart_next
 
 # --- ดึงฟังก์ชันจากไฟล์ helpers.py มาใช้ ---
 from helpers import (
@@ -13,7 +14,8 @@ from helpers import (
     find_and_fill_smart,
     smart_next,
     click_toggle_inside_parent,
-    find_and_click_with_rotate_logic
+    find_and_click_with_rotate_logic,
+    select_first_list_item_in_group
 )
 
 def load_config(filename='config.ini'):
@@ -95,8 +97,6 @@ def process_payment(window, payment_method, received_amount):
     time.sleep(2.0) # รอ Animation ใบเสร็จเด้ง
     window.type_keys("{ENTER}")
     time.sleep(1)
-
-# ================= 3. Business Logic Functions =================
 
 def process_sender_info_popup(window, phone, sender_postal):
     """จัดการหน้าข้อมูลผู้ส่ง: กดอ่านบัตร -> เติมรหัสปณ. -> เติมเบอร์โทร"""
@@ -195,16 +195,24 @@ def run_smart_scenario(main_window, config):
     # (ใช้ฟังก์ชันใหม่ที่เขียนรอไว้แล้ว)
     process_sender_info_popup(main_window, sender_phone, sender_postal)
     
-    # Step 5: หน้าส่งเงิน
-    # รอให้แน่ใจว่าเข้าหน้าส่งเงินแล้ว (เช็คจากคำว่า 'จำนวนเงิน' หรือ ID ช่องกรอก)
-    wait_for_text(main_window, ["จำนวนเงิน", "ปลายทาง"], timeout=10)
+    wait_for_text(main_window, ["ปลายทาง", "จำนวนเงิน"], timeout=20) 
     
-    # กรอกจำนวนเงิน (Auto Wait)
+    # 1. กรอกจำนวนเงิน (ใช้แบบเดิมได้ เพราะถ้าพลาดไม่ได้ส่งผลต่อ List)
     find_and_fill_smart(main_window, "จำนวนเงิน", "CurrencyAmount", amount, timeout=10)
     
-    # กรอกปลายทาง (Auto Wait)
-    find_and_fill_smart(main_window, "ปลายทาง", "SpecificPostOfficeFilter", dest_postal, timeout=10)
+    # 2. กรอกรหัสไปรษณีย์ (ใช้ตัวใหม่: แบบตรวจสอบผลลัพธ์)
+    # มันจะวนรอบจนกว่าเลข 10110 จะเข้าไปอยู่ในช่องจริงๆ
+    if robust_fill_and_verify(main_window, "SpecificPostOfficeFilter", dest_postal, timeout=15):
+        
+        # 3. รอและเลือกรายการ (ใช้ตัวใหม่: รอจนกว่าลูกจะเกิด)
+        # ระบบจะรอจนกว่า "พระโขนง" (หรือรายการแรก) จะโผล่มาให้กดจริงๆ
+        wait_and_select_first_item_strict(main_window, "SpecificPostOffice", timeout=10)
     
+    else:
+        log("[Error] กรอกรหัสไปรษณีย์ไม่สำเร็จ โปรแกรมจะหยุด")
+        return
+
+    # กดถัดไป
     smart_next(main_window)
     time.sleep(step_delay)
 
