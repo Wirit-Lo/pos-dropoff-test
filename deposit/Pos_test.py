@@ -207,27 +207,24 @@ def check_error_popup(window, delay=0.5):
 # ================= 3. Business Logic Functions =================
 
 def process_sender_info_popup(window, phone, sender_postal):
-    """(สำคัญ) จัดการ Popup ข้อมูลผู้ส่ง (Step 4)"""
+    """จัดการหน้าข้อมูลผู้ส่ง: กดอ่านบัตร -> เติมรหัสปณ. -> เติมเบอร์โทร"""
+    
+    # กดปุ่มอ่านบัตรประชาชนเพื่อดึงข้อมูล (หรือเพื่อให้แน่ใจว่าโฟกัสหน้านี้)
     if smart_click(window, "อ่านบัตรประชาชน", timeout=3): 
         time.sleep(1.5) 
-        try:
-            edits = window.descendants(control_type="Edit")
-            for edit in edits:
-                if "รหัสไปรษณีย์" in edit.element_info.name:
-                    if not edit.get_value():
-                        edit.click_input(); edit.type_keys(str(sender_postal), with_spaces=True)
-                    break 
-        except: pass
-        found_phone = False
-        for _ in range(3):
-            try:
-                for edit in window.descendants(control_type="Edit"):
-                    if "หมายเลขโทรศัพท์" in edit.element_info.name:
-                        edit.click_input(); edit.type_keys(str(phone), with_spaces=True)
-                        found_phone = True; break
-            except: pass
-            if found_phone: break
-            force_scroll_down(window, -5)
+
+        # 1. กรอกรหัสไปรษณีย์ (ถ้ายังว่างอยู่)
+        # ใช้ find_and_fill_smart ช่วยหาทั้ง "รหัสไปรษณีย์" หรือ ID ที่เกี่ยวข้อง
+        find_and_fill_smart(window, "รหัสไปรษณีย์", "PostalCode", sender_postal)
+
+        # 2. กรอกเบอร์โทรศัพท์ [จุดที่แก้ไข]
+        # เปลี่ยนคำค้นหาเป็น "เบอร์โทรศัพท์" ตามที่ปรากฏในรูปภาพ
+        if not find_and_fill_smart(window, "เบอร์โทรศัพท์", "PhoneNumber", phone):
+            # Fallback: ถ้าหาไม่เจอ ลองหาคำว่า "โทรศัพท์" หรือ "หมายเลขโทรศัพท์" เผื่อไว้
+            if not find_and_fill_smart(window, "โทรศัพท์", "Phone", phone):
+                find_and_fill_smart(window, "หมายเลขโทรศัพท์", "Phone", phone)
+        
+        # กดถัดไป
         smart_next(window)
 
 def process_payment(window, payment_method, received_amount):
