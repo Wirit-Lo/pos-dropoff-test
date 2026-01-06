@@ -385,29 +385,28 @@ def run_smart_scenario(main_window, config):
     smart_next(main_window)
     time.sleep(step_delay)
 
-    # Step 6: เลือกบริการเสริม
+   # Step 6: เลือกบริการเสริม (Services Option)
     target_opt = str(options_str).strip().lower()
-    
     log(f"--- หน้าเลือกบริการเสริม (Target: {target_opt}) ---")
     
-    # รอให้ตัวเลือกโหลดขึ้นมา (เช็คจากคำว่า "SMS" หรือ "ตอบรับ")
-    wait_for_text(main_window, ["SMS", "ตอบรับ", "บริการพิเศษ"], timeout=10)
+    # รอให้หน้าจอโหลดเสร็จ (สังเกตจาก ID ของปุ่มแรก)
+    wait_until_id_appears(main_window, "TransferOption_PaperNotice", timeout=10)
     
     if target_opt:
-        # 1. ตอบรับธรรมดา (Paper)
+        # 1. ตอบรับธรรมดา (Paper) -> ใช้ ID: TransferOption_PaperNotice
         if 'paper' in target_opt or 'ธรรมดา' in target_opt:
-            log("...กำลังเลือก: ตอบรับธรรมดา...")
-            click_element_by_fuzzy_id(main_window, "TransferOption_PaperNotice")
+            log("...กำลังเลือก: ตอบรับธรรมดา (ID: TransferOption_PaperNotice)...")
+            click_element_by_id(main_window, "TransferOption_PaperNotice")
             
-        # 2. ตอบรับด่วน (EMS) -> ใช้ elif เพื่อให้เลือกแค่อันเดียว
+        # 2. ตอบรับด่วน (EMS) -> ใช้ ID: TransferOption_EMSNotice
         elif 'ems' in target_opt or 'ด่วน' in target_opt:
-            log("...กำลังเลือก: ตอบรับด่วนพิเศษ...")
-            click_element_by_fuzzy_id(main_window, "TransferOption_EMSNotice")
+            log("...กำลังเลือก: ตอบรับด่วนพิเศษ (ID: TransferOption_EMSNotice)...")
+            click_element_by_id(main_window, "TransferOption_EMSNotice")
             
-        # 3. SMS -> ใช้ elif เพื่อให้เลือกแค่อันเดียว
+        # 3. SMS -> ใช้ ID: TransferOption_SMSNotice
         elif 'sms' in target_opt:
-            log("...กำลังเลือก: ส่ง SMS...")
-            click_element_by_fuzzy_id(main_window, "TransferOption_SMSNotice")
+            log("...กำลังเลือก: ส่ง SMS (ID: TransferOption_SMSNotice)...")
+            click_element_by_id(main_window, "TransferOption_SMSNotice")
 
     # กดถัดไป
     smart_next(main_window)
