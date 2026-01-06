@@ -230,29 +230,46 @@ def process_sender_info_popup(window, phone, sender_postal):
         smart_next(window)
 
 def process_payment(window, payment_method, received_amount):
-    """จัดการการจ่ายเงิน (รอปุ่มรับเงิน)"""
-    log("--- ขั้นตอนการชำระเงิน ---")
+    """
+    ฟังก์ชันชำระเงินแบบ Fast Cash (ไม่มีเงินทอน)
+    - ปรับปรุง: เพิ่มระบบรอปุ่ม (Wait) เพื่อความแม่นยำ
+    """
+    # ใช้ตัวแปร log เพื่อให้ Python รู้ว่าเราใช้ค่าที่ส่งมาแล้ว (กันสีจาง/Error)
+    log(f"--- ขั้นตอนการชำระเงิน: วิธี '{payment_method}' | ยอด: '{received_amount}' (โหมด Fast Cash) ---")
     
-    # รอจนกว่าปุ่ม 'รับเงิน' จะโผล่มา
+    # 1. กดรับเงิน (หน้าหลัก)
+    log("...กำลังค้นหาปุ่ม 'รับเงิน'...")
+    
     wait_for_text(window, "รับเงิน", timeout=10)
-    time.sleep(1.0) # รอ Animation หยุด
+    time.sleep(1.0) # รอ Animation นิ่งสนิท
     
+    # กดปุ่ม
     if smart_click(window, "รับเงิน"):
-        # รอเข้าหน้า Fast Cash
-        wait_until_id_appears(window, "EnableFastCash", timeout=10)
-        time.sleep(1.0)
+        log("...กดปุ่มรับเงินสำเร็จ -> รอโหลดหน้าชำระเงิน...")
+        
+        # รอให้ปุ่ม Fast Cash (ID: EnableFastCash) 
+        if not wait_until_id_appears(window, "EnableFastCash", timeout=10):
+            log("[WARN] รอนานเกินไป หน้าชำระเงินไม่โหลด")
+            return
+            
+        time.sleep(1.0) 
     else:
         log("[WARN] หาปุ่ม 'รับเงิน' ไม่เจอ")
         return
 
-    log("...กดปุ่ม Fast Cash...")
+    # 2. กดปุ่ม Fast Cash (ID: EnableFastCash)
+    log("...กำลังกดปุ่ม Fast Cash (อันที่ 2 แบบไม่มีเงินทอน)...")
+    
+    # ใช้ ID: EnableFastCash 
     if click_element_by_id(window, "EnableFastCash", timeout=5):
-        log("[/] ชำระเงินสำเร็จ")
+        log("[/] กดปุ่ม Fast Cash สำเร็จ -> ระบบตัดเงินทันที")
     else:
+        log("[WARN] กดปุ่ม Fast Cash ไม่ติด -> ลองกด Enter ช่วย")
         window.type_keys("{ENTER}")
 
-    # รอหน้าสรุป
-    time.sleep(2.0)
+    # 3. จบรายการ
+    log("...รอหน้าสรุป/เงินทอน -> กด Enter ปิดรายการ...")
+    time.sleep(2.0) # รอ Animation ใบเสร็จเด้ง
     window.type_keys("{ENTER}")
     time.sleep(1)
 
@@ -279,27 +296,29 @@ def process_sender_info_popup(window, phone, sender_postal):
         # กดถัดไป
         smart_next(window)
 
-def process_payment(window):
-    """(สำคัญ) จัดการการจ่ายเงิน Fast Cash (Step 10)"""
+def process_payment(window, payment_method, received_amount):
+    """(แก้ไข) รับ Argument ให้ครบ 3 ตัว ตามที่เรียกใช้"""
     log("--- ขั้นตอนการชำระเงิน (โหมด Fast Cash) ---")
-    log("...ค้นหาปุ่ม 'รับเงิน'...")
-    time.sleep(1.5)
+    
+    # รอจนกว่าปุ่ม 'รับเงิน' จะโผล่มา
+    wait_for_text(window, "รับเงิน", timeout=10)
+    time.sleep(1.0) # รอ Animation หยุด
     
     if smart_click(window, "รับเงิน"):
-        log("...เข้าสู่หน้าชำระเงิน รอโหลด 1.5s...")
-        time.sleep(1.5)
+        # รอเข้าหน้า Fast Cash
+        wait_until_id_appears(window, "EnableFastCash", timeout=10)
+        time.sleep(1.0)
     else:
         log("[WARN] หาปุ่ม 'รับเงิน' ไม่เจอ")
         return
 
-    log("...กำลังกดปุ่ม Fast Cash (ID: EnableFastCash)...")
+    log("...กดปุ่ม Fast Cash...")
     if click_element_by_id(window, "EnableFastCash", timeout=5):
-        log("[/] กดปุ่ม Fast Cash สำเร็จ -> ระบบดำเนินการตัดเงินทันที")
+        log("[/] ชำระเงินสำเร็จ")
     else:
-        log("[WARN] ไม่เจอปุ่ม ID 'EnableFastCash' -> ลองกด Enter")
         window.type_keys("{ENTER}")
 
-    log("...รอหน้าสรุป/เงินทอน -> กด Enter ปิดรายการ...")
+    # รอหน้าสรุป
     time.sleep(2.0)
     window.type_keys("{ENTER}")
     time.sleep(1)
@@ -339,10 +358,13 @@ def run_smart_scenario(main_window, config):
 
     # Step 3: เลือกบริการ
     target_service_id = "PayOutDomesticSendMoneyNormal101"
-    # รอจนกว่ารายการจะโหลดมา (เช็คจาก ID รายการแรกๆ หรือ Text ก็ได้)
-    wait_until_id_appears(main_window, "ShippingServiceList", timeout=10)
+    
+    # [แก้ไข] เปลี่ยนจากรอ ShippingServiceList เป็นรอปุ่มบริการโดยตรง
+    # จะได้ไม่รอเก้อ 10 วินาที ถ้าปุ่มมาแล้วก็กดเลย
+    wait_until_id_appears(main_window, target_service_id, timeout=10)
     
     if not find_and_click_with_rotate_logic(main_window, target_service_id):
+        log(f"[Error] ไม่เจอปุ่มบริการ {target_service_id}")
         return
     time.sleep(step_delay)
 
