@@ -1,11 +1,21 @@
 import configparser
 import os
 import time
-import datetime
 from pywinauto.application import Application
-from pywinauto import mouse
 
-# ================= 1. Config & Log =================
+# --- ดึงฟังก์ชันจากไฟล์ helpers.py มาใช้ ---
+from helpers import (
+    log,
+    wait_for_text,
+    wait_until_id_appears,
+    smart_click,
+    click_element_by_id,
+    find_and_fill_smart,
+    smart_next,
+    click_toggle_inside_parent,
+    find_and_click_with_rotate_logic
+)
+
 def load_config(filename='config.ini'):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(script_dir, filename)
@@ -15,218 +25,6 @@ def load_config(filename='config.ini'):
         return None
     config.read(file_path, encoding='utf-8')
     return config
-
-def log(message):
-    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
-
-
-# ================= 2. Helper Functions (Auto-Wait Version) =================
-def click_toggle_inside_parent(window, parent_id):
-    """
-    ค้นหา Parent ก่อน แล้วเจาะจงคลิกที่ 'SwitchThumb' ด้านใน
-    """
-    # 1. หาตัวแม่ (Parent)
-    parents = [c for c in window.descendants() if c.element_info.automation_id == parent_id]
-    
-    if parents:
-        target_parent = parents[0]
-        
-        # 2. หาตัวลูกชื่อ 'SwitchThumb' ที่อยู่ภายในตัวแม่นี้เท่านั้น
-        thumbs = [c for c in target_parent.descendants() if c.element_info.automation_id == "SwitchThumb"]
-        
-        if thumbs:
-            log(f"   -> เจอ SwitchThumb ใน {parent_id} -> กำลังกด...")
-            thumbs[0].click_input() # สั่งกดที่ปุ่มสวิตช์โดยตรง
-            return True
-        else:
-            # สำรอง: ถ้าหาปุ่มสวิตช์ไม่เจอ ให้ลองกดที่ Label แทน
-            labels = [c for c in target_parent.descendants() if c.element_info.automation_id == "LabelForToggle"]
-            if labels:
-                labels[0].click_input()
-                return True
-                
-    log(f"[WARN] หา SwitchThumb ใน {parent_id} ไม่เจอ")
-    return False
-
-def find_and_fill_smart(window, target_name, target_id_keyword, value, timeout=15):
-    """
-    (แก้ไขใหม่) ค้นหาช่องกรอกแบบ 'รอจนกว่าจะเจอ' (Wait until found)
-    - timeout: ระยะเวลาสูงสุดที่จะรอ (วินาที) ป้องกันโปรแกรมค้าง
-    """
-    if not value or str(value).strip() == "": return False
-    
-    log(f"...กำลังรอช่อง '{target_name}' เพื่อกรอกข้อมูล (Max {timeout}s)...")
-    start = time.time()
-    
-    while time.time() - start < timeout:
-        target_elem = None
-        try:
-            # วนลูปหา Element ในหน้าจอ
-            for child in window.descendants():
-                if not child.is_visible(): continue
-                
-                aid = child.element_info.automation_id
-                name = child.element_info.name
-                
-                # 1. เช็คจากชื่อ (Name)
-                if target_name and name and target_name in name:
-                    target_elem = child; break
-                # 2. เช็คจาก ID
-                if target_id_keyword and aid and target_id_keyword in aid:
-                    target_elem = child; break
-            
-            if target_elem:
-                # เจอแล้ว! พยายามหาช่อง Edit ข้างใน
-                try:
-                    edits = target_elem.descendants(control_type="Edit")
-                    if edits: target_elem = edits[0]
-                except: pass
-                
-                # คลิกและกรอกข้อมูล
-                target_elem.set_focus()
-                target_elem.click_input()
-                # เพิ่มการรอเล็กน้อยหลังคลิก เพื่อให้เคอร์เซอร์กระพริบ
-                time.sleep(0.5) 
-                target_elem.type_keys(str(value), with_spaces=True)
-                log(f"   [/] เจอและกรอก '{target_name}' เรียบร้อย")
-                return True
-                
-        except Exception as e:
-            # ถ้ามี Error ระหว่างหา ให้ลองใหม่รอบหน้า
-            pass
-            
-        # ถ้ายังไม่เจอ ให้รอ 0.5 วินาที แล้ววนรอบใหม่
-        time.sleep(0.5)
-        
-    log(f"[WARN] หมดเวลา ({timeout}s) หาช่อง '{target_name}' ไม่เจอ")
-    return False
-
-def wait_for_text(window, text_list, timeout=10):
-    """(สำคัญ) ใช้สำหรับรอให้หน้าจอโหลดเสร็จ โดยเช็คจากข้อความบนจอ"""
-    if isinstance(text_list, str): text_list = [text_list]
-    log(f"...กำลังรอข้อความ: {text_list} (Max {timeout}s)...")
-    
-    start = time.time()
-    while time.time() - start < timeout:
-        try:
-            for child in window.descendants():
-                txt = child.window_text()
-                for t in text_list:
-                    if t in txt and child.is_visible(): 
-                        log(f"   [/] พบข้อความ '{t}' -> ไปต่อ")
-                        return True
-        except: pass
-        time.sleep(0.5)
-    log(f"[WARN] รอข้อความไม่เจอ (Timeout)")
-    return False
-
-# --- ฟังก์ชันอื่นๆ ใช้ของเดิมได้ แต่เพื่อความชัวร์แปะให้ครบชุดครับ ---
-
-def click_scroll_arrow_smart(window, direction='right', repeat=5):
-    try:
-        target_group = [c for c in window.descendants() if c.element_info.automation_id == "ShippingServiceList"]
-        if target_group: target_group[0].set_focus()
-        else: window.set_focus()
-        key_code = '{RIGHT}' if direction == 'right' else '{LEFT}'
-        window.type_keys(key_code * repeat, pause=0.2, set_foreground=False)
-        return True
-    except: return False
-
-def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
-    log(f"...กำลังค้นหาปุ่มบริการ ID: '{target_id}'...")
-    for i in range(1, max_rotations + 1):
-        found_elements = [c for c in window.descendants() if str(c.element_info.automation_id) == target_id and c.is_visible()]
-        should_scroll = False
-        if found_elements:
-            target = found_elements[0]
-            rect = target.rectangle()
-            win_rect = window.rectangle()
-            safe_limit = win_rect.left + (win_rect.width() * 0.70) 
-            if rect.right < safe_limit:
-                 try: target.click_input()
-                 except: target.set_focus(); window.type_keys("{ENTER}")
-                 return True
-            else: should_scroll = True
-        else: should_scroll = True
-        if should_scroll:
-            if not click_scroll_arrow_smart(window, repeat=5): window.type_keys("{RIGHT}")
-            time.sleep(1.0)
-    return False
-
-def force_scroll_down(window, scroll_dist=-5):
-    try:
-        window.set_focus()
-        rect = window.rectangle()
-        center_x = rect.left + int(rect.width() * 0.5)
-        center_y = rect.top + int(rect.height() * 0.5)
-        mouse.click(coords=(center_x, center_y))
-        time.sleep(0.2)
-        mouse.scroll(coords=(center_x, center_y), wheel_dist=scroll_dist)
-        time.sleep(0.8)
-    except: pass
-
-def smart_click(window, criteria_list, timeout=5):
-    if isinstance(criteria_list, str): criteria_list = [criteria_list]
-    start = time.time()
-    while time.time() - start < timeout:
-        for criteria in criteria_list:
-            try:
-                for child in window.descendants():
-                    if child.is_visible() and criteria in child.window_text().strip():
-                        child.click_input()
-                        log(f"[/] กดปุ่ม '{criteria}' สำเร็จ")
-                        return True
-            except: pass
-        time.sleep(0.3)
-    return False
-
-def click_element_by_id(window, exact_id, timeout=5, index=0):
-    start = time.time()
-    while time.time() - start < timeout:
-        try:
-            found = [c for c in window.descendants() if c.element_info.automation_id == exact_id and c.is_visible()]
-            if len(found) > index:
-                found[index].click_input()
-                log(f"[/] กดปุ่ม ID '{exact_id}' สำเร็จ")
-                return True
-        except: pass
-        time.sleep(0.5)
-    return False
-
-def click_element_by_fuzzy_id(window, keyword, timeout=5):
-    start = time.time()
-    while time.time() - start < timeout:
-        try:
-            for child in window.descendants():
-                aid = child.element_info.automation_id
-                if child.is_visible() and aid and keyword in aid:
-                    child.click_input()
-                    log(f"[/] เจอ Fuzzy ID: '{aid}' -> กดสำเร็จ")
-                    return True
-        except: pass
-        time.sleep(0.5)
-    return False
-
-def wait_until_id_appears(window, exact_id, timeout=10):
-    log(f"...รอโหลด ID: {exact_id}...")
-    start = time.time()
-    while time.time() - start < timeout:
-        try:
-            for child in window.descendants():
-                if child.element_info.automation_id == exact_id and child.is_visible(): return True
-        except: pass
-        time.sleep(1)
-    return False
-
-def smart_next(window):
-    submits = [c for c in window.descendants() if c.element_info.automation_id == "LocalCommand_Submit" and c.is_visible()]
-    if submits:
-        submits.sort(key=lambda x: x.rectangle().top)
-        submits[-1].click_input()
-        log("   [/] กดปุ่ม 'ถัดไป' (Footer)")
-    else:
-        log("   [!] หาปุ่มถัดไปไม่เจอ -> กด Enter")
-        window.type_keys("{ENTER}")
 
 # ================= 3. Business Logic Functions (Updated) =================
 
@@ -297,8 +95,6 @@ def process_payment(window, payment_method, received_amount):
     time.sleep(2.0) # รอ Animation ใบเสร็จเด้ง
     window.type_keys("{ENTER}")
     time.sleep(1)
-
-# ================= 3. Business Logic Functions =================
 
 def process_sender_info_popup(window, phone, sender_postal):
     """จัดการหน้าข้อมูลผู้ส่ง: กดอ่านบัตร -> เติมรหัสปณ. -> เติมเบอร์โทร"""

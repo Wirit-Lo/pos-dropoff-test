@@ -142,3 +142,46 @@ def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
             time.sleep(1.0)
     log(f"[X] หาปุ่มไม่เจอ: {target_id}")
     return False
+
+# --- วางต่อท้ายใน helpers.py ---
+
+def select_item_from_dropdown_list(window, list_id, target_text):
+    """
+    ฟังก์ชันสำหรับเลือกรายการใน Dropdown ที่ต้องเลื่อนหา
+    - list_id: ID ของตัวกล่องรายการ (เช่น 'SelectedSubList')
+    - target_text: ข้อความที่ต้องการเลือก
+    """
+    log(f"...กำลังค้นหา '{target_text}' ในลิสต์ '{list_id}'...")
+    
+    # 1. รอให้กล่องรายการเด้งขึ้นมา
+    if not wait_until_id_appears(window, list_id, timeout=5):
+        log(f"[WARN] ไม่พบกล่องรายการ ID: {list_id}")
+        return False
+
+    # 2. จับตัวกล่องรายการเพื่อส่งคำสั่ง Scroll
+    list_container = None
+    # หาตัวที่มี ID ตรงและมองเห็น
+    candidates = [c for c in window.descendants() if c.element_info.automation_id == list_id and c.is_visible()]
+    if candidates:
+        list_container = candidates[0]
+    else:
+        return False
+
+    # 3. วนลูปหาข้อความ (เลื่อนลงไปเรื่อยๆ)
+    for i in range(15): # ลองเลื่อนหา 15 รอบ
+        try:
+            # หา ListItem หรือ Text ที่มีคำที่ต้องการ
+            for item in list_container.descendants():
+                if target_text in item.window_text():
+                    log(f"   [/] เจอรายการ '{item.window_text()}' -> คลิก")
+                    item.click_input()
+                    return True
+            
+            # ถ้ายังไม่เจอ ให้ส่งปุ่ม PageDown เพื่อเลื่อนลง
+            list_container.type_keys("{PGDN}") 
+            time.sleep(0.5)
+        except: 
+            break
+            
+    log(f"[X] หารายการ '{target_text}' ไม่เจอ")
+    return False
