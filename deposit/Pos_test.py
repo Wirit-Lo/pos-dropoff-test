@@ -386,18 +386,30 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
 
     # Step 6: เลือกบริการเสริม
-    # รอหน้านี้โหลด
-    wait_for_text(main_window, ["บริการพิเศษ", "SMS"], timeout=10)
+    target_opt = str(options_str).strip().lower()
     
-    if options_str:
-        opts = [o.strip().lower() for o in options_str.split(',')]
-        if 'paper' in opts or 'ธรรมดา' in opts:
+    log(f"--- หน้าเลือกบริการเสริม (Target: {target_opt}) ---")
+    
+    # รอให้ตัวเลือกโหลดขึ้นมา (เช็คจากคำว่า "SMS" หรือ "ตอบรับ")
+    wait_for_text(main_window, ["SMS", "ตอบรับ", "บริการพิเศษ"], timeout=10)
+    
+    if target_opt:
+        # 1. ตอบรับธรรมดา (Paper)
+        if 'paper' in target_opt or 'ธรรมดา' in target_opt:
+            log("...กำลังเลือก: ตอบรับธรรมดา...")
             click_element_by_fuzzy_id(main_window, "TransferOption_PaperNotice")
-        if 'ems' in opts or 'ด่วน' in opts:
+            
+        # 2. ตอบรับด่วน (EMS) -> ใช้ elif เพื่อให้เลือกแค่อันเดียว
+        elif 'ems' in target_opt or 'ด่วน' in target_opt:
+            log("...กำลังเลือก: ตอบรับด่วนพิเศษ...")
             click_element_by_fuzzy_id(main_window, "TransferOption_EMSNotice")
-        if 'sms' in opts:
+            
+        # 3. SMS -> ใช้ elif เพื่อให้เลือกแค่อันเดียว
+        elif 'sms' in target_opt:
+            log("...กำลังเลือก: ส่ง SMS...")
             click_element_by_fuzzy_id(main_window, "TransferOption_SMSNotice")
 
+    # กดถัดไป
     smart_next(main_window)
     time.sleep(step_delay)
 
