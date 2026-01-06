@@ -147,49 +147,42 @@ def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
 
 def select_item_from_dropdown_list(window, combo_id, target_text):
     """
-    ฟังก์ชันเลือก Dropdown (ฉบับแก้ไข): คลิกแม่ + กด F4 เพื่อบังคับกางรายการ
+    ฟังก์ชันเลือก Dropdown (ฉบับใช้ F4 ล้วน): ตัดการคลิกเมาส์ออก เพื่อแก้ปัญหา Focus
     """
     log(f"...กำลังจัดการ Dropdown ID: '{combo_id}' เลือก: '{target_text}'...")
 
-    # 1. พยายามหาตัวแม่ (Parent Container) ก่อน เพราะมักจะเป็นตัวรับคำสั่งคลิก
-    # ชื่อ ID แม่มักจะลงท้ายด้วย _UserControlBase (จากที่คุณส่งมา)
+    # 1. หาตัวแม่หรือตัวลูกเหมือนเดิม
     parent_id = f"{combo_id}_UserControlBase"
-    
     target_element = None
     
-    # ลองหาตัวแม่ก่อน
     parents = [c for c in window.descendants() if c.element_info.automation_id == parent_id and c.is_visible()]
     if parents:
         log(f"   [Debug] เจอ Parent ID: '{parent_id}' -> จะใช้ตัวนี้ในการกด")
         target_element = parents[0]
     else:
-        # ถ้าไม่เจอตัวแม่ ให้หาตัวลูก (SelectedSubList) ตามปกติ
         candidates = [c for c in window.descendants() if c.element_info.automation_id == combo_id and c.is_visible()]
         if candidates:
             log(f"   [Debug] เจอ ID ตรงตัว: '{combo_id}' -> จะใช้ตัวนี้ในการกด")
             target_element = candidates[0]
 
-    # 2. ปฏิบัติการเปิดกล่อง (Click + F4)
+    # 2. ปฏิบัติการเปิดกล่อง (แก้ใหม่: ใช้ F4 อย่างเดียว)
     if target_element:
-        # คลิกเพื่อให้ Focus
+        # แค่ Set Focus ก็พอ ไม่ต้อง click_input() ที่ทำให้เกิด Error
         target_element.set_focus()
-        target_element.click_input()
-        time.sleep(0.5)
         
-        # [ทีเด็ด] ส่งปุ่ม F4 เพื่อบังคับกางรายการ (แก้ปัญหาคลิกแล้วเงียบ)
-        log("   [/] ส่งคำสั่ง F4 เพื่อกางรายการ...")
+        # ส่งปุ่ม F4 เพื่อกางรายการทันที
+        log("   [/] สั่งกด F4 เพื่อกางรายการ (ข้ามการคลิกเมาส์)...")
         target_element.type_keys("{F4}")
-        time.sleep(1.5) # รอ Animation
+        time.sleep(1.5) 
     else:
         log(f"[WARN] หา Dropdown ไม่เจอทั้งตัวแม่และตัวลูก")
         return False
 
-    # 3. วนลูปหา 'ListItem' (ส่วนนี้เหมือนเดิม แต่ปรับให้หา Text แม่นยำขึ้น)
+    # 3. วนลูปหา 'ListItem' (ส่วนนี้เหมือนเดิม)
     for i in range(15): 
         try:
             found_item = None
             for child in window.descendants():
-                # หาเฉพาะ ListItem หรือ Text ที่มีคำที่ต้องการ
                 if child.is_visible() and target_text in child.window_text():
                     found_item = child
                     break
@@ -200,8 +193,6 @@ def select_item_from_dropdown_list(window, combo_id, target_text):
                 found_item.click_input()
                 return True
             else:
-                # กด PageDown ที่ window หลัก เพื่อเลื่อนรายการ
-                log(f"   [...] ไม่เจอในหน้านี้ -> เลื่อนลง (รอบที่ {i+1})")
                 window.type_keys("{PGDN}") 
                 time.sleep(0.8)
         except Exception as e:
