@@ -103,3 +103,42 @@ def click_toggle_inside_parent(window, parent_id):
         thumbs = [c for c in parents[0].descendants() if c.element_info.automation_id == "SwitchThumb"]
         if thumbs: thumbs[0].click_input(); return True
     return False
+
+# --- วางต่อท้ายไฟล์ helpers.py ---
+
+def click_scroll_arrow_smart(window, direction='right', repeat=5):
+    """ใช้ช่วยเลื่อนหน้าจอในฟังก์ชัน Rotate Logic"""
+    try:
+        target_group = [c for c in window.descendants() if c.element_info.automation_id == "ShippingServiceList"]
+        if target_group: target_group[0].set_focus()
+        else: window.set_focus()
+        
+        key_code = '{RIGHT}' if direction == 'right' else '{LEFT}'
+        window.type_keys(key_code * repeat, pause=0.2, set_foreground=False)
+        return True
+    except: return False
+
+def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
+    """(สำคัญ) ใช้หาปุ่มบริการ 'ธนาณัติธรรมดา' ที่อาจหลบอยู่"""
+    log(f"...กำลังค้นหาปุ่มบริการ ID: '{target_id}'...")
+    for i in range(1, max_rotations + 1):
+        found_elements = [c for c in window.descendants() if str(c.element_info.automation_id) == target_id and c.is_visible()]
+        should_scroll = False
+        if found_elements:
+            target = found_elements[0]
+            rect = target.rectangle()
+            win_rect = window.rectangle()
+            safe_limit = win_rect.left + (win_rect.width() * 0.70) 
+            
+            if rect.right < safe_limit:
+                 try: target.click_input()
+                 except: target.set_focus(); window.type_keys("{ENTER}")
+                 return True
+            else: should_scroll = True
+        else: should_scroll = True
+        
+        if should_scroll:
+            if not click_scroll_arrow_smart(window, repeat=5): window.type_keys("{RIGHT}")
+            time.sleep(1.0)
+    log(f"[X] หาปุ่มไม่เจอ: {target_id}")
+    return False
