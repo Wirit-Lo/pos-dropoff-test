@@ -257,11 +257,7 @@ def run_smart_scenario(main_window, config):
     time.sleep(1.0) # รอ Pop-up ปิด
 
     # 3. กรอกชื่อผู้รับเงิน
-    # หาช่องกรอกชื่อ (ใช้ ID: Remarks_UserControlBase หรือ Note ตามโครงสร้างจริง)
-    # ถ้าหาไม่เจอ ให้ลองหาคำว่า "ระบุชื่อผู้รับเงิน"
-    if not find_and_fill_smart(main_window, "ระบุชื่อผู้รับเงิน", "Note", prisoner_name):
-         # สำรอง: บางทีช่องนี้อาจจะชื่อ Remarks
-         find_and_fill_smart(main_window, "หมายเหตุ", "Remarks", prisoner_name)
+    find_and_fill_smart(main_window, "", "Remarks", prisoner_name, timeout=10)
     
     # กดถัดไป
     smart_next(main_window)
