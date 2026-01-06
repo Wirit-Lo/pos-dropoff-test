@@ -245,23 +245,23 @@ def run_smart_scenario(main_window, config):
     prison_name = config['MO_PRISON'].get('PrisonName', 'ทัณฑสถาน')
     prisoner_name = config['MO_PRISON'].get('PrisonerName', 'สมชาย')
 
-    # รอให้หน้าจอโหลด (สังเกตจากคำว่า สน./สภ.)
+    # รอหน้าจอโหลด
     wait_for_text(main_window, ["สน./สภ.", "รายชื่อเรือนจำ"], timeout=10)
 
-    # 1. กดเปิด Dropdown (คลิกที่ช่อง สน./สภ. หรือลูกศร)
-    # หมายเหตุ: ลองใช้ smart_click คำว่า "สน./สภ." หรือ ID ของกล่อง Dropdown เพื่อเปิดลิสต์
-    log("...เปิด Dropdown รายชื่อเรือนจำ...")
-    smart_click(main_window, "สน./สภ.") 
+    # --- ส่วนที่แก้ไข ---
+    # เรียกฟังก์ชันใหม่: ส่ง ID ของ ComboBox ('SelectedSubList') ไปให้มันกดเอง
+    # ไม่ต้องกด smart_click("สน./สภ.") แยกแล้ว ให้ฟังก์ชันจัดการทีเดียว
+    if not select_item_from_dropdown_list(main_window, "SelectedSubList", prison_name):
+        log("[WARN] เลือกเรือนจำไม่สำเร็จ (อาจต้องเลือกเองด้วยมือ)")
     
-    # 2. เลื่อนหาและเลือกเรือนจำ (ใช้ฟังก์ชันใหม่ที่สร้างไว้)
-    # ID=SelectedSubList คือ ID ของกล่อง Popup ที่เด้งออกมาตามที่คุณบอก
-    select_item_from_dropdown_list(main_window, "SelectedSubList", prison_name)
-    
-    time.sleep(1.0) # รอให้ปิด Popup
+    time.sleep(1.0) # รอ Pop-up ปิด
 
     # 3. กรอกชื่อผู้รับเงิน
-    # หาช่องกรอกด้านขวา (จากรูปคือ 'หมายเหตุ' หรือ 'ระบุชื่อผู้รับเงิน')
-    find_and_fill_smart(main_window, "ระบุชื่อผู้รับเงิน", "Note", prisoner_name)
+    # หาช่องกรอกชื่อ (ใช้ ID: Remarks_UserControlBase หรือ Note ตามโครงสร้างจริง)
+    # ถ้าหาไม่เจอ ให้ลองหาคำว่า "ระบุชื่อผู้รับเงิน"
+    if not find_and_fill_smart(main_window, "ระบุชื่อผู้รับเงิน", "Note", prisoner_name):
+         # สำรอง: บางทีช่องนี้อาจจะชื่อ Remarks
+         find_and_fill_smart(main_window, "หมายเหตุ", "Remarks", prisoner_name)
     
     # กดถัดไป
     smart_next(main_window)

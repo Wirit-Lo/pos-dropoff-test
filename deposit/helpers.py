@@ -145,43 +145,55 @@ def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
 
 # --- วางต่อท้ายใน helpers.py ---
 
-def select_item_from_dropdown_list(window, list_id, target_text):
+def select_item_from_dropdown_list(window, combo_id, target_text):
     """
-    ฟังก์ชันสำหรับเลือกรายการใน Dropdown ที่ต้องเลื่อนหา
-    - list_id: ID ของตัวกล่องรายการ (เช่น 'SelectedSubList')
+    ฟังก์ชันเลือก Dropdown: กดกล่องให้กาง -> เลื่อนหา -> กดเลือก
+    - combo_id: ID ของกล่อง ComboBox (เช่น 'SelectedSubList')
     - target_text: ข้อความที่ต้องการเลือก
     """
-    log(f"...กำลังค้นหา '{target_text}' ในลิสต์ '{list_id}'...")
-    
-    # 1. รอให้กล่องรายการเด้งขึ้นมา
-    if not wait_until_id_appears(window, list_id, timeout=5):
-        log(f"[WARN] ไม่พบกล่องรายการ ID: {list_id}")
-        return False
+    log(f"...กำลังจัดการ Dropdown ID: '{combo_id}' เลือก: '{target_text}'...")
 
-    # 2. จับตัวกล่องรายการเพื่อส่งคำสั่ง Scroll
-    list_container = None
-    # หาตัวที่มี ID ตรงและมองเห็น
-    candidates = [c for c in window.descendants() if c.element_info.automation_id == list_id and c.is_visible()]
+    # 1. หาตัวกล่อง ComboBox และกดเพื่อให้รายการกางออก
+    combo_box = None
+    # หาจาก ID ที่ระบุ
+    candidates = [c for c in window.descendants() if c.element_info.automation_id == combo_id and c.is_visible()]
     if candidates:
-        list_container = candidates[0]
+        combo_box = candidates[0]
+        # กดที่ตัวกล่อง 1 ครั้งเพื่อกางรายการ
+        log(f"   [/] เจอ ComboBox -> กดเพื่อกางรายการ")
+        combo_box.click_input()
+        time.sleep(1.5) # รอให้รายการเด้งออกมา (Animation)
     else:
+        log(f"[WARN] หา ComboBox ID '{combo_id}' ไม่เจอ")
         return False
 
-    # 3. วนลูปหาข้อความ (เลื่อนลงไปเรื่อยๆ)
+    # 2. วนลูปหา 'ListItem' ที่มีชื่อที่เราต้องการ
+    # (เราหาจาก window.descendants() เลย เพราะรายการที่เด้งมามักจะเป็น Popup ลอยอยู่เหนือสุด)
     for i in range(15): # ลองเลื่อนหา 15 รอบ
         try:
-            # หา ListItem หรือ Text ที่มีคำที่ต้องการ
-            for item in list_container.descendants():
-                if target_text in item.window_text():
-                    log(f"   [/] เจอรายการ '{item.window_text()}' -> คลิก")
-                    item.click_input()
-                    return True
+            found_item = None
+            # ค้นหาเฉพาะ Control Type ที่เป็น ListItem หรือ Text
+            # เทคนิค: หาจากข้อความ target_text ตรงๆ เลยจะเร็วกว่า
+            for child in window.descendants():
+                # เช็คว่ามองเห็นและมีชื่อตรงกับเป้าหมาย
+                if child.is_visible() and target_text in child.window_text():
+                    found_item = child
+                    break
             
-            # ถ้ายังไม่เจอ ให้ส่งปุ่ม PageDown เพื่อเลื่อนลง
-            list_container.type_keys("{PGDN}") 
-            time.sleep(0.5)
-        except: 
+            if found_item:
+                log(f"   [/] เจอรายการ '{target_text}' -> คลิกเลือก")
+                found_item.set_focus()
+                found_item.click_input()
+                return True
+            else:
+                # ถ้ายังไม่เจอ ให้ส่งปุ่ม PageDown ไปที่หน้าจอเพื่อเลื่อนลง
+                # (ส่งไปที่ window หลัก เพราะโฟกัสอยู่ที่รายการแล้ว)
+                log(f"   [...] ไม่เจอในหน้านี้ -> เลื่อนลง (รอบที่ {i+1})")
+                window.type_keys("{PGDN}") 
+                time.sleep(0.8)
+        except Exception as e:
+            log(f"[!] Error ขณะเลื่อนหา: {e}")
             break
             
-    log(f"[X] หารายการ '{target_text}' ไม่เจอ")
+    log(f"[X] หาไม่เจอ หรือ เลื่อนจนสุดแล้ว")
     return False
