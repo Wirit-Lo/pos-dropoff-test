@@ -147,35 +147,49 @@ def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
 
 def select_item_from_dropdown_list(window, combo_id, target_text):
     """
-    ฟังก์ชันเลือก Dropdown: กดกล่องให้กาง -> เลื่อนหา -> กดเลือก
-    - combo_id: ID ของกล่อง ComboBox (เช่น 'SelectedSubList')
-    - target_text: ข้อความที่ต้องการเลือก
+    ฟังก์ชันเลือก Dropdown (ฉบับแก้ไข): คลิกแม่ + กด F4 เพื่อบังคับกางรายการ
     """
     log(f"...กำลังจัดการ Dropdown ID: '{combo_id}' เลือก: '{target_text}'...")
 
-    # 1. หาตัวกล่อง ComboBox และกดเพื่อให้รายการกางออก
-    combo_box = None
-    # หาจาก ID ที่ระบุ
-    candidates = [c for c in window.descendants() if c.element_info.automation_id == combo_id and c.is_visible()]
-    if candidates:
-        combo_box = candidates[0]
-        # กดที่ตัวกล่อง 1 ครั้งเพื่อกางรายการ
-        log(f"   [/] เจอ ComboBox -> กดเพื่อกางรายการ")
-        combo_box.click_input()
-        time.sleep(1.5) # รอให้รายการเด้งออกมา (Animation)
+    # 1. พยายามหาตัวแม่ (Parent Container) ก่อน เพราะมักจะเป็นตัวรับคำสั่งคลิก
+    # ชื่อ ID แม่มักจะลงท้ายด้วย _UserControlBase (จากที่คุณส่งมา)
+    parent_id = f"{combo_id}_UserControlBase"
+    
+    target_element = None
+    
+    # ลองหาตัวแม่ก่อน
+    parents = [c for c in window.descendants() if c.element_info.automation_id == parent_id and c.is_visible()]
+    if parents:
+        log(f"   [Debug] เจอ Parent ID: '{parent_id}' -> จะใช้ตัวนี้ในการกด")
+        target_element = parents[0]
     else:
-        log(f"[WARN] หา ComboBox ID '{combo_id}' ไม่เจอ")
+        # ถ้าไม่เจอตัวแม่ ให้หาตัวลูก (SelectedSubList) ตามปกติ
+        candidates = [c for c in window.descendants() if c.element_info.automation_id == combo_id and c.is_visible()]
+        if candidates:
+            log(f"   [Debug] เจอ ID ตรงตัว: '{combo_id}' -> จะใช้ตัวนี้ในการกด")
+            target_element = candidates[0]
+
+    # 2. ปฏิบัติการเปิดกล่อง (Click + F4)
+    if target_element:
+        # คลิกเพื่อให้ Focus
+        target_element.set_focus()
+        target_element.click_input()
+        time.sleep(0.5)
+        
+        # [ทีเด็ด] ส่งปุ่ม F4 เพื่อบังคับกางรายการ (แก้ปัญหาคลิกแล้วเงียบ)
+        log("   [/] ส่งคำสั่ง F4 เพื่อกางรายการ...")
+        target_element.type_keys("{F4}")
+        time.sleep(1.5) # รอ Animation
+    else:
+        log(f"[WARN] หา Dropdown ไม่เจอทั้งตัวแม่และตัวลูก")
         return False
 
-    # 2. วนลูปหา 'ListItem' ที่มีชื่อที่เราต้องการ
-    # (เราหาจาก window.descendants() เลย เพราะรายการที่เด้งมามักจะเป็น Popup ลอยอยู่เหนือสุด)
-    for i in range(15): # ลองเลื่อนหา 15 รอบ
+    # 3. วนลูปหา 'ListItem' (ส่วนนี้เหมือนเดิม แต่ปรับให้หา Text แม่นยำขึ้น)
+    for i in range(15): 
         try:
             found_item = None
-            # ค้นหาเฉพาะ Control Type ที่เป็น ListItem หรือ Text
-            # เทคนิค: หาจากข้อความ target_text ตรงๆ เลยจะเร็วกว่า
             for child in window.descendants():
-                # เช็คว่ามองเห็นและมีชื่อตรงกับเป้าหมาย
+                # หาเฉพาะ ListItem หรือ Text ที่มีคำที่ต้องการ
                 if child.is_visible() and target_text in child.window_text():
                     found_item = child
                     break
@@ -186,8 +200,7 @@ def select_item_from_dropdown_list(window, combo_id, target_text):
                 found_item.click_input()
                 return True
             else:
-                # ถ้ายังไม่เจอ ให้ส่งปุ่ม PageDown ไปที่หน้าจอเพื่อเลื่อนลง
-                # (ส่งไปที่ window หลัก เพราะโฟกัสอยู่ที่รายการแล้ว)
+                # กด PageDown ที่ window หลัก เพื่อเลื่อนรายการ
                 log(f"   [...] ไม่เจอในหน้านี้ -> เลื่อนลง (รอบที่ {i+1})")
                 window.type_keys("{PGDN}") 
                 time.sleep(0.8)
