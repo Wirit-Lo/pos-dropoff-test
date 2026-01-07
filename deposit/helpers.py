@@ -413,20 +413,21 @@ def process_excess_cash_flow(window):
     log("   [/] จบขั้นตอนการโอนเงินเกินและสั่งพิมพ์")
     return True
 
-# --- วางต่อท้ายไฟล์ helpers.py ---
+# --- แก้ไขในไฟล์ helpers.py ---
 
 @strict_check
 def select_dropdown_using_pagedown(window, box_id, target_text, max_pages=20):
     """
-    ฟังก์ชันเลือก Dropdown (ฉบับกด PageDown):
+    ฟังก์ชันเลือก Dropdown (ฉบับกด PageDown + ค้นหาด้วย ID):
     1. กด F4 เปิดกล่อง
-    2. เช็คว่าเจอคำไหม ถ้าไม่เจอ -> กด PageDown
-    3. ทำซ้ำจนกว่าจะเจอหรือครบจำนวนรอบ
+    2. วนหา ListItem ที่มี AutomationId ตรงกับ target_text
+    3. ถ้าไม่เจอ -> กด PageDown
     """
-    log(f"...กำลังค้นหา '{target_text}' ใน ID '{box_id}' (โหมดกด PageDown)...")
+    log(f"...กำลังค้นหา ID '{target_text}' ในช่อง '{box_id}' (โหมด PageDown)...")
     
     # 1. หาและ Focus ที่กล่อง
     try:
+        # หาตัวกล่อง Dropdown ก่อน
         found_box = [c for c in window.descendants() if c.element_info.automation_id == box_id and c.is_visible()]
         if not found_box:
             log(f"[Error] หาช่อง Dropdown ID: {box_id} ไม่เจอ")
@@ -439,32 +440,36 @@ def select_dropdown_using_pagedown(window, box_id, target_text, max_pages=20):
     # 2. กด F4 เพื่อกางรายการ
     log("   [/] กด F4 เพื่อกางรายการ")
     target_box.type_keys("{F4}")
-    time.sleep(2.0) # รอให้รายการเด้ง
+    time.sleep(2.0) # รอให้รายการเด้งออกมา
 
     # 3. วนลูปค้นหา
     for i in range(max_pages):
         try:
-            # 3.1 สแกนหา ListItem ที่มีคำที่ต้องการ (เฉพาะที่มองเห็น)
-            # ต้องหาจาก top_window() เพราะ Popup มักจะแยกตัวออกมา
-            visible_items = [c for c in window.top_window().descendants(control_type="ListItem") 
-                             if c.is_visible() and target_text in c.window_text()]
+            # --- [จุดที่แก้ไข] ---
+            # 1. ใช้ window.descendants() แทน top_window() เพื่อแก้ Error
+            # 2. เช็คที่ automation_id โดยตรง (ตามคำแนะนำ)
+            # 3. หาเฉพาะ ListItem ที่ Visible (มองเห็น)
+            found_items = [c for c in window.descendants(control_type="ListItem") 
+                           if c.element_info.automation_id == target_text 
+                           and c.is_visible()]
             
-            if visible_items:
-                target_item = visible_items[0]
-                log(f"   [/] เจอรายการแล้ว: '{target_text}' (รอบที่ {i})")
+            if found_items:
+                target_item = found_items[0]
+                log(f"   [/] เจอ ID '{target_text}' แล้ว (รอบที่ {i})")
+                
+                # คลิกเลือกทันที
                 target_item.set_focus()
                 target_item.click_input()
                 return True
             
-            # 3.2 ถ้ายังไม่เจอ -> กด PageDown
-            # ส่งปุ่มไปที่ top_window หรือ target_box ก็ได้
-            log(f"   ...ยังไม่เจอ กด PageDown (รอบที่ {i+1})")
+            # ถ้ายังไม่เจอ -> กด PageDown ที่กล่องหลัก
+            log(f"   ...ยังไม่เจอ ID '{target_text}' -> กด PageDown (รอบที่ {i+1})")
             target_box.type_keys("{PGDN}") 
-            time.sleep(1.0) # รอให้รายการเลื่อนและหยุดนิ่ง
+            time.sleep(1.0) # รอให้รายการเลื่อน
 
         except Exception as e:
             log(f"[!] Error ขณะค้นหา: {e}")
             pass
             
-    log(f"[X] กด PageDown ไป {max_pages} รอบแล้วยังไม่เจอ '{target_text}'")
+    log(f"[X] กด PageDown ไป {max_pages} รอบแล้วยังไม่เจอ ID '{target_text}'")
     return False

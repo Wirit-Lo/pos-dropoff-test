@@ -157,11 +157,33 @@ def run_smart_scenario(main_window, config):
         dest_postal = mo_config.get('DestinationPostalCode', '10110')
         rcv_fname = mo_config.get('ReceiverFirstName', 'TestName')
         rcv_lname = mo_config.get('ReceiverLastName', 'TestLast')
-        options_str = mo_config.get('Options', '')
         pay_method = config['PAYMENT'].get('Method', 'เงินสด') if 'PAYMENT' in config else 'เงินสด'
         pay_amount = config['PAYMENT'].get('ReceivedAmount', '1000') if 'PAYMENT' in config else '1000'
-        prison_name = config['MO_PRISON'].get('PrisonName', 'ทัณฑสถานบำบัดพิเศษกลาง') if 'MO_PRISON' in config else 'ทัณฑสถานบำบัดพิเศษกลาง'
         step_delay = float(config['SETTINGS'].get('StepDelay', 0.8))
+
+        # 1. อ่านค่าดิบจากทั้ง 2 หมวดมาก่อน
+        prison_val = config['MO_PRISON'].get('PrisonName', '') if 'MO_PRISON' in config else ''
+        police_val = config['TRAFFIC_POLICE'].get('PoliceStationName', '') if 'TRAFFIC_POLICE' in config else ''
+        
+        # 2. Logic ตัดสินใจ (Priority):
+        # ถ้ามีชื่อเรือนจำ -> ให้ใช้เรือนจำ
+        if prison_val and prison_val.strip() != "":
+            target_unit_name = prison_val
+            log(f"[Config] โหมด: ฝากเงินผู้ต้องขัง ({target_unit_name})")
+        
+        # ถ้าไม่มีเรือนจำ แต่มีชื่อสถานีตำรวจ -> ให้ใช้สถานีตำรวจ
+        elif police_val and police_val.strip() != "":
+            target_unit_name = police_val
+            log(f"[Config] โหมด: ค่าปรับจราจร ({target_unit_name})")
+        
+        # ถ้าไม่มีทั้งคู่ -> ใช้ค่า Default
+        else:
+            target_unit_name = "ทัณฑสถานบำบัดพิเศษกลาง"
+            log(f"[Config] ไม่ระบุปลายทาง -> ใช้ค่า Default ({target_unit_name})")
+
+        # 3. เตรียมชื่อผู้รับ (ถ้าเป็นเรือนจำ ต้องอ่านชื่อนักโทษ)
+        prisoner_name = config['MO_PRISON'].get('PrisonerName', '') if 'MO_PRISON' in config else ''
+
     except Exception as e: 
         log(f"[Error] อ่าน Config ไม่สำเร็จ: {e}")
         return
@@ -217,20 +239,26 @@ def run_smart_scenario(main_window, config):
     smart_next(main_window)
     time.sleep(step_delay)
 
-    # Step 8: เลือกเรือนจำ (หรือ สถานีตำรวจ)
-    log("--- เลือกหน่วยงาน/เรือนจำ ---")
-    
-    wait_for_text(main_window, ["สน./สภ.", "รายชื่อ", "เรือนจำ"])
+    # Step 8: เลือกหน่วยงาน
+    log(f"--- Step 8: เลือกหน่วยงาน: {target_unit_name} ---")
+    wait_for_text(main_window, ["สน./สภ.", "รายชื่อ", "เรือนจำ", "ผู้รับ"])
 
-    # เรียกใช้ฟังก์ชัน (ID: SelectedSubList)
-    if select_dropdown_using_pagedown(main_window, "SelectedSubList", prison_name):
-        log(f"   [/] เลือก '{prison_name}' สำเร็จ")
+    # ใช้ตัวแปร target_unit_name ที่ได้จาก Logic ข้างบน
+    if select_dropdown_using_pagedown(main_window, "SelectedSubList", target_unit_name):
+        log(f"   [/] เลือก '{target_unit_name}' สำเร็จ")
     else:
-        log(f"[Error] เลือกเรือนจำไม่สำเร็จ")
-        
+        log(f"[Error] เลือกหน่วยงาน '{target_unit_name}' ไม่สำเร็จ")
+    
     time.sleep(1.0) 
 
-    # กดถัดไป
+    # กรอกชื่อผู้รับ (Logic: ถ้านักโทษมีชื่อ ให้ใช้ชื่อนักโทษ / ถ้าไม่มี ให้ใช้ชื่อคนรับปกติ)
+    final_name = prisoner_name if prisoner_name else rcv_fname
+    find_and_fill_smart(main_window, "ชื่อ", "CustomerFirstName", final_name)
+    
+    # ถ้าไม่ใช่เคสนักโทษ (ไม่มี prisoner_name) ให้กรอกนามสกุลด้วย
+    if not prisoner_name and rcv_lname:
+         find_and_fill_smart(main_window, "นามสกุล", "CustomerLastName", rcv_lname)
+
     smart_next(main_window)
     time.sleep(step_delay)
 
