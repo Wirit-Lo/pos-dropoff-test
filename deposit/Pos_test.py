@@ -93,11 +93,6 @@ def process_payment(window, payment_method, received_amount):
         log("[WARN] กดปุ่ม Fast Cash ไม่ติด -> ลองกด Enter ช่วย")
     
 
-    # 3. จบรายการ
-    log("...รอหน้าสรุป/เงินทอน -> กด Enter ปิดรายการ...")
-    time.sleep(2.0) # รอ Animation ใบเสร็จเด้ง
-    time.sleep(1)
-
 def process_sender_info_popup(window, phone, sender_postal):
     """จัดการหน้าข้อมูลผู้ส่ง: กดอ่านบัตร -> เติมรหัสปณ. -> เติมเบอร์โทร"""
     
