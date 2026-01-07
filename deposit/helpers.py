@@ -414,61 +414,72 @@ def process_excess_cash_flow(window):
     return True
 
 # --- วางต่อท้ายไฟล์ helpers.py ---
-
 @strict_check
-def search_and_select_dropdown(window, box_id, keyword, timeout=10):
+def select_dropdown_by_clicking_linedown(window, box_id, target_text, max_clicks=50):
     """
-    ฟังก์ชันสำหรับ Dropdown รายการเยอะ (เช่น เรือนจำ, สถานีตำรวจ)
-    ใช้วิธี: คลิกกล่อง -> พิมพ์ชื่อ (เพื่อกรอง) -> คลิกเลือกรายการที่เด้งมา
+    ฟังก์ชันเลือก Dropdown (ฉบับกดปุ่มลูกศร Scrollbar):
+    1. กด F4 เปิดกล่อง
+    2. หาปุ่ม Scrollbar ที่ชื่อ ID='LineDown'
+    3. กดปุ่มนั้นซ้ำๆ จนกว่าจะเจอรายการที่ต้องการ
     """
-    log(f"...กำลังค้นหาและเลือก '{keyword}' ในช่อง ID: '{box_id}'...")
-    start = time.time()
-
-    # 1. หาและคลิกกล่อง Dropdown (เพื่อ Focus)
-    box_elem = None
-    while time.time() - start < timeout:
-        try:
-            found = [c for c in window.descendants() if c.element_info.automation_id == box_id and c.is_visible()]
-            if found:
-                box_elem = found[0]
-                box_elem.set_focus()
-                box_elem.click_input() # คลิกเพื่อเปิด หรือเพื่อให้พร้อมพิมพ์
-                break
-        except: pass
-        time.sleep(0.5)
-
-    if not box_elem:
-        log(f"[Error] หาช่อง Dropdown '{box_id}' ไม่เจอ")
-        return False
-
-    # 2. พิมพ์ข้อความลงไปเพื่อ Filter
+    log(f"...กำลังค้นหา '{target_text}' ใน ID '{box_id}' (โหมดกดปุ่ม LineDown)...")
+    
+    # 1. หาและ Focus ที่กล่อง Dropdown
     try:
-        # ใช้ type_keys เพื่อพิมพ์เหมือนคน
-        box_elem.type_keys(keyword, with_spaces=True, pause=0.05)
-        time.sleep(1.0) # รอให้รายการเด้งขึ้นมา (Popup)
-    except Exception as e:
-        log(f"[Warn] พิมพ์ข้อความไม่ได้: {e}")
+        found_box = [c for c in window.descendants() if c.element_info.automation_id == box_id and c.is_visible()]
+        if not found_box:
+            log(f"[Error] หาช่อง Dropdown ID: {box_id} ไม่เจอ")
+            return False
+        
+        target_box = found_box[0]
+        target_box.set_focus()
+    except: return False
 
-    # 3. วนหา ListItem ที่ชื่อตรงกับ Keyword แล้วกดเลือก
-    # (ระบบมักจะสร้าง Popup แยกออกมา หรือเป็นลูกของ Window)
-    sub_start = time.time()
-    while time.time() - sub_start < 5: # ให้เวลารายการเด้ง 5 วิ
+    # 2. กด F4 เพื่อกางรายการ
+    log("   [/] กด F4 เพื่อกางรายการ")
+    target_box.type_keys("{F4}")
+    time.sleep(2.0) # รอให้รายการและ Scrollbar เด้งออกมา
+
+    # 3. หาปุ่ม "LineDown" (ปุ่มลูกศรลงของ Scrollbar)
+    line_down_btn = None
+    try:
+        # ค้นหาปุ่ม LineDown ในหน้าต่างทั้งหมด (เพราะ Popup อาจแยกตัวออกมา)
+        btns = [c for c in window.top_window().descendants() 
+                if c.element_info.automation_id == "LineDown" and c.is_visible()]
+        if btns:
+            line_down_btn = btns[0]
+            log("   [Debug] เจอปุ่ม Scrollbar (LineDown) แล้ว -> พร้อมใช้งาน")
+        else:
+            log("[Warn] ไม่เจอปุ่ม LineDown (รายการอาจจะสั้นจนไม่มี Scrollbar?)")
+    except: pass
+
+    # 4. วนลูป: เช็คว่าเจอคำไหม -> ถ้าไม่เจอ ให้กด LineDown -> วนใหม่
+    for i in range(max_clicks):
         try:
-            # ค้นหา ListItem ทั้งหมดในหน้าจอ (เพราะ Popup อาจจะอยู่นอก Parent เดิม)
-            # *เทคนิค: หาเฉพาะที่ Visible และมีชื่อตรงกับ Keyword
-            items = [c for c in window.top_window().descendants() 
-                     if c.element_info.control_type == 'ListItem' 
-                     and keyword in c.window_text() 
-                     and c.is_visible()]
+            # 4.1 สแกนหา ListItem ที่มีคำที่ต้องการ (เฉพาะที่มองเห็น)
+            visible_items = [c for c in window.top_window().descendants(control_type="ListItem") 
+                             if c.is_visible() and target_text in c.window_text()]
             
-            if items:
-                target_item = items[0]
-                log(f"   [/] เจอรายการ '{target_item.window_text()}' -> คลิกเลือก")
+            if visible_items:
+                target_item = visible_items[0]
+                log(f"   [/] เจอรายการแล้ว: '{target_text}' (รอบที่ {i})")
                 target_item.set_focus()
                 target_item.click_input()
                 return True
-        except: pass
-        time.sleep(0.5)
-    
-    log(f"[X] พิมพ์ '{keyword}' แล้ว แต่ไม่เจอรายการให้เลือก")
+            
+            # 4.2 ถ้ายังไม่เจอ -> กดปุ่ม LineDown 1 ที
+            if line_down_btn:
+                # กดรัวๆ อาจจะค้าง ใส่ sleep นิดหน่อย
+                line_down_btn.click_input() 
+                time.sleep(0.5) 
+            else:
+                # ถ้าไม่มีปุ่มให้กด แต่หาไม่เจอ แปลว่าไม่มีรายการนี้ หรือต้องใช้ลูกศรคีย์บอร์ดแทน
+                log("[X] ไม่เจอปุ่มกดเลื่อน และยังหารายการไม่เจอ")
+                break
+
+        except Exception as e:
+            log(f"[!] Error ขณะค้นหา: {e}")
+            pass
+            
+    log(f"[X] กดเลื่อนไป {max_clicks} ครั้งแล้วยังไม่เจอ '{target_text}'")
     return False

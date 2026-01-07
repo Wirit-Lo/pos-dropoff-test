@@ -2,7 +2,7 @@ import configparser
 import os
 import time
 from pywinauto.application import Application
-from helpers import search_and_select_dropdown
+from helpers import select_dropdown_by_clicking_linedown
 
 # --- ดึงฟังก์ชันจากไฟล์ helpers.py มาใช้ ---
 from helpers import (
@@ -218,20 +218,20 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
 
     # Step 8: เลือกเรือนจำ (หรือ สถานีตำรวจ)
-    # 1. รอให้ช่อง Dropdown โผล่มา (เช็คจาก Text หรือ ID ก็ได้)
+    log("--- เลือกหน่วยงาน/เรือนจำ ---")
+    
+    # 1. รอให้ช่อง Dropdown โผล่มา
     wait_for_text(main_window, ["สน./สภ.", "รายชื่อ", "เรือนจำ"])
 
-    # 2. เรียกใช้ฟังก์ชันใหม่ (พิมพ์ค้นหา -> กดเลือก)
-    # ID: "SelectedSubList" (อ้างอิงจากที่คุณให้มา)
-    # Value: prison_name (อ่านจาก Config)
-    if search_and_select_dropdown(main_window, "SelectedSubList", prison_name):
+    # 2. เรียกใช้ฟังก์ชัน (ID: SelectedSubList, ปุ่มเลื่อน: LineDown)
+    # ฟังก์ชันนี้จะกด F4 แล้วจิ้มปุ่มลูกศรลงให้เอง
+    if select_dropdown_by_clicking_linedown(main_window, "SelectedSubList", prison_name):
         log(f"   [/] เลือก '{prison_name}' สำเร็จ")
     else:
-        # กรณีค้นหาไม่เจอ (หยุด Script หรือจะให้คนกดเองก็ได้)
-        # stop_script_immediately(f"หาเรือนจำ '{prison_name}' ไม่เจอ") 
-        pass 
+        log(f"[Error] เลือกเรือนจำไม่ได้")
+        # stop_script_immediately("เลือกเรือนจำไม่สำเร็จ") # ถ้าอยากให้หยุด
 
-    time.sleep(1.0) # รอ Popup ปิดสนิท
+    time.sleep(1.0) # รอ Popup ปิด
 
     # 3. กดถัดไป
     smart_next(main_window)
