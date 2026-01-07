@@ -61,7 +61,7 @@ def process_payment(window, payment_method, received_amount):
     - ปรับปรุง: เพิ่มระบบรอปุ่ม (Wait) เพื่อความแม่นยำ
     """
     # ใช้ตัวแปร log เพื่อให้ Python รู้ว่าเราใช้ค่าที่ส่งมาแล้ว (กันสีจาง/Error)
-    log(f"--- ขั้นตอนการชำระเงิน: วิธี '{payment_method}' | ยอด: '{received_amount}' (โหมด Fast Cash) ---")
+    log(f"--- ขั้นตอนการชำระเงิน: (โหมด Fast Cash) ---")
     
     # 1. กดรับเงิน (หน้าหลัก)
     log("...กำลังค้นหาปุ่ม 'รับเงิน'...")
@@ -94,9 +94,8 @@ def process_payment(window, payment_method, received_amount):
         window.type_keys("{ENTER}")
 
     # 3. จบรายการ
-    log("...รอหน้าสรุป/เงินทอน -> กด Enter ปิดรายการ...")
+    log("...รอหน้าสรุป/เงินทอน...")
     time.sleep(2.0) # รอ Animation ใบเสร็จเด้ง
-    window.type_keys("{ENTER}")
     time.sleep(1)
 
 def process_sender_info_popup(window, phone, sender_postal):
@@ -119,33 +118,6 @@ def process_sender_info_popup(window, phone, sender_postal):
         
         # กดถัดไป
         smart_next(window)
-
-def process_payment(window, payment_method, received_amount):
-    """(แก้ไข) รับ Argument ให้ครบ 3 ตัว ตามที่เรียกใช้"""
-    log("--- ขั้นตอนการชำระเงิน (โหมด Fast Cash) ---")
-    
-    # รอจนกว่าปุ่ม 'รับเงิน' จะโผล่มา
-    wait_for_text(window, "รับเงิน")
-    time.sleep(1.0) # รอ Animation หยุด
-    
-    if smart_click(window, "รับเงิน"):
-        # รอเข้าหน้า Fast Cash
-        wait_until_id_appears(window, "EnableFastCash")
-        time.sleep(1.0)
-    else:
-        log("[WARN] หาปุ่ม 'รับเงิน' ไม่เจอ")
-        return
-
-    log("...กดปุ่ม Fast Cash...")
-    if click_element_by_id(window, "EnableFastCash", timeout=5):
-        log("[/] ชำระเงินสำเร็จ")
-    else:
-        window.type_keys("{ENTER}")
-
-    # รอหน้าสรุป
-    time.sleep(2.0)
-    window.type_keys("{ENTER}")
-    time.sleep(1)
 
 # ================= 4. Workflow Main (Safe Mode) =================
 def run_smart_scenario(main_window, config):
