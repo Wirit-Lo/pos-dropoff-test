@@ -152,7 +152,6 @@ def click_toggle_inside_parent(window, parent_id):
         if thumbs: thumbs[0].click_input(); return True
     return False
 
-# --- วางต่อท้ายไฟล์ helpers.py ---
 @strict_check
 def click_scroll_arrow_smart(window, direction='right', repeat=5):
     """ใช้ช่วยเลื่อนหน้าจอในฟังก์ชัน Rotate Logic"""
@@ -192,7 +191,6 @@ def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
     log(f"[X] หาปุ่มไม่เจอ: {target_id}")
     return False
 
-# --- วางต่อท้ายใน helpers.py ---
 @strict_check
 def select_item_from_dropdown_list(window, combo_id, target_text):
     """
@@ -251,7 +249,6 @@ def select_item_from_dropdown_list(window, combo_id, target_text):
     log(f"[X] หาไม่เจอ หรือ เลื่อนจนสุดแล้ว")
     return False
 
-# --- วางต่อท้ายไฟล์ helpers.py ---
 @strict_check
 def select_first_list_item_in_group(window, group_id, timeout=5):
     """
@@ -288,7 +285,6 @@ def select_first_list_item_in_group(window, group_id, timeout=5):
     log(f"[WARN] ไม่พบรายการให้เลือกในกลุ่ม '{group_id}' (หรืออาจเลือกไปแล้ว)")
     return False
 
-# --- วางต่อท้ายไฟล์ helpers.py ---
 @strict_check
 def robust_fill_and_verify(window, target_id, value, timeout=15):
     """
@@ -384,8 +380,6 @@ def wait_and_select_first_item_strict(window, group_id, timeout=10):
         
     log("[X] รอนานเกินไป รายการไม่ขึ้น")
     return False
-
-# --- วางต่อท้ายไฟล์ helpers.py ---
 
 @strict_check
 def process_excess_cash_flow(window):
