@@ -181,9 +181,6 @@ def run_smart_scenario(main_window, config):
             target_unit_name = "ทัณฑสถานบำบัดพิเศษกลาง"
             log(f"[Config] ไม่ระบุปลายทาง -> ใช้ค่า Default ({target_unit_name})")
 
-        # 3. เตรียมชื่อผู้รับ (ถ้าเป็นเรือนจำ ต้องอ่านชื่อนักโทษ)
-        prisoner_name = config['MO_PRISON'].get('PrisonerName', '') if 'MO_PRISON' in config else ''
-
     except Exception as e: 
         log(f"[Error] อ่าน Config ไม่สำเร็จ: {e}")
         return
@@ -203,7 +200,7 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
 
     # Step 3: เลือกบริการ
-    target_service_id = "PayOutDomesticSendMoneyTrafficPolice116"
+    target_service_id = "PayOutDomesticSendMoneyConsul117"
     
     # [แก้ไข] เปลี่ยนจากรอ ShippingServiceList เป็นรอปุ่มบริการโดยตรง
     # จะได้ไม่รอเก้อ 10 วินาที ถ้าปุ่มมาแล้วก็กดเลย
@@ -239,23 +236,7 @@ def run_smart_scenario(main_window, config):
     smart_next(main_window)
     time.sleep(step_delay)
 
-    # Step 8: เลือกหน่วยงาน
-    log(f"--- Step 8: เลือกหน่วยงาน: {target_unit_name} ---")
-    wait_for_text(main_window, ["สน./สภ.", "รายชื่อ", "เรือนจำ", "ผู้รับ"])
-
-    # ใช้ตัวแปร target_unit_name ที่ได้จาก Logic ข้างบน
-    if select_dropdown_using_pagedown(main_window, "SelectedSubList", target_unit_name):
-        log(f"   [/] เลือก '{target_unit_name}' สำเร็จ")
-    else:
-        log(f"[Error] เลือกหน่วยงาน '{target_unit_name}' ไม่สำเร็จ")
-    
-    time.sleep(1.0) 
-    
-    # กดถัดไป
-    smart_next(main_window)
-    time.sleep(step_delay)
-
-    # Step 9-10: รับเงิน (ใช้ฟังก์ชันที่เขียนรอไว้แล้ว)
+    # Step 8-9: รับเงิน (ใช้ฟังก์ชันที่เขียนรอไว้แล้ว)
     process_payment(main_window, pay_method, pay_amount)
 
     log("\n[SUCCESS] จบการทำงานธนาณัติครบทุกขั้นตอน")
