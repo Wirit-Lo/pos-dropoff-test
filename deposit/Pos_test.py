@@ -2,7 +2,6 @@ import configparser
 import os
 import time
 from pywinauto.application import Application
-from helpers import robust_fill_and_verify, wait_and_select_first_item_strict, wait_for_text, find_and_fill_smart, smart_next
 
 # --- ดึงฟังก์ชันจากไฟล์ helpers.py มาใช้ ---
 from helpers import (
@@ -15,8 +14,7 @@ from helpers import (
     smart_next,
     click_toggle_inside_parent,
     find_and_click_with_rotate_logic,
-    select_first_list_item_in_group,
-    process_excess_cash_flow
+    select_item_from_dropdown_list
 )
 
 def load_config(filename='config.ini'):
@@ -61,7 +59,7 @@ def process_payment(window, payment_method, received_amount):
     - ปรับปรุง: เพิ่มระบบรอปุ่ม (Wait) เพื่อความแม่นยำ
     """
     # ใช้ตัวแปร log เพื่อให้ Python รู้ว่าเราใช้ค่าที่ส่งมาแล้ว (กันสีจาง/Error)
-    log(f"--- ขั้นตอนการชำระเงิน: (โหมด Fast Cash) ---")
+    log(f"--- ขั้นตอนการชำระเงิน: วิธี '{payment_method}' | ยอด: '{received_amount}' (โหมด Fast Cash) ---")
     
     # 1. กดรับเงิน (หน้าหลัก)
     log("...กำลังค้นหาปุ่ม 'รับเงิน'...")
@@ -94,8 +92,9 @@ def process_payment(window, payment_method, received_amount):
         window.type_keys("{ENTER}")
 
     # 3. จบรายการ
-    log("...รอหน้าสรุป/เงินทอน...")
+    log("...รอหน้าสรุป/เงินทอน -> กด Enter ปิดรายการ...")
     time.sleep(2.0) # รอ Animation ใบเสร็จเด้ง
+    window.type_keys("{ENTER}")
     time.sleep(1)
 
 def process_sender_info_popup(window, phone, sender_postal):
@@ -118,6 +117,33 @@ def process_sender_info_popup(window, phone, sender_postal):
         
         # กดถัดไป
         smart_next(window)
+
+def process_payment(window, payment_method, received_amount):
+    """(แก้ไข) รับ Argument ให้ครบ 3 ตัว ตามที่เรียกใช้"""
+    log("--- ขั้นตอนการชำระเงิน (โหมด Fast Cash) ---")
+    
+    # รอจนกว่าปุ่ม 'รับเงิน' จะโผล่มา
+    wait_for_text(window, "รับเงิน")
+    time.sleep(1.0) # รอ Animation หยุด
+    
+    if smart_click(window, "รับเงิน"):
+        # รอเข้าหน้า Fast Cash
+        wait_until_id_appears(window, "EnableFastCash")
+        time.sleep(1.0)
+    else:
+        log("[WARN] หาปุ่ม 'รับเงิน' ไม่เจอ")
+        return
+
+    log("...กดปุ่ม Fast Cash...")
+    if click_element_by_id(window, "EnableFastCash", timeout=5):
+        log("[/] ชำระเงินสำเร็จ")
+    else:
+        window.type_keys("{ENTER}")
+
+    # รอหน้าสรุป
+    time.sleep(2.0)
+    window.type_keys("{ENTER}")
+    time.sleep(1)
 
 # ================= 4. Workflow Main (Safe Mode) =================
 def run_smart_scenario(main_window, config):
@@ -153,7 +179,7 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
 
     # Step 3: เลือกบริการ
-    target_service_id = "PayOutDomesticSendMoneyEMSJumbo108"
+    target_service_id = "PayOutDomesticSendMoneyTrafficPolice116"
     
     # [แก้ไข] เปลี่ยนจากรอ ShippingServiceList เป็นรอปุ่มบริการโดยตรง
     # จะได้ไม่รอเก้อ 10 วินาที ถ้าปุ่มมาแล้วก็กดเลย
@@ -168,25 +194,13 @@ def run_smart_scenario(main_window, config):
     # (ใช้ฟังก์ชันใหม่ที่เขียนรอไว้แล้ว)
     process_sender_info_popup(main_window, sender_phone, sender_postal)
     
-    # Step 5
-    wait_for_text(main_window, ["ปลายทาง", "จำนวนเงิน"])
+    # Step 5: หน้าส่งเงิน
+    # รอให้แน่ใจว่าเข้าหน้าส่งเงินแล้ว (เช็คจากคำว่า 'จำนวนเงิน' หรือ ID ช่องกรอก)
+    wait_for_text(main_window, ["จำนวนเงิน"])
     
-    # 1. กรอกจำนวนเงิน (ใช้แบบเดิมได้ เพราะถ้าพลาดไม่ได้ส่งผลต่อ List)
+    # กรอกจำนวนเงิน (Auto Wait)
     find_and_fill_smart(main_window, "จำนวนเงิน", "CurrencyAmount", amount)
     
-    # 2. กรอกรหัสไปรษณีย์ (ใช้ตัวใหม่: แบบตรวจสอบผลลัพธ์)
-    # มันจะวนรอบจนกว่าเลข 10110 จะเข้าไปอยู่ในช่องจริงๆ
-    if robust_fill_and_verify(main_window, "SpecificPostOfficeFilter", dest_postal, timeout=15):
-        
-        # 3. รอและเลือกรายการ (ใช้ตัวใหม่: รอจนกว่าลูกจะเกิด)
-        # ระบบจะรอจนกว่า "พระโขนง" (หรือรายการแรก) จะโผล่มาให้กดจริงๆ
-        wait_and_select_first_item_strict(main_window, "SpecificPostOffice")
-    
-    else:
-        log("[Error] กรอกรหัสไปรษณีย์ไม่สำเร็จ โปรแกรมจะหยุด")
-        return
-
-    # กดถัดไป
     smart_next(main_window)
     time.sleep(step_delay)
 
@@ -201,20 +215,29 @@ def run_smart_scenario(main_window, config):
     smart_next(main_window)
     time.sleep(step_delay)
 
-    # Step 8: หน้าข้อมูลผู้รับ
-    wait_for_text(main_window, ["ผู้รับ", "ชื่อ", "นามสกุล"])
+    # Step 8: เลือกเรือนจำ และ กรอกชื่อผู้รับเงิน
+    log("--- หน้าข้อมูลผู้รับเงิน (เรือนจำ) ---")
     
-    find_and_fill_smart(main_window, "ชื่อ", "CustomerFirstName", rcv_fname)
-    find_and_fill_smart(main_window, "นามสกุล", "CustomerLastName", rcv_lname)
+    # ดึงค่าจาก Config
+    prison_name = config['MO_PRISON'].get('PrisonName', 'ทัณฑสถาน')
+
+    # รอหน้าจอโหลด
+    wait_for_text(main_window, ["สน./สภ.", "รายชื่อเรือนจำ"])
+
+    # --- ส่วนที่แก้ไข ---
+    # เรียกฟังก์ชันใหม่: ส่ง ID ของ ComboBox ('SelectedSubList') ไปให้มันกดเอง
+    # ไม่ต้องกด smart_click("สน./สภ.") แยกแล้ว ให้ฟังก์ชันจัดการทีเดียว
+    if not select_item_from_dropdown_list(main_window, "SelectedSubList", prison_name):
+        log("[WARN] เลือกเรือนจำไม่สำเร็จ (อาจต้องเลือกเองด้วยมือ)")
     
+    time.sleep(1.0) # รอ Pop-up ปิด
+    
+    # กดถัดไป
     smart_next(main_window)
     time.sleep(step_delay)
 
     # Step 9-10: รับเงิน (ใช้ฟังก์ชันที่เขียนรอไว้แล้ว)
     process_payment(main_window, pay_method, pay_amount)
-    
-    # Step 11: จัดการเงินเกินลิ้นชัก (เพิ่มเติม)
-    process_excess_cash_flow(main_window)
 
     log("\n[SUCCESS] จบการทำงานธนาณัติครบทุกขั้นตอน")
 
