@@ -125,8 +125,6 @@ def run_smart_scenario(main_window, config):
         rcv_fname = mo_config.get('ReceiverFirstName', 'TestName')
         rcv_lname = mo_config.get('ReceiverLastName', 'TestLast')
         options_str = mo_config.get('Options', '')
-        pay_method = config['PAYMENT'].get('Method', 'เงินสด') if 'PAYMENT' in config else 'เงินสด'
-        process_payment(main_window, pay_method, pay_amount)
         pay_amount = config['PAYMENT'].get('ReceivedAmount', '1000') if 'PAYMENT' in config else '1000'
         step_delay = float(config['SETTINGS'].get('StepDelay', 0.8))
     except Exception as e: 
