@@ -15,7 +15,8 @@ from helpers import (
     smart_next,
     click_toggle_inside_parent,
     find_and_click_with_rotate_logic,
-    select_first_list_item_in_group
+    select_first_list_item_in_group,
+    process_excess_cash_flow
 )
 
 def load_config(filename='config.ini'):
@@ -95,7 +96,6 @@ def process_payment(window, payment_method, received_amount):
     # 3. จบรายการ
     log("...รอหน้าสรุป/เงินทอน -> กด Enter ปิดรายการ...")
     time.sleep(2.0) # รอ Animation ใบเสร็จเด้ง
-    window.type_keys("{ENTER}")
     time.sleep(1)
 
 def process_sender_info_popup(window, phone, sender_postal):
@@ -239,6 +239,9 @@ def run_smart_scenario(main_window, config):
 
     # Step 9-10: รับเงิน (ใช้ฟังก์ชันที่เขียนรอไว้แล้ว)
     process_payment(main_window, pay_method, pay_amount)
+    
+    # Step 11: จัดการเงินเกินลิ้นชัก (เพิ่มเติม)
+    process_excess_cash_flow(main_window)
 
     log("\n[SUCCESS] จบการทำงานธนาณัติครบทุกขั้นตอน")
 
