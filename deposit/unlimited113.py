@@ -15,7 +15,8 @@ from helpers import (
     smart_next,
     click_toggle_inside_parent,
     find_and_click_with_rotate_logic,
-    select_first_list_item_in_group
+    select_first_list_item_in_group,
+    process_excess_cash_flow
 )
 
 def load_config(filename='config.ini'):
@@ -180,7 +181,7 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
 
     # Step 3: เลือกบริการ
-    target_service_id = "PayOutDomesticSendMoneyEMSJumbo108"
+    target_service_id = "PayOutDomesticSendMoneyAbove100k113"
     
     # [แก้ไข] เปลี่ยนจากรอ ShippingServiceList เป็นรอปุ่มบริการโดยตรง
     # จะได้ไม่รอเก้อ 10 วินาที ถ้าปุ่มมาแล้วก็กดเลย
@@ -239,6 +240,9 @@ def run_smart_scenario(main_window, config):
 
     # Step 9-10: รับเงิน (ใช้ฟังก์ชันที่เขียนรอไว้แล้ว)
     process_payment(main_window, pay_method, pay_amount)
+
+    # Step 11: จัดการเงินเกินลิ้นชัก (เพิ่มเติม)
+    process_excess_cash_flow(main_window)
 
     log("\n[SUCCESS] จบการทำงานธนาณัติครบทุกขั้นตอน")
 

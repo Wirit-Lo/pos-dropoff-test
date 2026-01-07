@@ -385,3 +385,36 @@ def wait_and_select_first_item_strict(window, group_id, timeout=10):
     log("[X] รอนานเกินไป รายการไม่ขึ้น")
     return False
 
+# --- วางต่อท้ายไฟล์ helpers.py ---
+
+@strict_check
+def process_excess_cash_flow(window):
+    """
+    จัดการ Flow เงินเกินลิ้นชัก:
+    1. Popup แจ้งเตือน (กด AcceptButton)
+    2. หน้าโอนเงินสด (กด Next)
+    3. Popup ยืนยัน (กด Yes)
+    4. หน้าพิมพ์ (กด PrintYes)
+    """
+    log("--- เริ่มกระบวนการจัดการเงินเกินลิ้นชัก (Excess Cash Flow) ---")
+
+    # 1. รอและกดปุ่ม 'ตกลง' (AcceptButton) ที่ Popup แจ้งเตือน
+    # ใช้ wait_until_id_appears เพื่อรอให้ Popup เด้งขึ้นมาแน่นอน
+    wait_until_id_appears(window, "AcceptButton")
+    click_element_by_id(window, "AcceptButton")
+    
+    # 2. รอเข้าหน้า 'การโอนเงินสด/เช็ค' และกด 'ถัดไป' (LocalCommand_Submit)
+    # รอข้อความหัวข้อเพื่อให้แน่ใจว่าหน้าโหลดเสร็จ
+    wait_for_text(window, "การโอนเงินสด")
+    smart_next(window) # ฟังก์ชันนี้กด LocalCommand_Submit ให้เอง
+
+    # 3. รอและกดปุ่ม 'ใช่' (Yes) ที่ Popup ยืนยันการโอน
+    wait_until_id_appears(window, "Yes")
+    click_element_by_id(window, "Yes")
+
+    # 4. รอและกดปุ่ม 'พิมพ์' (PrintYes) ที่หน้าสุดท้าย
+    wait_until_id_appears(window, "PrintYes")
+    click_element_by_id(window, "PrintYes")
+
+    log("   [/] จบขั้นตอนการโอนเงินเกินและสั่งพิมพ์")
+    return True
