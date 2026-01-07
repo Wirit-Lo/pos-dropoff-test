@@ -226,21 +226,12 @@ def run_smart_scenario(main_window, config):
     if not fill_amount_and_destination(main_window, amount, dest_postal):
         return # ถ้ากรอกไม่สำเร็จ (False) ให้หยุดโปรแกรมทันที
 
-    # กดถัดไป
-    smart_next(main_window)
-    time.sleep(step_delay)
-
    # Step 6: หน้ายอดเงินที่ส่ง กดถัดไป
     handle_sms_step(main_window, send_sms)
-    # กดถัดไป
-    smart_next(main_window)
-    time.sleep(step_delay)
 
     # Step 7: หน้าข้อมูลผู้ส่ง (ยืนยัน)
     # รอให้ Header ขึ้น
     wait_for_text(main_window, ["ผู้ฝากส่ง", "ข้อมูลผู้ส่ง"])
-    smart_next(main_window)
-    time.sleep(step_delay)
 
     # Step 8: หน้าข้อมูลผู้รับ
     fill_receiver_details_with_sms(main_window, rcv_fname, rcv_lname, send_sms, receiver_phone)
