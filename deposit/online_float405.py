@@ -183,7 +183,7 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
 
     # Step 3: เลือกบริการ
-    target_service_name = "401 - ธนาณัติออนไลน์ระบุปลายทาง" 
+    target_service_name = "405 - ธนาณัติออนไลน์ไม่ระบุปลายทาง" 
 
     log(f"...กำลังหาปุ่มชื่อ '{target_service_name}'...")
 
@@ -225,7 +225,12 @@ def run_smart_scenario(main_window, config):
     # Step 5: หน้าส่งเงิน
     # รอให้แน่ใจว่าเข้าหน้าส่งเงินแล้ว (เช็คจากคำว่า 'จำนวนเงิน' หรือ ID ช่องกรอก)
     wait_for_text(main_window, ["จำนวนเงิน"])
-
+    
+    # กรอกจำนวนเงิน (Auto Wait)
+    find_and_fill_smart(main_window, "จำนวนเงิน", "CurrencyAmount", amount)
+    
+    smart_next(main_window)
+    time.sleep(step_delay)
 
    # Step 6: หน้ายอดเงินที่ส่ง กดถัดไป
     handle_sms_step(main_window, send_sms)
