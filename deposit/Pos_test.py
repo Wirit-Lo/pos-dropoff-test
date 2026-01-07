@@ -2,7 +2,7 @@ import configparser
 import os
 import time
 from pywinauto.application import Application
-from helpers import select_dropdown_by_clicking_linedown
+from helpers import select_dropdown_using_pagedown
 
 # --- ดึงฟังก์ชันจากไฟล์ helpers.py มาใช้ ---
 from helpers import (
@@ -220,20 +220,17 @@ def run_smart_scenario(main_window, config):
     # Step 8: เลือกเรือนจำ (หรือ สถานีตำรวจ)
     log("--- เลือกหน่วยงาน/เรือนจำ ---")
     
-    # 1. รอให้ช่อง Dropdown โผล่มา
     wait_for_text(main_window, ["สน./สภ.", "รายชื่อ", "เรือนจำ"])
 
-    # 2. เรียกใช้ฟังก์ชัน (ID: SelectedSubList, ปุ่มเลื่อน: LineDown)
-    # ฟังก์ชันนี้จะกด F4 แล้วจิ้มปุ่มลูกศรลงให้เอง
-    if select_dropdown_by_clicking_linedown(main_window, "SelectedSubList", prison_name):
+    # เรียกใช้ฟังก์ชัน (ID: SelectedSubList)
+    if select_dropdown_using_pagedown(main_window, "SelectedSubList", prison_name):
         log(f"   [/] เลือก '{prison_name}' สำเร็จ")
     else:
-        log(f"[Error] เลือกเรือนจำไม่ได้")
-        # stop_script_immediately("เลือกเรือนจำไม่สำเร็จ") # ถ้าอยากให้หยุด
+        log(f"[Error] เลือกเรือนจำไม่สำเร็จ")
+        
+    time.sleep(1.0) 
 
-    time.sleep(1.0) # รอ Popup ปิด
-
-    # 3. กดถัดไป
+    # กดถัดไป
     smart_next(main_window)
     time.sleep(step_delay)
 

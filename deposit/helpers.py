@@ -414,17 +414,18 @@ def process_excess_cash_flow(window):
     return True
 
 # --- วางต่อท้ายไฟล์ helpers.py ---
+
 @strict_check
-def select_dropdown_by_clicking_linedown(window, box_id, target_text, max_clicks=50):
+def select_dropdown_using_pagedown(window, box_id, target_text, max_pages=20):
     """
-    ฟังก์ชันเลือก Dropdown (ฉบับกดปุ่มลูกศร Scrollbar):
+    ฟังก์ชันเลือก Dropdown (ฉบับกด PageDown):
     1. กด F4 เปิดกล่อง
-    2. หาปุ่ม Scrollbar ที่ชื่อ ID='LineDown'
-    3. กดปุ่มนั้นซ้ำๆ จนกว่าจะเจอรายการที่ต้องการ
+    2. เช็คว่าเจอคำไหม ถ้าไม่เจอ -> กด PageDown
+    3. ทำซ้ำจนกว่าจะเจอหรือครบจำนวนรอบ
     """
-    log(f"...กำลังค้นหา '{target_text}' ใน ID '{box_id}' (โหมดกดปุ่ม LineDown)...")
+    log(f"...กำลังค้นหา '{target_text}' ใน ID '{box_id}' (โหมดกด PageDown)...")
     
-    # 1. หาและ Focus ที่กล่อง Dropdown
+    # 1. หาและ Focus ที่กล่อง
     try:
         found_box = [c for c in window.descendants() if c.element_info.automation_id == box_id and c.is_visible()]
         if not found_box:
@@ -438,25 +439,13 @@ def select_dropdown_by_clicking_linedown(window, box_id, target_text, max_clicks
     # 2. กด F4 เพื่อกางรายการ
     log("   [/] กด F4 เพื่อกางรายการ")
     target_box.type_keys("{F4}")
-    time.sleep(2.0) # รอให้รายการและ Scrollbar เด้งออกมา
+    time.sleep(2.0) # รอให้รายการเด้ง
 
-    # 3. หาปุ่ม "LineDown" (ปุ่มลูกศรลงของ Scrollbar)
-    line_down_btn = None
-    try:
-        # ค้นหาปุ่ม LineDown ในหน้าต่างทั้งหมด (เพราะ Popup อาจแยกตัวออกมา)
-        btns = [c for c in window.top_window().descendants() 
-                if c.element_info.automation_id == "LineDown" and c.is_visible()]
-        if btns:
-            line_down_btn = btns[0]
-            log("   [Debug] เจอปุ่ม Scrollbar (LineDown) แล้ว -> พร้อมใช้งาน")
-        else:
-            log("[Warn] ไม่เจอปุ่ม LineDown (รายการอาจจะสั้นจนไม่มี Scrollbar?)")
-    except: pass
-
-    # 4. วนลูป: เช็คว่าเจอคำไหม -> ถ้าไม่เจอ ให้กด LineDown -> วนใหม่
-    for i in range(max_clicks):
+    # 3. วนลูปค้นหา
+    for i in range(max_pages):
         try:
-            # 4.1 สแกนหา ListItem ที่มีคำที่ต้องการ (เฉพาะที่มองเห็น)
+            # 3.1 สแกนหา ListItem ที่มีคำที่ต้องการ (เฉพาะที่มองเห็น)
+            # ต้องหาจาก top_window() เพราะ Popup มักจะแยกตัวออกมา
             visible_items = [c for c in window.top_window().descendants(control_type="ListItem") 
                              if c.is_visible() and target_text in c.window_text()]
             
@@ -467,19 +456,15 @@ def select_dropdown_by_clicking_linedown(window, box_id, target_text, max_clicks
                 target_item.click_input()
                 return True
             
-            # 4.2 ถ้ายังไม่เจอ -> กดปุ่ม LineDown 1 ที
-            if line_down_btn:
-                # กดรัวๆ อาจจะค้าง ใส่ sleep นิดหน่อย
-                line_down_btn.click_input() 
-                time.sleep(0.5) 
-            else:
-                # ถ้าไม่มีปุ่มให้กด แต่หาไม่เจอ แปลว่าไม่มีรายการนี้ หรือต้องใช้ลูกศรคีย์บอร์ดแทน
-                log("[X] ไม่เจอปุ่มกดเลื่อน และยังหารายการไม่เจอ")
-                break
+            # 3.2 ถ้ายังไม่เจอ -> กด PageDown
+            # ส่งปุ่มไปที่ top_window หรือ target_box ก็ได้
+            log(f"   ...ยังไม่เจอ กด PageDown (รอบที่ {i+1})")
+            target_box.type_keys("{PGDN}") 
+            time.sleep(1.0) # รอให้รายการเลื่อนและหยุดนิ่ง
 
         except Exception as e:
             log(f"[!] Error ขณะค้นหา: {e}")
             pass
             
-    log(f"[X] กดเลื่อนไป {max_clicks} ครั้งแล้วยังไม่เจอ '{target_text}'")
+    log(f"[X] กด PageDown ไป {max_pages} รอบแล้วยังไม่เจอ '{target_text}'")
     return False
