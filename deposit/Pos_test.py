@@ -230,8 +230,6 @@ def run_smart_scenario(main_window, config):
    # Step 6: หน้ายอดเงินที่ส่ง กดถัดไป
     handle_sms_step(main_window, send_sms)
     # กดถัดไป
-    smart_next(main_window)
-    time.sleep(step_delay)
 
     # Step 7: หน้าข้อมูลผู้ส่ง (ยืนยัน)
     # รอให้ Header ขึ้น
