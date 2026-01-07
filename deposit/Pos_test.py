@@ -91,6 +91,12 @@ def process_payment(window, payment_method, received_amount):
         log("[/] กดปุ่ม Fast Cash สำเร็จ -> ระบบตัดเงินทันที")
     else:
         log("[WARN] กดปุ่ม Fast Cash ไม่ติด -> ลองกด Enter ช่วย")
+    
+
+    # 3. จบรายการ
+    log("...รอหน้าสรุป/เงินทอน -> กด Enter ปิดรายการ...")
+    time.sleep(2.0) # รอ Animation ใบเสร็จเด้ง
+    time.sleep(1)
 
 def process_sender_info_popup(window, phone, sender_postal):
     """จัดการหน้าข้อมูลผู้ส่ง: กดอ่านบัตร -> เติมรหัสปณ. -> เติมเบอร์โทร"""
@@ -125,6 +131,7 @@ def run_smart_scenario(main_window, config):
         rcv_fname = mo_config.get('ReceiverFirstName', 'TestName')
         rcv_lname = mo_config.get('ReceiverLastName', 'TestLast')
         options_str = mo_config.get('Options', '')
+        pay_method = config['PAYMENT'].get('Method', 'เงินสด') if 'PAYMENT' in config else 'เงินสด'
         pay_amount = config['PAYMENT'].get('ReceivedAmount', '1000') if 'PAYMENT' in config else '1000'
         step_delay = float(config['SETTINGS'].get('StepDelay', 0.8))
     except Exception as e: 
