@@ -2,7 +2,6 @@ import configparser
 import os
 import time
 from pywinauto.application import Application
-from helpers import select_dropdown_using_pagedown
 
 # --- ดึงฟังก์ชันจากไฟล์ helpers.py มาใช้ ---
 from helpers import (
@@ -13,9 +12,10 @@ from helpers import (
     click_element_by_id,
     find_and_fill_smart,
     smart_next,
-    click_toggle_inside_parent,
-    find_and_click_with_rotate_logic,
-    select_item_from_dropdown_list
+    wait_for_text,
+    fill_receiver_details_with_sms,
+    handle_sms_step,
+    fill_amount_and_destination
 )
 
 def load_config(filename='config.ini'):
@@ -153,34 +153,17 @@ def run_smart_scenario(main_window, config):
         sender_postal = config['TEST_DATA'].get('SenderPostalCode', '10110')
         sender_phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
         mo_config = config['MONEY_ORDER'] if 'MONEY_ORDER' in config else {}
+        raw_sms = mo_config.get('SendSMS', 'No').lower()
+        send_sms = True if raw_sms in ['yes', 'true', '1', 'on'] else False
+        receiver_phone = mo_config.get('ReceiverPhone', '')
         amount = mo_config.get('Amount', '100')
         dest_postal = mo_config.get('DestinationPostalCode', '10110')
         rcv_fname = mo_config.get('ReceiverFirstName', 'TestName')
         rcv_lname = mo_config.get('ReceiverLastName', 'TestLast')
+        options_str = mo_config.get('Options', '')
         pay_method = config['PAYMENT'].get('Method', 'เงินสด') if 'PAYMENT' in config else 'เงินสด'
         pay_amount = config['PAYMENT'].get('ReceivedAmount', '1000') if 'PAYMENT' in config else '1000'
         step_delay = float(config['SETTINGS'].get('StepDelay', 0.8))
-
-        # 1. อ่านค่าดิบจากทั้ง 2 หมวดมาก่อน
-        prison_val = config['MO_PRISON'].get('PrisonName', '') if 'MO_PRISON' in config else ''
-        police_val = config['TRAFFIC_POLICE'].get('PoliceStationName', '') if 'TRAFFIC_POLICE' in config else ''
-        
-        # 2. Logic ตัดสินใจ (Priority):
-        # ถ้ามีชื่อเรือนจำ -> ให้ใช้เรือนจำ
-        if prison_val and prison_val.strip() != "":
-            target_unit_name = prison_val
-            log(f"[Config] โหมด: ฝากเงินผู้ต้องขัง ({target_unit_name})")
-        
-        # ถ้าไม่มีเรือนจำ แต่มีชื่อสถานีตำรวจ -> ให้ใช้สถานีตำรวจ
-        elif police_val and police_val.strip() != "":
-            target_unit_name = police_val
-            log(f"[Config] โหมด: ค่าปรับจราจร ({target_unit_name})")
-        
-        # ถ้าไม่มีทั้งคู่ -> ใช้ค่า Default
-        else:
-            target_unit_name = "ทัณฑสถานบำบัดพิเศษกลาง"
-            log(f"[Config] ไม่ระบุปลายทาง -> ใช้ค่า Default ({target_unit_name})")
-
     except Exception as e: 
         log(f"[Error] อ่าน Config ไม่สำเร็จ: {e}")
         return
@@ -200,7 +183,7 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
 
     # Step 3: เลือกบริการ
-    target_service_name = "117 - ธนาณัติกรมการกงศุล" 
+    target_service_name = "107 - พกง EMS Jumbo" 
 
     log(f"...กำลังหาปุ่มชื่อ '{target_service_name}'...")
 
@@ -239,18 +222,17 @@ def run_smart_scenario(main_window, config):
     # (ใช้ฟังก์ชันใหม่ที่เขียนรอไว้แล้ว)
     process_sender_info_popup(main_window, sender_phone, sender_postal)
     
-    # Step 5: หน้าส่งเงิน
-    # รอให้แน่ใจว่าเข้าหน้าส่งเงินแล้ว (เช็คจากคำว่า 'จำนวนเงิน' หรือ ID ช่องกรอก)
-    wait_for_text(main_window, ["จำนวนเงิน"])
-    
-    # กรอกจำนวนเงิน (Auto Wait)
-    find_and_fill_smart(main_window, "จำนวนเงิน", "CurrencyAmount", amount)
-    
+    # Step 5
+    if not fill_amount_and_destination(main_window, amount, dest_postal):
+        return # ถ้ากรอกไม่สำเร็จ (False) ให้หยุดโปรแกรมทันที
+
+    # กดถัดไป
     smart_next(main_window)
     time.sleep(step_delay)
 
    # Step 6: หน้ายอดเงินที่ส่ง กดถัดไป
-    wait_for_text(main_window, ["ยอดเงินที่ส่ง"])
+    handle_sms_step(main_window, send_sms)
+    # กดถัดไป
     smart_next(main_window)
     time.sleep(step_delay)
 
@@ -260,7 +242,12 @@ def run_smart_scenario(main_window, config):
     smart_next(main_window)
     time.sleep(step_delay)
 
-    # Step 8-9: รับเงิน (ใช้ฟังก์ชันที่เขียนรอไว้แล้ว)
+    # Step 8: หน้าข้อมูลผู้รับ
+    fill_receiver_details_with_sms(main_window, rcv_fname, rcv_lname, send_sms, receiver_phone)
+    smart_next(main_window)
+    time.sleep(step_delay)
+
+    # Step 9-10: รับเงิน (ใช้ฟังก์ชันที่เขียนรอไว้แล้ว)
     process_payment(main_window, pay_method, pay_amount)
 
     log("\n[SUCCESS] จบการทำงานธนาณัติครบทุกขั้นตอน")

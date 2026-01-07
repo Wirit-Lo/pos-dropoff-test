@@ -474,3 +474,96 @@ def select_dropdown_using_pagedown(window, box_id, target_text, max_pages=20):
     log(f"[X] กด PageDown ไป {max_pages} รอบแล้วยังไม่เจอ ID '{target_text}'")
     return False
 
+@strict_check
+def fill_receiver_details_with_sms(window, fname, lname, send_sms=False, phone=""):
+    """
+    กรอกข้อมูลผู้รับ + จัดการเรื่อง SMS (ถ้าเปิด)
+    """
+    log(f"--- กรอกข้อมูลผู้รับ: {fname} {lname} (SMS: {send_sms}) ---")
+    
+    # 1. รอหน้าจอ
+    wait_for_text(window, ["ผู้รับ", "ชื่อ", "นามสกุล"])
+
+    # 2. กรอกชื่อและนามสกุล
+    find_and_fill_smart(window, "ชื่อ", "CustomerFirstName", fname)
+    find_and_fill_smart(window, "นามสกุล", "CustomerLastName", lname)
+
+    # 3. จัดการ SMS (ถ้าเปิด)
+    if send_sms:
+        log("   [SMS Mode] กำลังกรอกเบอร์โทรศัพท์...")
+        if phone:
+            # พยายามหาช่องเบอร์โทร (ใช้ ID: PhoneNumber หรือ Text: เบอร์โทร)
+            if not find_and_fill_smart(window, "เบอร์โทร", "PhoneNumber", phone):
+                 # Fallback: ลองหาคำว่า "โทรศัพท์"
+                 find_and_fill_smart(window, "โทรศัพท์", "Phone", phone)
+        else:
+            log("   [Warn] เปิดโหมด SMS แต่ไม่มีเบอร์โทรระบุมา")
+
+    # 4. กดถัดไป
+    smart_next(window)
+    time.sleep(1.0) # รอหน้าเปลี่ยน
+    return True
+
+# --- เพิ่มใน helpers.py ---
+
+@strict_check
+def handle_sms_step(window, send_sms=False):
+    """
+    Step 6: จัดการหน้ายอดเงิน และกดเปิด SMS (ถ้า Config สั่ง)
+    """
+    log("--- Step 6: ตรวจสอบยอดเงิน & SMS ---")
+    
+    # 1. รอหน้าจอ "ยอดเงินที่ส่ง"
+    wait_for_text(window, ["ยอดเงินที่ส่ง"])
+
+    # 2. Logic เปิด/ปิด SMS
+    if send_sms:
+        log("   [Config] ต้องการส่ง SMS -> กำลังกดเปิด Switch...")
+        
+        # รอให้ปุ่ม SwitchThumb โผล่มา (Timeout สั้นๆ ก็ได้เพราะหน้าจอโหลดแล้ว)
+        wait_until_id_appears(window, "SwitchThumb", timeout=5)
+        
+        # กดปุ่มเพื่อเปิด (Toggle On)
+        if click_element_by_id(window, "SwitchThumb"):
+            log("   [/] กดเปิด SMS สำเร็จ")
+        else:
+            log("   [Warn] หาปุ่ม SwitchThumb ไม่เจอ (อาจจะไม่ได้เปิด SMS)")
+    else:
+        log("   [Config] ไม่ส่ง SMS -> ข้ามขั้นตอน")
+
+    # 3. กดถัดไป (จบ Step นี้ในตัวเลย)
+    smart_next(window)
+    time.sleep(1.0) # รอหน้าเปลี่ยน
+    return True
+
+# --- เพิ่มใน helpers.py ---
+
+@strict_check
+def fill_amount_and_destination(window, amount, postal_code):
+    """
+    Step 5: กรอกจำนวนเงิน และ เลือกปลายทาง (รหัสไปรษณีย์)
+    """
+    log(f"--- Step 5: กรอกยอดเงิน ({amount}) & ปลายทาง ({postal_code}) ---")
+    
+    # 1. รอหน้าจอ
+    wait_for_text(window, ["ปลายทาง", "จำนวนเงิน"])
+    
+    # 2. กรอกจำนวนเงิน (ใช้ find_and_fill_smart ตามเดิม)
+    find_and_fill_smart(window, "จำนวนเงิน", "CurrencyAmount", amount)
+    
+    # 3. กรอกรหัสไปรษณีย์ (ใช้ตัวตรวจสอบผลลัพธ์: robust_fill_and_verify)
+    # มันจะวนรอบจนกว่าเลขจะเข้าไปอยู่ในช่องจริงๆ
+    if robust_fill_and_verify(window, "SpecificPostOfficeFilter", postal_code, timeout=15):
+        
+        # 4. รอและเลือกรายการ (รอจนกว่าลูกจะเกิดแล้วค่อยกด)
+        # ระบบจะรอจนกว่ารายการแรก (เช่น พระโขนง) จะโผล่มาให้กด
+        wait_and_select_first_item_strict(window, "SpecificPostOffice")
+        
+    else:
+        log(f"[Error] กรอกรหัสไปรษณีย์ '{postal_code}' ไม่สำเร็จ (Timeout)")
+        return False # ส่งค่ากลับว่าล้มเหลว
+
+    # 5. กดถัดไป (จบ Step นี้)
+    smart_next(window)
+    time.sleep(1.0) # รอหน้าเปลี่ยน
+    return True
