@@ -473,3 +473,4 @@ def select_dropdown_using_pagedown(window, box_id, target_text, max_pages=20):
             
     log(f"[X] กด PageDown ไป {max_pages} รอบแล้วยังไม่เจอ ID '{target_text}'")
     return False
+
