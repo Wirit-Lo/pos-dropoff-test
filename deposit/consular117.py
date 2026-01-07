@@ -2,7 +2,7 @@ import configparser
 import os
 import time
 from pywinauto.application import Application
-from helpers import robust_fill_and_verify, wait_and_select_first_item_strict, wait_for_text, find_and_fill_smart, smart_next
+from helpers import select_dropdown_using_pagedown
 
 # --- ดึงฟังก์ชันจากไฟล์ helpers.py มาใช้ ---
 from helpers import (
@@ -15,7 +15,7 @@ from helpers import (
     smart_next,
     click_toggle_inside_parent,
     find_and_click_with_rotate_logic,
-    select_first_list_item_in_group
+    select_item_from_dropdown_list
 )
 
 def load_config(filename='config.ini'):
@@ -157,10 +157,30 @@ def run_smart_scenario(main_window, config):
         dest_postal = mo_config.get('DestinationPostalCode', '10110')
         rcv_fname = mo_config.get('ReceiverFirstName', 'TestName')
         rcv_lname = mo_config.get('ReceiverLastName', 'TestLast')
-        options_str = mo_config.get('Options', '')
         pay_method = config['PAYMENT'].get('Method', 'เงินสด') if 'PAYMENT' in config else 'เงินสด'
         pay_amount = config['PAYMENT'].get('ReceivedAmount', '1000') if 'PAYMENT' in config else '1000'
         step_delay = float(config['SETTINGS'].get('StepDelay', 0.8))
+
+        # 1. อ่านค่าดิบจากทั้ง 2 หมวดมาก่อน
+        prison_val = config['MO_PRISON'].get('PrisonName', '') if 'MO_PRISON' in config else ''
+        police_val = config['TRAFFIC_POLICE'].get('PoliceStationName', '') if 'TRAFFIC_POLICE' in config else ''
+        
+        # 2. Logic ตัดสินใจ (Priority):
+        # ถ้ามีชื่อเรือนจำ -> ให้ใช้เรือนจำ
+        if prison_val and prison_val.strip() != "":
+            target_unit_name = prison_val
+            log(f"[Config] โหมด: ฝากเงินผู้ต้องขัง ({target_unit_name})")
+        
+        # ถ้าไม่มีเรือนจำ แต่มีชื่อสถานีตำรวจ -> ให้ใช้สถานีตำรวจ
+        elif police_val and police_val.strip() != "":
+            target_unit_name = police_val
+            log(f"[Config] โหมด: ค่าปรับจราจร ({target_unit_name})")
+        
+        # ถ้าไม่มีทั้งคู่ -> ใช้ค่า Default
+        else:
+            target_unit_name = "ทัณฑสถานบำบัดพิเศษกลาง"
+            log(f"[Config] ไม่ระบุปลายทาง -> ใช้ค่า Default ({target_unit_name})")
+
     except Exception as e: 
         log(f"[Error] อ่าน Config ไม่สำเร็จ: {e}")
         return
@@ -180,7 +200,7 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
 
     # Step 3: เลือกบริการ
-    target_service_name = "107 - พกง EMS Jumbo" 
+    target_service_name = "117 - ธนาณัติกรมการกงศุล" 
 
     log(f"...กำลังหาปุ่มชื่อ '{target_service_name}'...")
 
@@ -219,25 +239,13 @@ def run_smart_scenario(main_window, config):
     # (ใช้ฟังก์ชันใหม่ที่เขียนรอไว้แล้ว)
     process_sender_info_popup(main_window, sender_phone, sender_postal)
     
-    # Step 5
-    wait_for_text(main_window, ["ปลายทาง", "จำนวนเงิน"])
+    # Step 5: หน้าส่งเงิน
+    # รอให้แน่ใจว่าเข้าหน้าส่งเงินแล้ว (เช็คจากคำว่า 'จำนวนเงิน' หรือ ID ช่องกรอก)
+    wait_for_text(main_window, ["จำนวนเงิน"])
     
-    # 1. กรอกจำนวนเงิน (ใช้แบบเดิมได้ เพราะถ้าพลาดไม่ได้ส่งผลต่อ List)
+    # กรอกจำนวนเงิน (Auto Wait)
     find_and_fill_smart(main_window, "จำนวนเงิน", "CurrencyAmount", amount)
     
-    # 2. กรอกรหัสไปรษณีย์ (ใช้ตัวใหม่: แบบตรวจสอบผลลัพธ์)
-    # มันจะวนรอบจนกว่าเลข 10110 จะเข้าไปอยู่ในช่องจริงๆ
-    if robust_fill_and_verify(main_window, "SpecificPostOfficeFilter", dest_postal, timeout=15):
-        
-        # 3. รอและเลือกรายการ (ใช้ตัวใหม่: รอจนกว่าลูกจะเกิด)
-        # ระบบจะรอจนกว่า "พระโขนง" (หรือรายการแรก) จะโผล่มาให้กดจริงๆ
-        wait_and_select_first_item_strict(main_window, "SpecificPostOffice")
-    
-    else:
-        log("[Error] กรอกรหัสไปรษณีย์ไม่สำเร็จ โปรแกรมจะหยุด")
-        return
-
-    # กดถัดไป
     smart_next(main_window)
     time.sleep(step_delay)
 
@@ -252,16 +260,7 @@ def run_smart_scenario(main_window, config):
     smart_next(main_window)
     time.sleep(step_delay)
 
-    # Step 8: หน้าข้อมูลผู้รับ
-    wait_for_text(main_window, ["ผู้รับ", "ชื่อ", "นามสกุล"])
-    
-    find_and_fill_smart(main_window, "ชื่อ", "CustomerFirstName", rcv_fname)
-    find_and_fill_smart(main_window, "นามสกุล", "CustomerLastName", rcv_lname)
-    
-    smart_next(main_window)
-    time.sleep(step_delay)
-
-    # Step 9-10: รับเงิน (ใช้ฟังก์ชันที่เขียนรอไว้แล้ว)
+    # Step 8-9: รับเงิน (ใช้ฟังก์ชันที่เขียนรอไว้แล้ว)
     process_payment(main_window, pay_method, pay_amount)
 
     log("\n[SUCCESS] จบการทำงานธนาณัติครบทุกขั้นตอน")
