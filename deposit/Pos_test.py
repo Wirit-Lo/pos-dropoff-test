@@ -250,15 +250,8 @@ def run_smart_scenario(main_window, config):
         log(f"[Error] เลือกหน่วยงาน '{target_unit_name}' ไม่สำเร็จ")
     
     time.sleep(1.0) 
-
-    # กรอกชื่อผู้รับ (Logic: ถ้านักโทษมีชื่อ ให้ใช้ชื่อนักโทษ / ถ้าไม่มี ให้ใช้ชื่อคนรับปกติ)
-    final_name = prisoner_name if prisoner_name else rcv_fname
-    find_and_fill_smart(main_window, "ชื่อ", "CustomerFirstName", final_name)
     
-    # ถ้าไม่ใช่เคสนักโทษ (ไม่มี prisoner_name) ให้กรอกนามสกุลด้วย
-    if not prisoner_name and rcv_lname:
-         find_and_fill_smart(main_window, "นามสกุล", "CustomerLastName", rcv_lname)
-
+    # กดถัดไป
     smart_next(main_window)
     time.sleep(step_delay)
 
