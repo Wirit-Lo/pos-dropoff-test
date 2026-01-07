@@ -14,7 +14,6 @@ from helpers import (
     smart_next,
     wait_for_text,
     fill_receiver_details_with_sms,
-    find_and_click_with_rotate_logic,
     handle_sms_step,
     fill_amount_and_destination
 )
@@ -184,16 +183,39 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
 
     # Step 3: เลือกบริการ
-    # Step 3: เลือกบริการ
-    target_service_id = "PayOutDomesticSendMoneyExpress401"
+    target_service_name = "401 - ธนาณัติออนไลน์ระบุปลายทาง" 
+
+    log(f"...กำลังหาปุ่มชื่อ '{target_service_name}'...")
+
+    found_btn = None
     
-    # [แก้ไข] เปลี่ยนจากรอ ShippingServiceList เป็นรอปุ่มบริการโดยตรง
-    # จะได้ไม่รอเก้อ 10 วินาที ถ้าปุ่มมาแล้วก็กดเลย
-    wait_until_id_appears(main_window, target_service_id)
-    
-    if not find_and_click_with_rotate_logic(main_window, target_service_id):
-        log(f"[Error] ไม่เจอปุ่มบริการ {target_service_id}")
+    # วนลูปหา 2 รอบ (รอบแรกหาเลย, รอบสองลองกด PageDown เผื่ออยู่ล่าง)
+    for i in range(2): 
+        try:
+            # ค้นหาปุ่มที่มี "ข้อความ" ตรงกับที่เราต้องการ
+            candidates = [c for c in main_window.descendants() 
+                          if target_service_name in c.window_text() 
+                          and c.is_visible()]
+            
+            if candidates:
+                found_btn = candidates[0]
+                break # เจอแล้ว ออกจากลูป
+        except: pass
+
+        # ถ้ายังไม่เจอ และเป็นรอบแรก -> ให้ลองกด PageDown
+        if i == 0:
+            log(f"   [Warn] หาไม่เจอในหน้าแรก -> ลองกด PageDown")
+            main_window.type_keys("{PGDN}")
+            time.sleep(1.0)
+
+    # เช็คผลลัพธ์และกด
+    if found_btn:
+        log(f"   [/] เจอและคลิกบริการ: '{target_service_name}'")
+        found_btn.click_input()
+    else:
+        log(f"[Error] หาปุ่มชื่อ '{target_service_name}' ไม่เจอ")
         return
+
     time.sleep(step_delay)
 
     # Step 4: Popup ข้อมูลผู้ส่ง
