@@ -2,6 +2,7 @@ import configparser
 import os
 import time
 from pywinauto.application import Application
+from helpers import search_and_select_dropdown
 
 # --- ดึงฟังก์ชันจากไฟล์ helpers.py มาใช้ ---
 from helpers import (
@@ -159,6 +160,7 @@ def run_smart_scenario(main_window, config):
         options_str = mo_config.get('Options', '')
         pay_method = config['PAYMENT'].get('Method', 'เงินสด') if 'PAYMENT' in config else 'เงินสด'
         pay_amount = config['PAYMENT'].get('ReceivedAmount', '1000') if 'PAYMENT' in config else '1000'
+        prison_name = config['MO_PRISON'].get('PrisonName', 'ทัณฑสถานบำบัดพิเศษกลาง') if 'MO_PRISON' in config else 'ทัณฑสถานบำบัดพิเศษกลาง'
         step_delay = float(config['SETTINGS'].get('StepDelay', 0.8))
     except Exception as e: 
         log(f"[Error] อ่าน Config ไม่สำเร็จ: {e}")
@@ -215,24 +217,23 @@ def run_smart_scenario(main_window, config):
     smart_next(main_window)
     time.sleep(step_delay)
 
-    # Step 8: เลือกเรือนจำ และ กรอกชื่อผู้รับเงิน
-    log("--- หน้าข้อมูลผู้รับเงิน (เรือนจำ) ---")
-    
-    # ดึงค่าจาก Config
-    prison_name = config['MO_PRISON'].get('PrisonName', 'ทัณฑสถาน')
+    # Step 8: เลือกเรือนจำ (หรือ สถานีตำรวจ)
+    # 1. รอให้ช่อง Dropdown โผล่มา (เช็คจาก Text หรือ ID ก็ได้)
+    wait_for_text(main_window, ["สน./สภ.", "รายชื่อ", "เรือนจำ"])
 
-    # รอหน้าจอโหลด
-    wait_for_text(main_window, ["สน./สภ.", "รายชื่อเรือนจำ"])
+    # 2. เรียกใช้ฟังก์ชันใหม่ (พิมพ์ค้นหา -> กดเลือก)
+    # ID: "SelectedSubList" (อ้างอิงจากที่คุณให้มา)
+    # Value: prison_name (อ่านจาก Config)
+    if search_and_select_dropdown(main_window, "SelectedSubList", prison_name):
+        log(f"   [/] เลือก '{prison_name}' สำเร็จ")
+    else:
+        # กรณีค้นหาไม่เจอ (หยุด Script หรือจะให้คนกดเองก็ได้)
+        # stop_script_immediately(f"หาเรือนจำ '{prison_name}' ไม่เจอ") 
+        pass 
 
-    # --- ส่วนที่แก้ไข ---
-    # เรียกฟังก์ชันใหม่: ส่ง ID ของ ComboBox ('SelectedSubList') ไปให้มันกดเอง
-    # ไม่ต้องกด smart_click("สน./สภ.") แยกแล้ว ให้ฟังก์ชันจัดการทีเดียว
-    if not select_item_from_dropdown_list(main_window, "SelectedSubList", prison_name):
-        log("[WARN] เลือกเรือนจำไม่สำเร็จ (อาจต้องเลือกเองด้วยมือ)")
-    
-    time.sleep(1.0) # รอ Pop-up ปิด
-    
-    # กดถัดไป
+    time.sleep(1.0) # รอ Popup ปิดสนิท
+
+    # 3. กดถัดไป
     smart_next(main_window)
     time.sleep(step_delay)
 

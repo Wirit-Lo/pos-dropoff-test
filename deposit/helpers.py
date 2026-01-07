@@ -412,3 +412,63 @@ def process_excess_cash_flow(window):
 
     log("   [/] จบขั้นตอนการโอนเงินเกินและสั่งพิมพ์")
     return True
+
+# --- วางต่อท้ายไฟล์ helpers.py ---
+
+@strict_check
+def search_and_select_dropdown(window, box_id, keyword, timeout=10):
+    """
+    ฟังก์ชันสำหรับ Dropdown รายการเยอะ (เช่น เรือนจำ, สถานีตำรวจ)
+    ใช้วิธี: คลิกกล่อง -> พิมพ์ชื่อ (เพื่อกรอง) -> คลิกเลือกรายการที่เด้งมา
+    """
+    log(f"...กำลังค้นหาและเลือก '{keyword}' ในช่อง ID: '{box_id}'...")
+    start = time.time()
+
+    # 1. หาและคลิกกล่อง Dropdown (เพื่อ Focus)
+    box_elem = None
+    while time.time() - start < timeout:
+        try:
+            found = [c for c in window.descendants() if c.element_info.automation_id == box_id and c.is_visible()]
+            if found:
+                box_elem = found[0]
+                box_elem.set_focus()
+                box_elem.click_input() # คลิกเพื่อเปิด หรือเพื่อให้พร้อมพิมพ์
+                break
+        except: pass
+        time.sleep(0.5)
+
+    if not box_elem:
+        log(f"[Error] หาช่อง Dropdown '{box_id}' ไม่เจอ")
+        return False
+
+    # 2. พิมพ์ข้อความลงไปเพื่อ Filter
+    try:
+        # ใช้ type_keys เพื่อพิมพ์เหมือนคน
+        box_elem.type_keys(keyword, with_spaces=True, pause=0.05)
+        time.sleep(1.0) # รอให้รายการเด้งขึ้นมา (Popup)
+    except Exception as e:
+        log(f"[Warn] พิมพ์ข้อความไม่ได้: {e}")
+
+    # 3. วนหา ListItem ที่ชื่อตรงกับ Keyword แล้วกดเลือก
+    # (ระบบมักจะสร้าง Popup แยกออกมา หรือเป็นลูกของ Window)
+    sub_start = time.time()
+    while time.time() - sub_start < 5: # ให้เวลารายการเด้ง 5 วิ
+        try:
+            # ค้นหา ListItem ทั้งหมดในหน้าจอ (เพราะ Popup อาจจะอยู่นอก Parent เดิม)
+            # *เทคนิค: หาเฉพาะที่ Visible และมีชื่อตรงกับ Keyword
+            items = [c for c in window.top_window().descendants() 
+                     if c.element_info.control_type == 'ListItem' 
+                     and keyword in c.window_text() 
+                     and c.is_visible()]
+            
+            if items:
+                target_item = items[0]
+                log(f"   [/] เจอรายการ '{target_item.window_text()}' -> คลิกเลือก")
+                target_item.set_focus()
+                target_item.click_input()
+                return True
+        except: pass
+        time.sleep(0.5)
+    
+    log(f"[X] พิมพ์ '{keyword}' แล้ว แต่ไม่เจอรายการให้เลือก")
+    return False
