@@ -61,7 +61,7 @@ def process_payment(window, payment_method, received_amount):
     - ปรับปรุง: เพิ่มระบบรอปุ่ม (Wait) เพื่อความแม่นยำ
     """
     # ใช้ตัวแปร log เพื่อให้ Python รู้ว่าเราใช้ค่าที่ส่งมาแล้ว (กันสีจาง/Error)
-    log(f"--- ขั้นตอนการชำระเงิน: วิธี '{payment_method}' | ยอด: '{received_amount}' (โหมด Fast Cash) ---")
+    log(f"--- ขั้นตอนการชำระเงิน: (โหมด Fast Cash) ---")
     
     # 1. กดรับเงิน (หน้าหลัก)
     log("...กำลังค้นหาปุ่ม 'รับเงิน'...")
@@ -94,9 +94,8 @@ def process_payment(window, payment_method, received_amount):
         window.type_keys("{ENTER}")
 
     # 3. จบรายการ
-    log("...รอหน้าสรุป/เงินทอน -> กด Enter ปิดรายการ...")
+    log("...รอหน้าสรุป/เงินทอน...")
     time.sleep(2.0) # รอ Animation ใบเสร็จเด้ง
-    window.type_keys("{ENTER}")
     time.sleep(1)
 
 def process_sender_info_popup(window, phone, sender_postal):
