@@ -509,29 +509,33 @@ def fill_receiver_details_with_sms(window, fname, lname, send_sms=False, phone="
 @strict_check
 def handle_sms_step(window, send_sms=False):
     """
-    Step 6: จัดการหน้ายอดเงิน และกดเปิด SMS (ถ้า Config สั่ง)
+    Step 6: จัดการหน้ายอดเงิน และกดปิด SMS (เพราะค่าเดิมเป็น 'ใช่')
     """
     log("--- Step 6: ตรวจสอบยอดเงิน & SMS ---")
     
     # 1. รอหน้าจอ "ยอดเงินที่ส่ง"
     wait_for_text(window, ["ยอดเงินที่ส่ง"])
 
-    # 2. Logic เปิด/ปิด SMS
-    if send_sms:
-        log("   [Config] ต้องการส่ง SMS -> กำลังกดเปิด Switch...")
-        
-        # รอให้ปุ่ม SwitchThumb โผล่มา (Timeout สั้นๆ ก็ได้เพราะหน้าจอโหลดแล้ว)
-        wait_until_id_appears(window, "SwitchThumb", timeout=5)
-        
-        # กดปุ่มเพื่อเปิด (Toggle On)
-        if click_element_by_id(window, "SwitchThumb"):
-            log("   [/] กดเปิด SMS สำเร็จ")
-        else:
-            log("   [Warn] หาปุ่ม SwitchThumb ไม่เจอ (อาจจะไม่ได้เปิด SMS)")
-    else:
-        log("   [Config] ไม่ส่ง SMS -> ข้ามขั้นตอน")
+    # รอให้ปุ่ม SwitchThumb โผล่มา (สำคัญ: ต้องรอก่อนตัดสินใจกด)
+    wait_until_id_appears(window, "SwitchThumb", timeout=5)
 
-    # 3. กดถัดไป (จบ Step นี้ในตัวเลย)
+    # 2. Logic เปิด/ปิด SMS
+    # กรณี: ค่าเริ่มต้นของระบบคือ "เปิด (ใช่)" อยู่แล้ว
+    
+    if not send_sms:
+        # ถ้า Config = No (ไม่ส่ง) -> ต้องกด Switch 1 ที เพื่อ "ปิด"
+        log("   [Config] ไม่ต้องการส่ง SMS (แต่ค่าเดิมเป็น 'ใช่') -> กำลังกดปิด Switch...")
+        
+        if click_element_by_id(window, "SwitchThumb"):
+            log("   [/] กดปิด SMS เรียบร้อย (เปลี่ยนเป็น 'ไม่')")
+        else:
+            log("   [Warn] หาปุ่ม SwitchThumb ไม่เจอ (อาจจะปิดไม่ได้)")
+            
+    else:
+        # ถ้า Config = Yes (ส่ง) -> ไม่ต้องทำอะไร (เพราะค่าเดิมเป็น 'ใช่' อยู่แล้ว)
+        log("   [Config] ต้องการส่ง SMS (ตรงกับค่าเดิม) -> ไม่ต้องกดอะไร")
+
+    # 3. กดถัดไป
     smart_next(window)
     time.sleep(1.0) # รอหน้าเปลี่ยน
     return True
