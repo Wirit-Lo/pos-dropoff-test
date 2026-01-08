@@ -577,7 +577,7 @@ def fill_amount_and_destination(window, amount, postal_code):
 @strict_check
 def handle_car_tax_step(window, config_tax):
     """
-    Step 5: จัดการหน้าภาษีรถยนต์ (ปรับปรุงการรอ Element4)
+    Step 5: จัดการหน้าภาษีรถยนต์ (ใช้ ID Mapping ครบทุก Dropdown)
     """
     log("--- Step 5: คำนวณค่าภาษีรถยนต์ ---")
     
@@ -590,8 +590,8 @@ def handle_car_tax_step(window, config_tax):
     
     if main_type_name:
         log(f"   [Main] กำลังเลือกประเภทรถ: {main_type_name}")
-        
-        # ตารางแปลงชื่อไทย -> ID (Map)
+
+        # Map ชื่อไทย -> ID (ประเภทรถ)
         VEHICLE_ID_MAP = {
             "(รย.๑๔) รถบดถนน": "THP_SendMoney_CarType_ConstructionTruck_DisplayName",
             "(รย.๒) รถยนต์นั่งส่วนบุคคลเกิน 7 คน": "THP_SendMoney_CarType_Greaterthan7_DisplayName",
@@ -606,7 +606,7 @@ def handle_car_tax_step(window, config_tax):
         target_key = VEHICLE_ID_MAP.get(main_type_name, main_type_name)
         select_dropdown_using_pagedown(window, "Element", target_key)
         
-        # 🔥 รอ 3 วินาที (เพิ่มเวลาให้ชัวร์ว่ากล่องลูกโหลดครบ)
+        # รอให้กล่องลูกๆ โหลด (สำคัญ)
         time.sleep(3.0) 
     else:
         log("[Error] ไม่ได้ระบุ VehicleType ใน Config")
@@ -616,45 +616,48 @@ def handle_car_tax_step(window, config_tax):
     # ส่วนที่ 2: กรอกข้อมูล Dynamic
     # =======================================================
     
-    # --- [Element 1] ขนาดซีซี ---
+    # --- [Element 1, 2, 3] (กรอกข้อความปกติ) ---
     cc_val = config_tax.get('EngineCC', '')
-    if cc_val:
-        find_and_fill_smart(window, "ซีซี", "Element1", cc_val)
+    if cc_val: find_and_fill_smart(window, "ซีซี", "Element1", cc_val)
 
-    # --- [Element 2] ปีที่จดทะเบียน ---
     year_val = config_tax.get('RegYear', '')
-    if year_val:
-        find_and_fill_smart(window, "ปีที่จด", "Element2", year_val)
+    if year_val: find_and_fill_smart(window, "ปีที่จด", "Element2", year_val)
 
-    # --- [Element 3] น้ำหนัก ---
     weight_val = config_tax.get('VehicleWeight', '')
-    if weight_val:
-        find_and_fill_smart(window, "น้ำหนัก", "Element3", weight_val)
+    if weight_val: find_and_fill_smart(window, "น้ำหนัก", "Element3", weight_val)
 
-    # --- [Element 4] ประเภทเจ้าของ (แก้ไขใหม่!) ---
+    # --- [Element 4] ประเภทเจ้าของ (ใช้ Map ID) ---
     owner_type = config_tax.get('OwnerType', '')
     if owner_type:
-        log(f"   [Select] กำลังพยายามเลือกเจ้าของ (Element4): {owner_type}")
-        
-        # 1. รอจนกว่า ID 'Element4' จะโผล่ (Timeout 5 วิ)
+        log(f"   [Select] เลือกเจ้าของ (Element4): {owner_type}")
         wait_until_id_appears(window, "Element4", timeout=5)
-        
-        # 2. ไม่ต้องเช็ค if len() แล้ว สั่งกดเลย!
-        # (ถ้าหา ID ไม่เจอ มันจะฟ้อง Error ใน Log แทนที่จะเงียบ)
-        if not select_dropdown_using_pagedown(window, "Element4", owner_type):
-            # Fallback: ถ้าหา ID Element4 ไม่เจอ ลองหาจากชื่อ "ประเภทเจ้าของ" ดู
-            log("   [Retry] หา Element4 ไม่เจอ -> ลองหาจากชื่อ 'ประเภทเจ้าของ'")
-            if find_and_click_with_rotate_logic(window, owner_type): 
-                 pass # ลองคลิกโง่ๆ เผื่อฟลุ๊ค
-            else:
-                 log(f"   [Error] เลือกประเภทเจ้าของ '{owner_type}' ล้มเหลว")
 
-    # --- [Element 5] ประเภทจักรยานยนต์ (แก้ให้รอเหมือนกัน) ---
+        # Map ชื่อไทย -> ID (ประเภทเจ้าของ)
+        # หมายเหตุ: ผมใส่ 'ส่วนบุคคล' ให้ชี้ไปที่ ID 'Private' เผื่อ Config เขียนไม่ตรงกับหน้าจอ
+        OWNER_ID_MAP = {
+            "นิติบุคคล": "THP_SendMoney_OwnerType_Juristic_DisplayName",
+            "ส่วนตัว": "THP_SendMoney_OwnerType_Private_DisplayName",
+            "ส่วนบุคคล": "THP_SendMoney_OwnerType_Private_DisplayName" 
+        }
+        
+        target_owner_id = OWNER_ID_MAP.get(owner_type, owner_type)
+        select_dropdown_using_pagedown(window, "Element4", target_owner_id)
+
+
+    # --- [Element 5] ประเภทจักรยานยนต์ (ใช้ Map ID) ---
     moto_type = config_tax.get('MotorcycleType', '')
     if moto_type:
-        log(f"   [Select] กำลังพยายามเลือก จยย. (Element5): {moto_type}")
+        log(f"   [Select] เลือก จยย. (Element5): {moto_type}")
         wait_until_id_appears(window, "Element5", timeout=5)
-        select_dropdown_using_pagedown(window, "Element5", moto_type)
+
+        # Map ชื่อไทย -> ID (ประเภท จยย.)
+        MOTO_ID_MAP = {
+            "ไฟฟ้า": "THP_SendMoney_MotorcycleType_Electric_DisplayName",
+            "น้ำมัน": "THP_SendMoney_MotorcycleType_Petrol_DisplayName"
+        }
+
+        target_moto_id = MOTO_ID_MAP.get(moto_type, moto_type)
+        select_dropdown_using_pagedown(window, "Element5", target_moto_id)
 
     # =======================================================
     # ส่วนที่ 3: ค่าธรรมเนียม & วันครบกำหนด
@@ -662,17 +665,15 @@ def handle_car_tax_step(window, config_tax):
 
     # --- [SwitchThumb] ค่าธรรมเนียม ---
     fee_config = config_tax.get('ChangeBookFee', 'No').lower()
-    need_fee = True if fee_config in ['yes', 'true', 'on'] else False
-    
-    if need_fee:
-        log("   [Switch] ต้องการเปลี่ยนเล่ม -> กดเปิด SwitchThumb")
+    if fee_config in ['yes', 'true', 'on']:
+        log("   [Switch] กดเปิดเปลี่ยนเล่ม")
         wait_until_id_appears(window, "SwitchThumb", timeout=3)
         click_element_by_id(window, "SwitchThumb")
 
     # --- [Element 7] วันครบกำหนด ---
     due_date = config_tax.get('TaxDueDate', '')
     if due_date:
-        log(f"   [Fill] กรอกวันครบกำหนด (Element7): {due_date}")
+        log(f"   [Fill] กรอกวันครบกำหนด: {due_date}")
         find_and_fill_smart(window, "วันครบกำหนด", "Element7", due_date)
 
     # =======================================================
