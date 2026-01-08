@@ -249,8 +249,6 @@ def run_smart_scenario(main_window, config):
     # กรอกจำนวนเงิน (Auto Wait)
     find_and_fill_smart(main_window, "จำนวนเงิน", "CurrencyAmount", amount)
     
-    smart_next(main_window)
-    time.sleep(step_delay)
 
    # Step 6: หน้ายอดเงินที่ส่ง กดถัดไป
     wait_for_text(main_window, ["ยอดเงินที่ส่ง"])
