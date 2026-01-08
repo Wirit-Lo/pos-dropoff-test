@@ -203,7 +203,7 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
 
     # Step 3: เลือกบริการ
-    target_service_name = "405 - ธนาณัติออนไลน์ไม่ระบุปลายทาง" 
+    target_service_name = "105 - ต่อภาษีรถ" 
 
     log(f"...กำลังหาปุ่มชื่อ '{target_service_name}'...")
 
