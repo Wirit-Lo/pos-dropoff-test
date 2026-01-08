@@ -2,6 +2,7 @@ import configparser
 import os
 import time
 from pywinauto.application import Application
+from helpers import select_dropdown_using_pagedown
 
 # --- ดึงฟังก์ชันจากไฟล์ helpers.py มาใช้ ---
 from helpers import (
@@ -12,10 +13,8 @@ from helpers import (
     click_element_by_id,
     find_and_fill_smart,
     smart_next,
-    wait_for_text,
-    fill_receiver_details_with_sms,
-    handle_sms_step,
-    fill_amount_and_destination
+    find_and_click_with_rotate_logic,
+    handle_car_tax_step
 )
 
 def load_config(filename='config.ini'):
@@ -153,17 +152,38 @@ def run_smart_scenario(main_window, config):
         sender_postal = config['TEST_DATA'].get('SenderPostalCode', '10110')
         sender_phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
         mo_config = config['MONEY_ORDER'] if 'MONEY_ORDER' in config else {}
-        raw_sms = mo_config.get('SendSMS', 'No').lower()
-        send_sms = True if raw_sms in ['yes', 'true', '1', 'on'] else False
-        receiver_phone = mo_config.get('ReceiverPhone', '')
         amount = mo_config.get('Amount', '100')
         dest_postal = mo_config.get('DestinationPostalCode', '10110')
         rcv_fname = mo_config.get('ReceiverFirstName', 'TestName')
         rcv_lname = mo_config.get('ReceiverLastName', 'TestLast')
-        options_str = mo_config.get('Options', '')
         pay_method = config['PAYMENT'].get('Method', 'เงินสด') if 'PAYMENT' in config else 'เงินสด'
         pay_amount = config['PAYMENT'].get('ReceivedAmount', '1000') if 'PAYMENT' in config else '1000'
         step_delay = float(config['SETTINGS'].get('StepDelay', 0.8))
+        car_config = config['CAR_TAX'] if 'CAR_TAX' in config else {}
+
+        # 1. อ่านค่าดิบจากทั้ง 2 หมวดมาก่อน
+        prison_val = config['MO_PRISON'].get('PrisonName', '') if 'MO_PRISON' in config else ''
+        police_val = config['TRAFFIC_POLICE'].get('PoliceStationName', '') if 'TRAFFIC_POLICE' in config else ''
+        
+        # 2. Logic ตัดสินใจ (Priority):
+        # ถ้ามีชื่อเรือนจำ -> ให้ใช้เรือนจำ
+        if prison_val and prison_val.strip() != "":
+            target_unit_name = prison_val
+            log(f"[Config] โหมด: ฝากเงินผู้ต้องขัง ({target_unit_name})")
+        
+        # ถ้าไม่มีเรือนจำ แต่มีชื่อสถานีตำรวจ -> ให้ใช้สถานีตำรวจ
+        elif police_val and police_val.strip() != "":
+            target_unit_name = police_val
+            log(f"[Config] โหมด: ค่าปรับจราจร ({target_unit_name})")
+        
+        # ถ้าไม่มีทั้งคู่ -> ใช้ค่า Default
+        else:
+            target_unit_name = "ทัณฑสถานบำบัดพิเศษกลาง"
+            log(f"[Config] ไม่ระบุปลายทาง -> ใช้ค่า Default ({target_unit_name})")
+
+        # 3. เตรียมชื่อผู้รับ (ถ้าเป็นเรือนจำ ต้องอ่านชื่อนักโทษ)
+        prisoner_name = config['MO_PRISON'].get('PrisonerName', '') if 'MO_PRISON' in config else ''
+
     except Exception as e: 
         log(f"[Error] อ่าน Config ไม่สำเร็จ: {e}")
         return
@@ -183,53 +203,35 @@ def run_smart_scenario(main_window, config):
     time.sleep(step_delay)
 
     # Step 3: เลือกบริการ
-    target_service_name = "401 - ธนาณัติออนไลน์ระบุปลายทาง" 
-
-    log(f"...กำลังหาปุ่มชื่อ '{target_service_name}'...")
-
-    found_btn = None
+    target_service_id = "PayOutDomesticSendMoneyCarTax105"
     
-    # วนลูปหา 2 รอบ (รอบแรกหาเลย, รอบสองลองกด PageDown เผื่ออยู่ล่าง)
-    for i in range(2): 
-        try:
-            # ค้นหาปุ่มที่มี "ข้อความ" ตรงกับที่เราต้องการ
-            candidates = [c for c in main_window.descendants() 
-                          if target_service_name in c.window_text() 
-                          and c.is_visible()]
-            
-            if candidates:
-                found_btn = candidates[0]
-                break # เจอแล้ว ออกจากลูป
-        except: pass
-
-        # ถ้ายังไม่เจอ และเป็นรอบแรก -> ให้ลองกด PageDown
-        if i == 0:
-            log(f"   [Warn] หาไม่เจอในหน้าแรก -> ลองกด PageDown")
-            main_window.type_keys("{PGDN}")
-            time.sleep(1.0)
-
-    # เช็คผลลัพธ์และกด
-    if found_btn:
-        log(f"   [/] เจอและคลิกบริการ: '{target_service_name}'")
-        found_btn.click_input()
-    else:
-        log(f"[Error] หาปุ่มชื่อ '{target_service_name}' ไม่เจอ")
+    # [แก้ไข] เปลี่ยนจากรอ ShippingServiceList เป็นรอปุ่มบริการโดยตรง
+    # จะได้ไม่รอเก้อ 10 วินาที ถ้าปุ่มมาแล้วก็กดเลย
+    wait_until_id_appears(main_window, target_service_id)
+    
+    if not find_and_click_with_rotate_logic(main_window, target_service_id):
+        log(f"[Error] ไม่เจอปุ่มบริการ {target_service_id}")
         return
-
     time.sleep(step_delay)
 
     # Step 4: Popup ข้อมูลผู้ส่ง
     # (ใช้ฟังก์ชันใหม่ที่เขียนรอไว้แล้ว)
     process_sender_info_popup(main_window, sender_phone, sender_postal)
     
-    # Step 5
-    if not fill_amount_and_destination(main_window, amount, dest_postal):
-        return # ถ้ากรอกไม่สำเร็จ (False) ให้หยุดโปรแกรมทันที
-
+    # Step 5: คำนวณค่าภาษีรถยนต์
+    if not handle_car_tax_step(main_window, car_config):
+        return
+    
+    # กรอกจำนวนเงิน (Auto Wait)
+    find_and_fill_smart(main_window, "จำนวนเงิน", "CurrencyAmount", amount)
+    
+    smart_next(main_window)
+    time.sleep(step_delay)
 
    # Step 6: หน้ายอดเงินที่ส่ง กดถัดไป
-    handle_sms_step(main_window, send_sms)
-    # กดถัดไป
+    wait_for_text(main_window, ["ยอดเงินที่ส่ง"])
+    smart_next(main_window)
+    time.sleep(step_delay)
 
     # Step 7: หน้าข้อมูลผู้ส่ง (ยืนยัน)
     # รอให้ Header ขึ้น
@@ -237,8 +239,19 @@ def run_smart_scenario(main_window, config):
     smart_next(main_window)
     time.sleep(step_delay)
 
-    # Step 8: หน้าข้อมูลผู้รับ
-    fill_receiver_details_with_sms(main_window, rcv_fname, rcv_lname, send_sms, receiver_phone)
+    # Step 8: เลือกหน่วยงาน
+    log(f"--- Step 8: เลือกหน่วยงาน: {target_unit_name} ---")
+    wait_for_text(main_window, ["สน./สภ.", "รายชื่อ", "เรือนจำ", "ผู้รับ"])
+
+    # ใช้ตัวแปร target_unit_name ที่ได้จาก Logic ข้างบน
+    if select_dropdown_using_pagedown(main_window, "SelectedSubList", target_unit_name):
+        log(f"   [/] เลือก '{target_unit_name}' สำเร็จ")
+    else:
+        log(f"[Error] เลือกหน่วยงาน '{target_unit_name}' ไม่สำเร็จ")
+    
+    time.sleep(1.0) 
+    
+    # กดถัดไป
     smart_next(main_window)
     time.sleep(step_delay)
 
