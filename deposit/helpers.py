@@ -577,21 +577,21 @@ def fill_amount_and_destination(window, amount, postal_code):
 @strict_check
 def handle_car_tax_step(window, config_tax):
     """
-    Step 5: จัดการหน้าภาษีรถยนต์ (ใช้ ID Mapping ครบทุก Dropdown)
+    Step 5: จัดการหน้าภาษีรถยนต์ (Smart Check: มีช่องไหน กรอกช่องนั้น)
     """
     log("--- Step 5: คำนวณค่าภาษีรถยนต์ ---")
     
     wait_for_text(window, ["ประเภทรถ", "วันครบกำหนด"])
 
     # =======================================================
-    # ส่วนที่ 1: เลือกประเภทรถหลัก (Main Type)
+    # 1. เลือกประเภทรถหลัก (Main Type) - จุดเริ่มต้นของทุกคัน
     # =======================================================
     main_type_name = config_tax.get('VehicleType', '')
     
     if main_type_name:
         log(f"   [Main] กำลังเลือกประเภทรถ: {main_type_name}")
 
-        # Map ชื่อไทย -> ID (ประเภทรถ)
+        # Map ชื่อไทย -> ID (ครบ 8 ประเภทตามที่คุณแจ้ง)
         VEHICLE_ID_MAP = {
             "(รย.๑๔) รถบดถนน": "THP_SendMoney_CarType_ConstructionTruck_DisplayName",
             "(รย.๒) รถยนต์นั่งส่วนบุคคลเกิน 7 คน": "THP_SendMoney_CarType_Greaterthan7_DisplayName",
@@ -606,78 +606,89 @@ def handle_car_tax_step(window, config_tax):
         target_key = VEHICLE_ID_MAP.get(main_type_name, main_type_name)
         select_dropdown_using_pagedown(window, "Element", target_key)
         
-        # รอให้กล่องลูกๆ โหลด (สำคัญ)
+        # รอให้ฟอร์มเปลี่ยนรูป (สำคัญ)
         time.sleep(3.0) 
     else:
         log("[Error] ไม่ได้ระบุ VehicleType ใน Config")
         return False
 
     # =======================================================
-    # ส่วนที่ 2: กรอกข้อมูล Dynamic
+    # 2. กรอกข้อมูล Dynamic (ใช้ Smart Check เช็คก่อนทำ)
     # =======================================================
     
-    # --- [Element 1, 2, 3] (กรอกข้อความปกติ) ---
+    # --- [Element 1] ขนาดซีซี (สำหรับ รย.1) ---
     cc_val = config_tax.get('EngineCC', '')
-    if cc_val: find_and_fill_smart(window, "ซีซี", "Element1", cc_val)
+    if cc_val:
+        # เช็คว่ามีช่อง Element1 ไหม? (timeout สั้นๆ พอ ไม่ต้องรอนาน)
+        if window.child_window(auto_id="Element1").exists(timeout=1):
+            find_and_fill_smart(window, "ซีซี", "Element1", cc_val)
+        # ถ้าไม่มี (เช่น รย.14) -> โค้ดจะผ่านไปเฉยๆ ไม่ Error
 
+    # --- [Element 2] ปีที่จดทะเบียน (สำหรับ รย.1) ---
     year_val = config_tax.get('RegYear', '')
-    if year_val: find_and_fill_smart(window, "ปีที่จด", "Element2", year_val)
+    if year_val:
+        if window.child_window(auto_id="Element2").exists(timeout=1):
+            find_and_fill_smart(window, "ปีที่จด", "Element2", year_val)
 
+    # --- [Element 3] น้ำหนัก (สำหรับ รย.2, รย.3) ---
     weight_val = config_tax.get('VehicleWeight', '')
-    if weight_val: find_and_fill_smart(window, "น้ำหนัก", "Element3", weight_val)
+    if weight_val:
+        if window.child_window(auto_id="Element3").exists(timeout=1):
+            find_and_fill_smart(window, "น้ำหนัก", "Element3", weight_val)
 
-    # --- [Element 4] ประเภทเจ้าของ (ใช้ Map ID) ---
+    # --- [Element 4] ประเภทเจ้าของ (สำหรับ รย.1) ---
     owner_type = config_tax.get('OwnerType', '')
     if owner_type:
-        log(f"   [Select] เลือกเจ้าของ (Element4): {owner_type}")
-        wait_until_id_appears(window, "Element4", timeout=5)
+        # เช็คก่อนว่ามี Dropdown Element4 ไหม
+        if window.child_window(auto_id="Element4").exists(timeout=1):
+            log(f"   [Select] เลือกเจ้าของ (Element4): {owner_type}")
+            OWNER_ID_MAP = {
+                "นิติบุคคล": "THP_SendMoney_OwnerType_Juristic_DisplayName",
+                "ส่วนตัว": "THP_SendMoney_OwnerType_Private_DisplayName",
+                "ส่วนบุคคล": "THP_SendMoney_OwnerType_Private_DisplayName" 
+            }
+            target_owner_id = OWNER_ID_MAP.get(owner_type, owner_type)
+            select_dropdown_using_pagedown(window, "Element4", target_owner_id)
+        else:
+             # กรณีรถบางรุ่นไม่มีช่องนี้ ระบบจะแค่แจ้ง Log แล้วไปต่อ
+             pass
 
-        # Map ชื่อไทย -> ID (ประเภทเจ้าของ)
-        # หมายเหตุ: ผมใส่ 'ส่วนบุคคล' ให้ชี้ไปที่ ID 'Private' เผื่อ Config เขียนไม่ตรงกับหน้าจอ
-        OWNER_ID_MAP = {
-            "นิติบุคคล": "THP_SendMoney_OwnerType_Juristic_DisplayName",
-            "ส่วนตัว": "THP_SendMoney_OwnerType_Private_DisplayName",
-            "ส่วนบุคคล": "THP_SendMoney_OwnerType_Private_DisplayName" 
-        }
-        
-        target_owner_id = OWNER_ID_MAP.get(owner_type, owner_type)
-        select_dropdown_using_pagedown(window, "Element4", target_owner_id)
-
-
-    # --- [Element 5] ประเภทจักรยานยนต์ (ใช้ Map ID) ---
+    # --- [Element 5] ประเภทจักรยานยนต์ (สำหรับ รย.12) ---
     moto_type = config_tax.get('MotorcycleType', '')
     if moto_type:
-        log(f"   [Select] เลือก จยย. (Element5): {moto_type}")
-        wait_until_id_appears(window, "Element5", timeout=5)
-
-        # Map ชื่อไทย -> ID (ประเภท จยย.)
-        MOTO_ID_MAP = {
-            "ไฟฟ้า": "THP_SendMoney_MotorcycleType_Electric_DisplayName",
-            "น้ำมัน": "THP_SendMoney_MotorcycleType_Petrol_DisplayName"
-        }
-
-        target_moto_id = MOTO_ID_MAP.get(moto_type, moto_type)
-        select_dropdown_using_pagedown(window, "Element5", target_moto_id)
+        if window.child_window(auto_id="Element5").exists(timeout=1):
+            log(f"   [Select] เลือก จยย. (Element5): {moto_type}")
+            MOTO_ID_MAP = {
+                "ไฟฟ้า": "THP_SendMoney_MotorcycleType_Electric_DisplayName",
+                "น้ำมัน": "THP_SendMoney_MotorcycleType_Petrol_DisplayName"
+            }
+            target_moto_id = MOTO_ID_MAP.get(moto_type, moto_type)
+            select_dropdown_using_pagedown(window, "Element5", target_moto_id)
 
     # =======================================================
-    # ส่วนที่ 3: ค่าธรรมเนียม & วันครบกำหนด
+    # 3. ข้อมูลพื้นฐาน (มีทุกคัน 1-8)
     # =======================================================
 
-    # --- [SwitchThumb] ค่าธรรมเนียม ---
+    # --- [SwitchThumb] ค่าธรรมเนียมเปลี่ยนเล่ม ---
     fee_config = config_tax.get('ChangeBookFee', 'No').lower()
     if fee_config in ['yes', 'true', 'on']:
-        log("   [Switch] กดเปิดเปลี่ยนเล่ม")
-        wait_until_id_appears(window, "SwitchThumb", timeout=3)
-        click_element_by_id(window, "SwitchThumb")
+        # เช็ค Switch เผื่อบางหน้าไม่มี
+        if window.child_window(auto_id="SwitchThumb").exists(timeout=2):
+            log("   [Switch] กดเปิดเปลี่ยนเล่ม")
+            click_element_by_id(window, "SwitchThumb")
 
-    # --- [Element 7] วันครบกำหนด ---
+    # --- [Element 7] วันครบกำหนดภาษี (พระเอกของเรา มีทุกคัน) ---
     due_date = config_tax.get('TaxDueDate', '')
     if due_date:
-        log(f"   [Fill] กรอกวันครบกำหนด: {due_date}")
-        find_and_fill_smart(window, "วันครบกำหนด", "Element7", due_date)
+        # ถ้าหา Element7 ไม่เจอ อันนี้แปลก (เพราะควรมีทุกคัน) แต่ก็ใส่กันเหนียวไว้
+        if window.child_window(auto_id="Element7").exists(timeout=2):
+            log(f"   [Fill] กรอกวันครบกำหนด: {due_date}")
+            find_and_fill_smart(window, "วันครบกำหนด", "Element7", due_date)
+        else:
+            log("[Error] หาช่องวันครบกำหนด (Element7) ไม่เจอ!")
 
     # =======================================================
-    # ส่วนที่ 4: จบการทำงาน
+    # 4. จบการทำงาน
     # =======================================================
     smart_next(window)
     time.sleep(1.0)
