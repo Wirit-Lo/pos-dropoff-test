@@ -553,17 +553,18 @@ def process_repeat_transaction(window, should_repeat):
 
 def process_payment(window, payment_method, received_amount):
     log("--- ขั้นตอนการชำระเงิน ---")
-    # 1. กดรับเงิน (หน้าหลัก)
+    if wait_for_text(window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "ทำซ้ำ"], timeout=1.0):
+        process_repeat_transaction(window, False)
+        time.sleep(2.0)
+    
     log("...ค้นหาปุ่ม 'รับเงิน'...")
-    # รอให้หน้าจอพร้อมสักนิดหลังปิด Popup Repeat
     time.sleep(1.5)
     if smart_click(window, "รับเงิน"):
-        time.sleep(1.5) # รอหน้าชำระเงิน
+        time.sleep(1.5) 
     else:
         log("[WARN] หาปุ่มรับเงินไม่เจอ")
         return
 
-    # 2. เลือกวิธีชำระเงิน
     log(f"...เลือกวิธีชำระเงิน: {payment_method}...")
     wait_for_text(window, "รับชำระเงิน", timeout=5)
     if not smart_click(window, payment_method):
@@ -571,10 +572,8 @@ def process_payment(window, payment_method, received_amount):
         smart_click(window, "เงินสด")
     time.sleep(1.0)
 
-    # 3. กรอกจำนวนเงิน (Popup)
     log(f"...กรอกจำนวนเงิน: {received_amount}...")
     try:
-        # รอ Edit box
         for _ in range(10):
             edits = [e for e in window.descendants(control_type="Edit") if e.is_visible()]
             if edits:
@@ -582,11 +581,10 @@ def process_payment(window, payment_method, received_amount):
                 edits[0].type_keys(str(received_amount), with_spaces=True)
                 break
             time.sleep(0.5)
-        window.type_keys("{ENTER}") # กดถัดไป
+        window.type_keys("{ENTER}") 
     except: log("[!] Error กรอกเงิน")
     time.sleep(1.5)
 
-    # 4. หน้าเงินทอน (จบ)
     log("...หน้าเงินทอน -> กด Enter จบรายการ...")
     wait_for_text(window, ["เปลี่ยนแปลงจำนวนเงิน", "เงินทอน"], timeout=5)
     window.type_keys("{ENTER}")
@@ -689,20 +687,24 @@ def run_smart_scenario(main_window, config):
     
     time.sleep(step_delay)
     
-    # ----------------------------------------------------
-    # 1. เรียกฟังก์ชัน และรับค่ากลับมาด้วยว่า "ตกลงเมื่อกี้ตั้งใจจะ Repeat ใช่ไหม"
-    is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
+   # วนลูปรอ Popup เด้งขึ้นมาสักครู่ (เผื่อเครื่องช้า)
+    found_repeat_popup = False
+    for _ in range(10): # รอประมาณ 5 วินาที
+        if wait_for_text(main_window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "เพิ่มธุรกรรม"], timeout=0.5):
+            found_repeat_popup = True
+            break
+        time.sleep(0.5)
+        
+    if found_repeat_popup:
+        log("   [Info] เจอ Popup ทำรายการซ้ำ -> กด ESC")
+        main_window.type_keys("{ESC}")
+    else:
+        log("   [Info] ไม่เจอ Popup (Timeout) -> กด ESC เผื่อไว้")
+        main_window.type_keys("{ESC}")
+        
+    time.sleep(1.0) # รอหน้าต่างปิด
     
-    # 2. เช็คเลยว่า ถ้าฟังก์ชันบอกว่าใช่ (is_repeat_mode = True) -> ให้จบการทำงานตรงนี้ทันที
-    if is_repeat_mode:
-        log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที (Safe Exit)")
-        log("\n[SUCCESS] จบการทำงาน (Repeat Mode)")
-        return # ออกจากฟังก์ชันหลักทันที
-    
-    # ถ้าไม่เข้าเงื่อนไขด้านบน (คือ is_repeat_mode = False) ถึงจะลงมาทำบรรทัดนี้
-    # 2. ชำระเงิน (จะทำงานก็ต่อเมื่อเงื่อนไขข้างบนไม่เป็นจริง)
     process_payment(main_window, pay_method, pay_amount)
-
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
 # ================= 5. Start App =================
