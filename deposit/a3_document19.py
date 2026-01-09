@@ -880,8 +880,11 @@ def run_smart_scenario(main_window, config):
         # Fallback: ถ้าหาปุ่มไม่เจอ ให้กด Enter แทน
         log(" -> [WARN] หาปุ่ม SettleCommand ไม่เจอ -> ลองกด Enter เพื่อจบรายการ")
         main_window.type_keys("{ENTER}")
-        
     time.sleep(1.0)
+
+    # 4. [เพิ่มเติม] เรียกฟังก์ชันจ่ายเงินต่อทันที
+    log("...[Logic] ดำเนินการชำระเงินต่อ (Fast Cash)...")
+    process_payment(main_window, pay_method, pay_amount)
 
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
