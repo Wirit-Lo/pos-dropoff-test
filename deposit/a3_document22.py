@@ -58,56 +58,46 @@ def click_scroll_arrow_smart(window, direction='right', repeat=5):
 
 def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
     """
-    [Turbo] ค้นหาปุ่มบริการแบบวนลูป (เร่งความเร็วการเลื่อน + ลด Delay)
+    ค้นหาปุ่มบริการแบบวนลูป (Search -> Click -> If Not Found -> Scroll)
     """
-    log(f"...ค้นหาปุ่ม ID: '{target_id}' (Fast Scroll Mode)...")
+    log(f"...กำลังค้นหาปุ่มบริการ ID: '{target_id}' (โหมด Scroll, Limit={max_rotations} รอบ)...")
     
-    # พยายามโฟกัสหน้าจอหลักก่อนเริ่ม
-    try: window.set_focus()
-    except: pass
-
     for i in range(1, max_rotations + 1):
-        # 1. สแกนหาปุ่มเป้าหมาย
+        # 1. สแกนหาปุ่มเป้าหมายในหน้าจอปัจจุบัน
         found_elements = [c for c in window.descendants() if str(c.element_info.automation_id) == target_id and c.is_visible()]
         
-        should_scroll = False
+        should_scroll = False # ตัวแปรควบคุมการเลื่อน
 
         if found_elements:
             target = found_elements[0]
             rect = target.rectangle()
             win_rect = window.rectangle()
             
-            # เช็คว่าปุ่มโผล่มาในจอหรือยัง (Safe Zone = เกือบเต็มจอ)
-            is_visible_on_screen = rect.left < win_rect.right - 5
+            # [Safe Zone Check] เช็คว่าปุ่มตกขอบจอไหม (70% ของจอ)
+            safe_limit = win_rect.left + (win_rect.width() * 0.70) 
             
-            if is_visible_on_screen:
-                 log(f"   [{i}] ✅ เจอปุ่ม '{target_id}' -> CLICK!")
-                 try: 
-                    target.set_focus()
-                    target.click_input()
-                 except: 
-                    window.type_keys("{ENTER}")
+            if rect.right < safe_limit:
+                 # ถ้าอยู่ในระยะปลอดภัย ให้กดเลย
+                 log(f"   [{i}] ✅ เจอปุ่มใน Safe Zone -> กำลังกด...")
+                 try: target.click_input()
+                 except: target.set_focus(); window.type_keys("{ENTER}")
                  return True
             else:
-                 # เจอปุ่มแต่อยู่ขวาสุดๆ -> เลื่อนนิดหน่อยพอ (3 ครั้ง)
-                 log(f"   [{i}] เจอปุ่ม (ตกขอบ) -> เลื่อนขวานิดหน่อย")
-                 window.type_keys("{RIGHT}" * 3, pause=0.05)
-                 time.sleep(0.2)
-                 continue # วนลูปเช็คใหม่ทันที
+                 # ถ้าตกขอบ ให้สั่งเลื่อน
+                 log(f"   [{i}] ⚠️ เจอปุ่มแต่โดนบัง/อยู่ขวาสุด -> ต้องเลื่อน")
+                 should_scroll = True
         else:
+            # ถ้าหาไม่เจอเลย ให้สั่งเลื่อน
+            log(f"   [{i}] ไม่เจอปุ่มในหน้านี้ -> เลื่อนขวา...")
             should_scroll = True
         
-        # 2. สั่งเลื่อนหน้าจอ (ถ้ายังไม่เจอ)
+        # 2. สั่งเลื่อนหน้าจอ (เรียกใช้ฟังก์ชันข้อ 1)
         if should_scroll:
-            # ใช้การส่งปุ่มแบบรวดเร็ว (pause=0.05) และเลื่อนทีละ 7 ช่อง
-            # หมายเหตุ: ไม่เรียก click_scroll_arrow_smart เพราะตัวนั้นหน่วงเวลาเยอะ
-            log(f"   [{i}] ไม่เจอ -> เลื่อนขวาเร็ว (7x)")
-            window.type_keys("{RIGHT}" * 7, pause=0.05)
-            
-            # รอหน้าจอขยับแค่ 0.3 วิ (จากเดิม 1.0 วิ)
-            time.sleep(0.3)
+            if not click_scroll_arrow_smart(window, repeat=5):
+                window.type_keys("{RIGHT}") # สำรอง
+            time.sleep(1.0) # รอเลื่อน
         
-    log(f"[X] หาไม่เจอหลังเลื่อน {max_rotations} รอบ")
+    log(f"[X] หมดความพยายามในการหาปุ่ม '{target_id}'")
     return False
 
 
@@ -663,7 +653,7 @@ def run_smart_scenario(main_window, config):
     log("...รอหน้าบริการหลัก...")
     
     # [แก้ไข] เพิ่ม timeout เป็น 60 และใส่ if not เพื่อเช็คว่าถ้าไม่เจอให้หยุดทันที
-    target_service_id = "ShippingService_361765"
+    target_service_id = "ShippingService_361765" 
     if not wait_until_id_appears(main_window, target_service_id, timeout=60):
         log("Error: รอนานเกิน 60 วินาทีแล้ว ยังไม่เข้าหน้าบริการหลัก")
         return 
