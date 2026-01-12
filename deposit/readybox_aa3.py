@@ -667,6 +667,9 @@ def run_smart_scenario(main_window, config):
         return
     time.sleep(step_delay)
 
+    smart_next(main_window)
+    time.sleep(step_delay)
+
     # --- เริ่ม Logic ใหม่แยกตาม AddInsurance ---
     use_insurance_flow = str(add_insurance_flag).lower() in ['true', 'yes', 'on', '1']
 
