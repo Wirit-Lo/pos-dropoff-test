@@ -625,7 +625,7 @@ def run_smart_scenario(main_window, config):
     process_sender_info_popup(main_window, phone, sender_postal) 
     
     time.sleep(step_delay)
-    if not smart_click_with_scroll(main_window, "ซองจดหมาย", scroll_dist=scroll_dist): return
+    if not smart_click_with_scroll(main_window, "กล่องสำเร็จรูปแบบ กก.", scroll_dist=scroll_dist): return
     time.sleep(step_delay)
     if special_options_str.strip():
         for opt in special_options_str.split(','):
