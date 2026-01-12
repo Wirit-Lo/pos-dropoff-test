@@ -516,7 +516,6 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
     log("...จบขั้นตอนข้อมูลผู้รับ -> กด 'ถัดไป' 1 ครั้ง...")
     for i in range(1):
         log(f"   -> Enter ครั้งที่ {i+1}")
-        smart_next(window); time.sleep(1.8)
 
 def process_repeat_transaction(window, should_repeat):
     """
@@ -681,24 +680,20 @@ def run_smart_scenario(main_window, config):
     
     time.sleep(step_delay)
     
-    # วนลูปรอ Popup เด้งขึ้นมาสักครู่ (เผื่อเครื่องช้า)
-    found_repeat_popup = False
-    for _ in range(10): # รอประมาณ 5 วินาที
-        if wait_for_text(main_window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "เพิ่มธุรกรรม"], timeout=0.5):
-            found_repeat_popup = True
-            break
-        time.sleep(0.5)
-        
-    if found_repeat_popup:
-        log("   [Info] เจอ Popup ทำรายการซ้ำ -> กด ESC")
-        main_window.type_keys("{ESC}")
-    else:
-        log("   [Info] ไม่เจอ Popup (Timeout) -> กด ESC เผื่อไว้")
-        main_window.type_keys("{ESC}")
-        
-    time.sleep(1.0) # รอหน้าต่างปิด
+    # ----------------------------------------------------
+    # 1. เรียกฟังก์ชัน และรับค่ากลับมาด้วยว่า "ตกลงเมื่อกี้ตั้งใจจะ Repeat ใช่ไหม"
+    is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
     
+    # 2. เช็คเลยว่า ถ้าฟังก์ชันบอกว่าใช่ (is_repeat_mode = True) -> ให้จบการทำงานตรงนี้ทันที
+    if is_repeat_mode:
+        log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที (Safe Exit)")
+        log("\n[SUCCESS] จบการทำงาน (Repeat Mode)")
+        return # ออกจากฟังก์ชันหลักทันที
+    
+    # ถ้าไม่เข้าเงื่อนไขด้านบน (คือ is_repeat_mode = False) ถึงจะลงมาทำบรรทัดนี้
+    # 2. ชำระเงิน (จะทำงานก็ต่อเมื่อเงื่อนไขข้างบนไม่เป็นจริง)
     process_payment(main_window, pay_method, pay_amount)
+
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
 # ================= 5. Start App =================
