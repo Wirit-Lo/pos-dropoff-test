@@ -516,6 +516,7 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
     log("...จบขั้นตอนข้อมูลผู้รับ -> กด 'ถัดไป' 1 ครั้ง...")
     for i in range(1):
         log(f"   -> Enter ครั้งที่ {i+1}")
+        smart_next(window); time.sleep(1.8)
 
 def process_repeat_transaction(window, should_repeat):
     """
