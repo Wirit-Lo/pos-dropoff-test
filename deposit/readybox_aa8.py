@@ -536,7 +536,7 @@ def process_repeat_transaction(window, should_repeat):
         
     if found_popup:
         log("...เจอ Popup ทำรายการซ้ำ...")
-        time.sleep(1.0)
+        time.sleep(1.8)
         
         target = "ใช่" if is_repeat_intent else "ไม่"
         log(f"...Config: {should_repeat} -> Intent: {is_repeat_intent} -> เลือก: '{target}'")
