@@ -23,8 +23,6 @@ def log(message):
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {message}")
 
 # ================= 2. Helper Functions =================
-# ฟังก์ชันใหม่: ค้นหา Element แบบ Smart (Text หรือ ID)
-# ***** แปะเพิ่มเข้าไปในไฟล์ main.py (เช่น ไว้ต่อจาก smart_click_with_scroll) *****
 
 
 def find_and_fill_smart(window, target_name, target_id_keyword, value):
@@ -119,50 +117,59 @@ def click_scroll_arrow_smart(window, direction='right', repeat=5):
 
 def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
     """
-    ค้นหาปุ่มบริการแบบวนลูป (Search -> Click -> If Not Found -> Scroll)
+    [Turbo] ค้นหาปุ่มบริการแบบวนลูป (เร่งความเร็วการเลื่อน + ลด Delay)
     """
-    log(f"...กำลังค้นหาปุ่มบริการ ID: '{target_id}' (โหมด Scroll, Limit={max_rotations} รอบ)...")
+    log(f"...ค้นหาปุ่ม ID: '{target_id}' (Fast Scroll Mode)...")
+
+    # พยายามโฟกัสหน้าจอหลักก่อนเริ่ม
+    try:
+        window.set_focus()
+    except:
+        pass
 
     for i in range(1, max_rotations + 1):
-        # 1. สแกนหาปุ่มเป้าหมายในหน้าจอปัจจุบัน
+        # 1. สแกนหาปุ่มเป้าหมาย
         found_elements = [c for c in window.descendants() if str(
             c.element_info.automation_id) == target_id and c.is_visible()]
 
-        should_scroll = False  # ตัวแปรควบคุมการเลื่อน
+        should_scroll = False
 
         if found_elements:
             target = found_elements[0]
             rect = target.rectangle()
             win_rect = window.rectangle()
 
-            # [Safe Zone Check] เช็คว่าปุ่มตกขอบจอไหม (70% ของจอ)
-            safe_limit = win_rect.left + (win_rect.width() * 0.70)
+            # เช็คว่าปุ่มโผล่มาในจอหรือยัง (Safe Zone = เกือบเต็มจอ)
+            is_visible_on_screen = rect.left < win_rect.right - 5
 
-            if rect.right < safe_limit:
-                # ถ้าอยู่ในระยะปลอดภัย ให้กดเลย
-                log(f"   [{i}] ✅ เจอปุ่มใน Safe Zone -> กำลังกด...")
+            if is_visible_on_screen:
+                log(f"   [{i}] ✅ เจอปุ่ม '{target_id}' -> CLICK!")
                 try:
+                    target.set_focus()
                     target.click_input()
                 except:
-                    target.set_focus()
                     window.type_keys("{ENTER}")
                 return True
             else:
-                # ถ้าตกขอบ ให้สั่งเลื่อน
-                log(f"   [{i}] ⚠️ เจอปุ่มแต่โดนบัง/อยู่ขวาสุด -> ต้องเลื่อน")
-                should_scroll = True
+                # เจอปุ่มแต่อยู่ขวาสุดๆ -> เลื่อนนิดหน่อยพอ (3 ครั้ง)
+                log(f"   [{i}] เจอปุ่ม (ตกขอบ) -> เลื่อนขวานิดหน่อย")
+                window.type_keys("{RIGHT}" * 3, pause=0.05)
+                time.sleep(0.2)
+                continue  # วนลูปเช็คใหม่ทันที
         else:
-            # ถ้าหาไม่เจอเลย ให้สั่งเลื่อน
-            log(f"   [{i}] ไม่เจอปุ่มในหน้านี้ -> เลื่อนขวา...")
             should_scroll = True
 
-        # 2. สั่งเลื่อนหน้าจอ (เรียกใช้ฟังก์ชันข้อ 1)
+        # 2. สั่งเลื่อนหน้าจอ (ถ้ายังไม่เจอ)
         if should_scroll:
-            if not click_scroll_arrow_smart(window, repeat=5):
-                window.type_keys("{RIGHT}")  # สำรอง
-            time.sleep(1.0)  # รอเลื่อน
+            # ใช้การส่งปุ่มแบบรวดเร็ว (pause=0.05) และเลื่อนทีละ 7 ช่อง
+            # หมายเหตุ: ไม่เรียก click_scroll_arrow_smart เพราะตัวนั้นหน่วงเวลาเยอะ
+            log(f"   [{i}] ไม่เจอ -> เลื่อนขวาเร็ว (7x)")
+            window.type_keys("{RIGHT}" * 7, pause=0.05)
 
-    log(f"[X] หมดความพยายามในการหาปุ่ม '{target_id}'")
+            # รอหน้าจอขยับแค่ 0.3 วิ (จากเดิม 1.0 วิ)
+            time.sleep(0.3)
+
+    log(f"[X] หาไม่เจอหลังเลื่อน {max_rotations} รอบ")
     return False
 
 
@@ -490,54 +497,69 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
         smart_next(window)
         time.sleep(1.0)
 
-        log("...ตรวจสอบผลลัพธ์ (Popup/List)...")
+        # ================== เริ่มส่วนที่แก้ไขใหม่ ==================
+        log("...ตรวจสอบผลลัพธ์ (Popup หรือ รายการที่อยู่)...")
         found_popup = False
         found_list = False
 
-        for _ in range(40):
-            if check_error_popup(window, delay=0.0):
-                log("[WARN] ตรวจพบ Popup คำเตือน! -> ปิดแล้วเข้าสู่โหมดกรอกเอง")
+        # วนลูปรอผลลัพธ์ประมาณ 10-15 วินาที
+        for _ in range(30):
+            # 1. เช็ค Popup (กรณีแจ้งเตือนไม่มีข้อมูล)
+            # ฟังก์ชัน check_error_popup จะกด OK/ปิด ให้เองถ้าเจอ
+            if check_error_popup(window, delay=0.1):
+                log("[WARN] ตรวจพบ Popup (ไม่มีข้อมูล/แจ้งเตือน) -> เข้าสู่โหมด Manual")
                 found_popup = True
                 break
-            list_items = [i for i in window.descendants(control_type="ListItem")
-                          if i.is_visible() and i.rectangle().top > 200]
-            if list_items:
-                found_list = True
-                break
-            time.sleep(0.25)
 
-        if found_popup:
-            # เจอ Popup -> เข้า Manual Mode
-            log("...เข้าสู่โหมดกรอกเอง (Manual Mode) -> รอส่งข้อมูลหน้าถัดไป...")
-            is_manual_mode = True
-            time.sleep(1.0)
-
-        elif found_list:
-            log("...เจอรายการที่อยู่ -> เลือกรายการแรกสุด...")
-            time.sleep(1.0)
+            # 2. เช็ครายการที่อยู่ (ListItem)
             try:
-                all_list_items = [i for i in window.descendants(
+                # หา ListItem ทั้งหมดที่มองเห็น
+                list_items = [i for i in window.descendants(
                     control_type="ListItem") if i.is_visible()]
-                valid_items = [i for i in all_list_items if i.rectangle(
-                ).top > 200 and i.rectangle().height() > 50]
+
+                # กรอง: เอาเฉพาะที่อยู่ต่ำกว่า Search Bar (Y > 150) เพื่อไม่ให้ไปกดโดน Header มั่วๆ
+                valid_items = [
+                    i for i in list_items if i.rectangle().top > 150]
+
                 if valid_items:
+                    found_list = True
+
+                    # เรียงลำดับจากบนลงล่าง (Top น้อยไปมาก)
                     valid_items.sort(key=lambda x: x.rectangle().top)
+
+                    # *** เลือกตัวแรกสุด ***
                     target_item = valid_items[0]
-                    log(f"[/] Click รายการที่: (Y={target_item.rectangle().top})")
+
+                    log(
+                        f"[/] เจอรายการที่อยู่ ({len(valid_items)} รายการ) -> คลิกรายการแรกสุด")
+
                     try:
                         target_item.set_focus()
                     except:
                         pass
-                    target_item.click_input()
-                    log("...เลือกรายการแล้ว รอโหลดข้อมูล (2.0s)...")
-                    time.sleep(2.0)
-                else:
-                    log("[!] เจอ List แต่กรองความสูงไม่ผ่าน")
+
+                    target_item.click_input()  # กดเลือก
+                    time.sleep(2.0)  # รอโหลดข้อมูลเข้าฟอร์ม
+                    break
             except:
                 pass
-            # เลือก List แล้ว ไม่ต้องกด Next ซ้ำ
+
+            time.sleep(0.5)
+
+        # สรุปผลเพื่อกำหนดค่า is_manual_mode
+        if found_popup:
+            # เจอ Popup -> ต้องกรอกเอง
+            is_manual_mode = True
+            log("...Set Manual Mode = True (จาก Popup)")
+
+        elif found_list:
+            # เจอ List และเลือกไปแล้ว -> ไม่ต้องกรอกเอง
+            is_manual_mode = False
+            log("...เลือกที่อยู่สำเร็จ (Auto Fill)")
+
         else:
-            log("[!] ไม่เจอทั้ง Popup และ รายการ -> สันนิษฐานว่าเข้าหน้ากรอกเอง")
+            # เงียบกริบ (Timeout) -> สันนิษฐานว่าต้องกรอกเอง
+            log("[!] ไม่เจอทั้ง Popup และ List -> บังคับเข้า Manual Mode")
             is_manual_mode = True
             smart_next(window)
 
@@ -657,6 +679,7 @@ def process_repeat_transaction(window, should_repeat):
     return is_repeat_intent
 
 
+# --- โค้ดใหม่ (วางทับ) ---
 def process_payment(window, payment_method, received_amount):
     log("--- ขั้นตอนการชำระเงิน (โหมด Fast Cash) ---")
 
@@ -689,17 +712,19 @@ def process_payment(window, payment_method, received_amount):
     window.type_keys("{ENTER}")
     time.sleep(1)
 
-
 # ================= 4. Workflow Main =================
+
+
 def run_smart_scenario(main_window, config):
     try:
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
-        postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
         receiver_postal = config['DEPOSIT_ENVELOPE'].get(
             'ReceiverPostalCode', '10110')  # ปลายทาง
         sender_postal = config['TEST_DATA'].get(
             'SenderPostalCode', '10110')  # ต้นทาง
         phone = config['TEST_DATA'].get('PhoneNumber', '0812345678')
+        register_flag = config['DEPOSIT_ENVELOPE'].get(
+            'RegisterOption', 'False')
         special_options_str = config['DEPOSIT_ENVELOPE'].get(
             'SpecialOptions', '')
         add_insurance_flag = config['DEPOSIT_ENVELOPE'].get(
@@ -774,7 +799,7 @@ def run_smart_scenario(main_window, config):
     log("...รอหน้าบริการหลัก...")
 
     # [แก้ไข] เพิ่ม timeout เป็น 60 และใส่ if not เพื่อเช็คว่าถ้าไม่เจอให้หยุดทันที
-    target_service_id = "ShippingService_356974"
+    target_service_id = "ShippingService_500009"
     if not wait_until_id_appears(main_window, target_service_id, timeout=60):
         log("Error: รอนานเกิน 60 วินาทีแล้ว ยังไม่เข้าหน้าบริการหลัก")
         return
@@ -783,41 +808,146 @@ def run_smart_scenario(main_window, config):
     if not find_and_click_with_rotate_logic(main_window, target_service_id):
         log(f"[Error] หาปุ่มบริการไม่เจอ ({target_service_id})")
         return
+    time.sleep(step_delay)
 
+    # [FIXED LOGIC] แยก Flow ตามการลงทะเบียน (Register)
+    # -------------------------------------------------------------------------
+    is_registered = str(register_flag).lower() in ['true', 'yes', 'on', '1']
+
+    if is_registered:
+        log("...Config สั่งให้เลือก: ลงทะเบียน (Register)...")
+        if not click_element_by_id(main_window, "RegisteredToggleIcon", timeout=3):
+            log("[Warning] หาปุ่ม ID: 'RegisteredToggleIcon' ไม่เจอ")
+
+    time.sleep(0.5)
+
+    # [สำคัญ] กด Enter เพื่อไปขั้นตอนถัดไป
+    log("...กดถัดไป (Enter) เพื่อเข้าสู่ขั้นตอนต่อไป...")
     main_window.type_keys("{ENTER}")
 
-    time.sleep(1)
-    smart_next(main_window)
-    time.sleep(step_delay)
-    process_special_services(main_window, special_services)
-    time.sleep(step_delay)
-    process_sender_info_page(main_window)
-    time.sleep(step_delay)
-    # 1. ค้นหาที่อยู่ และรับค่าสถานะว่าเป็น Manual Mode หรือไม่?
-    is_manual_mode = process_receiver_address_selection(
-        main_window, addr_keyword, manual_data)
+    # -------------------------------------------------------------------------
+    # Flow แยก:
+    # 1. ไม่ลงทะเบียน -> กรอกจำนวน -> ข้ามรายละเอียด -> ทำรายการซ้ำ
+    # 2. ลงทะเบียน -> กรอกรายละเอียดครบ -> ทำรายการซ้ำ
+    # -------------------------------------------------------------------------
 
-    time.sleep(step_delay)
+    # --- โค้ดใหม่ (วางทับ) ---
+    if not is_registered:
+        # ==========================================
+        # CASE 1: ไม่ลงทะเบียน (Register = False)
+        # ==========================================
+        log("...Config ไม่ได้เลือกลงทะเบียน -> เข้าสู่กระบวนการจัดการ Popup จำนวน...")
+        main_window.type_keys("{ENTER}")  # เรียก Popup
 
-    # 2. กรอกรายละเอียดผู้รับ (ส่ง is_manual_mode และ manual_data เข้าไป)
-    process_receiver_details_form(
-        main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
+        # --- จัดการ Popup จำนวน ---
+        qty = config['PRODUCT_QUANTITY'].get(
+            'Quantity', '1') if 'PRODUCT_QUANTITY' in config else '1'
+        log(f"...เริ่มค้นหา Popup 'จำนวน' (ค่า: {qty})...")
 
-    time.sleep(step_delay)
+        popup_window = None
+        for i in range(30):
+            try:
+                app_top = Application(backend="uia").connect(
+                    active_only=True).top_window()
+                if app_top != main_window or "จำนวน" in app_top.window_text():
+                    edits = app_top.descendants(control_type="Edit")
+                    if edits and any(e.is_visible() for e in edits):
+                        popup_window = app_top
+                        break
+            except:
+                pass
+            time.sleep(0.5)
 
-    # ----------------------------------------------------
-    # 1. เรียกฟังก์ชัน และรับค่ากลับมาด้วยว่า "ตกลงเมื่อกี้ตั้งใจจะ Repeat ใช่ไหม"
+        if popup_window:
+            try:
+                edits = [e for e in popup_window.descendants(
+                    control_type="Edit") if e.is_visible()]
+                if edits:
+                    target = edits[0]
+                    target.click_input()
+                    target.type_keys("^a")
+                    target.type_keys("{DELETE}")
+                    target.type_keys(str(qty), with_spaces=True)
+                    popup_window.type_keys("{ENTER}")
+                    log(f"-> พิมพ์จำนวน {qty} และกด Enter เรียบร้อย")
+            except:
+                pass
+        else:
+            log("[WARN] หา Popup ไม่เจอ -> พิมพ์ใส่หน้าหลัก")
+            main_window.type_keys(str(qty), with_spaces=True)
+            main_window.type_keys("{ENTER}")
+
+        log("...จบขั้นตอน Popup จำนวน -> เตรียมไปหน้าทำรายการซ้ำ...")
+
+    else:
+        # ==========================================
+        # CASE 2: ลงทะเบียน (Register = True)
+        # ==========================================
+        log("...Config เลือกลงทะเบียน -> ทำขั้นตอนกรอกข้อมูล...")
+        time.sleep(step_delay)
+
+        # 1. บริการพิเศษ
+        process_special_services(main_window, special_services)
+        time.sleep(step_delay)
+
+        # 2. ข้อมูลผู้ส่ง
+        process_sender_info_page(main_window)
+        time.sleep(step_delay)
+
+        # 3. ค้นหาที่อยู่ (ย้ายเข้ามาใน else แล้ว)
+        is_manual_mode = process_receiver_address_selection(
+            main_window, addr_keyword, manual_data)
+        time.sleep(step_delay)
+
+        # 4. กรอกรายละเอียดผู้รับ (ย้ายเข้ามาใน else แล้ว)
+        process_receiver_details_form(
+            main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
+        time.sleep(step_delay)
+
+    # --- จบโค้ดใหม่ (ถึงตรงนี้) ---
+
+    # -------------------------------------------------------------------------
+    # ฟังก์ชันนี้จะคอยดักจับ Popup และกด "ไม่" ให้ (ถ้า Config=False)
+    log("...รอ Popup ทำรายการซ้ำ (เพื่อกด 'ไม่')...")
     is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
 
-    # 2. เช็คเลยว่า ถ้าฟังก์ชันบอกว่าใช่ (is_repeat_mode = True) -> ให้จบการทำงานตรงนี้ทันที
+    # ถ้า Config ตั้งใจให้ทำซ้ำ (กด "ใช่") -> จบการทำงานตรงนี้เลย
     if is_repeat_mode:
-        log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที (Safe Exit)")
-        log("\n[SUCCESS] จบการทำงาน (Repeat Mode)")
-        return  # ออกจากฟังก์ชันหลักทันที
+        log("[Logic] เลือกทำรายการซ้ำ -> จบการทำงานเพื่อเริ่มรอบใหม่")
+        return
 
-    # ถ้าไม่เข้าเงื่อนไขด้านบน (คือ is_repeat_mode = False) ถึงจะลงมาทำบรรทัดนี้
-    # 2. ชำระเงิน (จะทำงานก็ต่อเมื่อเงื่อนไขข้างบนไม่เป็นจริง)
-    process_payment(main_window, pay_method, pay_amount)
+    # 2. หลังจากกด "ไม่" ที่ Popup แล้ว -> มาเช็คว่าจะไปทางไหนต่อ
+    if is_registered:
+        # กรณีลงทะเบียน (Register=True) -> ต้องไปหน้าชำระเงิน
+        log("...[Logic] ลงทะเบียน -> ไปขั้นตอนชำระเงิน (Fast Cash)...")
+        process_payment(main_window, pay_method, pay_amount)
+
+    # --- โค้ดใหม่ (วางทับ) ---
+    else:
+        # กรณีไม่ลงทะเบียน (Register=False) -> จบที่หน้าสรุป -> ต้องกดเสร็จสิ้น
+        log("...[Logic] ไม่ลงทะเบียน -> เตรียมกดปุ่ม 'Settle' (เสร็จสิ้น)...")
+
+        # 1. รอให้หน้าจอคืนสภาพหลัง Popup "ทำรายการซ้ำ" ปิดไป
+        time.sleep(2.0)
+
+        # 2. ดึง Focus กลับมาที่หน้าหลัก (ใช้แค่ set_focus พอ ไม่คลิกมั่วแล้ว)
+        try:
+            main_window.set_focus()
+        except:
+            pass
+
+        # 3. กดปุ่ม "เสร็จสิ้น" (ID: SettleCommand) โดยตรง
+        log("...กำลังค้นหาและกดปุ่ม ID: 'SettleCommand'...")
+
+        # เรียกใช้ฟังก์ชัน click_element_by_id ที่มีอยู่แล้ว
+        if click_element_by_id(main_window, "SettleCommand", timeout=5):
+            log(" -> [SUCCESS] กดปุ่ม Settle (เสร็จสิ้น) เรียบร้อย")
+        else:
+            # Fallback: ถ้าหาปุ่มไม่เจอจริงๆ ค่อยกด Enter (เป็นแผนสำรอง)
+            log(" -> [WARN] หาปุ่ม SettleCommand ไม่เจอ -> ลองกด Enter แทน")
+            main_window.type_keys("{ENTER}")
+
+        time.sleep(1.0)
 
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
