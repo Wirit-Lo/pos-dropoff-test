@@ -65,59 +65,50 @@ def click_scroll_arrow_smart(window, direction='right', repeat=5):
 
 def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
     """
-    [Turbo] ค้นหาปุ่มบริการแบบวนลูป (เร่งความเร็วการเลื่อน + ลด Delay)
+    ค้นหาปุ่มบริการแบบวนลูป (Search -> Click -> If Not Found -> Scroll)
     """
-    log(f"...ค้นหาปุ่ม ID: '{target_id}' (Fast Scroll Mode)...")
-
-    # พยายามโฟกัสหน้าจอหลักก่อนเริ่ม
-    try:
-        window.set_focus()
-    except:
-        pass
+    log(f"...กำลังค้นหาปุ่มบริการ ID: '{target_id}' (โหมด Scroll, Limit={max_rotations} รอบ)...")
 
     for i in range(1, max_rotations + 1):
-        # 1. สแกนหาปุ่มเป้าหมาย
+        # 1. สแกนหาปุ่มเป้าหมายในหน้าจอปัจจุบัน
         found_elements = [c for c in window.descendants() if str(
             c.element_info.automation_id) == target_id and c.is_visible()]
 
-        should_scroll = False
+        should_scroll = False  # ตัวแปรควบคุมการเลื่อน
 
         if found_elements:
             target = found_elements[0]
             rect = target.rectangle()
             win_rect = window.rectangle()
 
-            # เช็คว่าปุ่มโผล่มาในจอหรือยัง (Safe Zone = เกือบเต็มจอ)
-            is_visible_on_screen = rect.left < win_rect.right - 5
+            # [Safe Zone Check] เช็คว่าปุ่มตกขอบจอไหม (70% ของจอ)
+            safe_limit = win_rect.left + (win_rect.width() * 0.70)
 
-            if is_visible_on_screen:
-                log(f"   [{i}] ✅ เจอปุ่ม '{target_id}' -> CLICK!")
+            if rect.right < safe_limit:
+                # ถ้าอยู่ในระยะปลอดภัย ให้กดเลย
+                log(f"   [{i}] ✅ เจอปุ่มใน Safe Zone -> กำลังกด...")
                 try:
-                    target.set_focus()
                     target.click_input()
                 except:
+                    target.set_focus()
                     window.type_keys("{ENTER}")
                 return True
             else:
-                # เจอปุ่มแต่อยู่ขวาสุดๆ -> เลื่อนนิดหน่อยพอ (3 ครั้ง)
-                log(f"   [{i}] เจอปุ่ม (ตกขอบ) -> เลื่อนขวานิดหน่อย")
-                window.type_keys("{RIGHT}" * 3, pause=0.05)
-                time.sleep(0.2)
-                continue  # วนลูปเช็คใหม่ทันที
+                # ถ้าตกขอบ ให้สั่งเลื่อน
+                log(f"   [{i}] ⚠️ เจอปุ่มแต่โดนบัง/อยู่ขวาสุด -> ต้องเลื่อน")
+                should_scroll = True
         else:
+            # ถ้าหาไม่เจอเลย ให้สั่งเลื่อน
+            log(f"   [{i}] ไม่เจอปุ่มในหน้านี้ -> เลื่อนขวา...")
             should_scroll = True
 
-        # 2. สั่งเลื่อนหน้าจอ (ถ้ายังไม่เจอ)
+        # 2. สั่งเลื่อนหน้าจอ (เรียกใช้ฟังก์ชันข้อ 1)
         if should_scroll:
-            # ใช้การส่งปุ่มแบบรวดเร็ว (pause=0.05) และเลื่อนทีละ 7 ช่อง
-            # หมายเหตุ: ไม่เรียก click_scroll_arrow_smart เพราะตัวนั้นหน่วงเวลาเยอะ
-            log(f"   [{i}] ไม่เจอ -> เลื่อนขวาเร็ว (7x)")
-            window.type_keys("{RIGHT}" * 7, pause=0.05)
+            if not click_scroll_arrow_smart(window, repeat=5):
+                window.type_keys("{RIGHT}")  # สำรอง
+            time.sleep(1.0)  # รอเลื่อน
 
-            # รอหน้าจอขยับแค่ 0.3 วิ (จากเดิม 1.0 วิ)
-            time.sleep(0.3)
-
-    log(f"[X] หาไม่เจอหลังเลื่อน {max_rotations} รอบ")
+    log(f"[X] หมดความพยายามในการหาปุ่ม '{target_id}'")
     return False
 
 
@@ -742,7 +733,7 @@ def run_smart_scenario(main_window, config):
     process_sender_info_popup(main_window, phone, sender_postal)
 
     time.sleep(step_delay)
-    if not smart_click_with_scroll(main_window, "กล่องธรรมดา หมายเลข 5", scroll_dist=scroll_dist):
+    if not smart_click_with_scroll(main_window, "กล่องธรรมดา หมายเลข 1", scroll_dist=scroll_dist):
         return
     time.sleep(step_delay)
     if special_options_str.strip():
@@ -779,7 +770,7 @@ def run_smart_scenario(main_window, config):
     log("...รอหน้าบริการหลัก...")
 
     # [แก้ไข] เพิ่ม timeout เป็น 60 และใส่ if not เพื่อเช็คว่าถ้าไม่เจอให้หยุดทันที
-    target_service_id = "ShippingService_3340"
+    target_service_id = "ShippingService_361765"
     if not wait_until_id_appears(main_window, target_service_id, timeout=60):
         log("Error: รอนานเกิน 60 วินาทีแล้ว ยังไม่เข้าหน้าบริการหลัก")
         return
@@ -828,41 +819,24 @@ def run_smart_scenario(main_window, config):
 
     time.sleep(step_delay)
 
-    # 1. เรียกฟังก์ชัน และรับค่ากลับมา (ตัวแปรนี้จะได้ค่า True/False จากจุดที่ 1)
-    is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
+    # วนลูปรอ Popup เด้งขึ้นมาสักครู่ (เผื่อเครื่องช้า)
+    found_repeat_popup = False
+    for _ in range(10):  # รอประมาณ 5 วินาที
+        if wait_for_text(main_window, ["การทำรายการซ้ำ", "ทำซ้ำไหม", "เพิ่มธุรกรรม"], timeout=0.5):
+            found_repeat_popup = True
+            break
+        time.sleep(0.5)
 
-    # 2. เช็คเลยว่า ถ้าเป็นจริง -> จบการทำงาน
-    if is_repeat_mode:
-        log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที")
-        return  # ออกจากฟังก์ชันทันที
-
-    # 3. ตรวจสอบเงื่อนไขการจบงาน (จ่ายเงิน vs เสร็จสิ้น)
-    # แปลงค่า Config เป็น Boolean ให้ชัวร์ (เผื่อค่าเป็น 'True', 'true', 'Yes')
-    need_payment = str(add_insurance_flag).lower() in [
-        'true', 'yes', 'on', '1']
-
-    if need_payment:
-        # กรณี True: มีประกัน -> มียอดเงิน -> เรียกฟังก์ชันจ่ายเงิน
-        log(f"...[Logic] AddInsurance={need_payment} -> เข้าสู่ขั้นตอนชำระเงิน (Fast Cash)...")
-        # เรียกฟังก์ชัน process_payment ที่ประกาศไว้ด้านบน
-        process_payment(main_window, pay_method, pay_amount)
+    if found_repeat_popup:
+        log("   [Info] เจอ Popup ทำรายการซ้ำ -> กด ESC")
+        main_window.type_keys("{ESC}")
     else:
-        # กรณี False: ไม่มีประกัน -> ไม่มียอดเงิน -> กดเสร็จสิ้น (Settle)
-        log(f"...[Logic] AddInsurance={need_payment} -> ไม่มีการเก็บเงิน -> กดปุ่ม 'เสร็จสิ้น' (SettleCommand)")
+        log("   [Info] ไม่เจอ Popup (Timeout) -> กด ESC เผื่อไว้")
+        main_window.type_keys("{ESC}")
 
-        # รอหน้าจอคืนสภาพหลัง Popup ปิดไป
-        time.sleep(1.5)
+    time.sleep(1.0)  # รอหน้าต่างปิด
 
-        # กดปุ่มเสร็จสิ้น (Settle)
-        if click_element_by_id(main_window, "SettleCommand", timeout=5):
-            log(" -> [SUCCESS] กดปุ่ม Settle (เสร็จสิ้น) เรียบร้อย")
-        else:
-            # Fallback: ถ้าหาปุ่มไม่เจอ ให้กด Enter แทน
-            log(" -> [WARN] หาปุ่ม SettleCommand ไม่เจอ -> ลองกด Enter เพื่อจบรายการ")
-            main_window.type_keys("{ENTER}")
-
-    time.sleep(1.0)
-
+    process_payment(main_window, pay_method, pay_amount)
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
 
 
