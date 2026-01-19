@@ -645,11 +645,11 @@ def process_repeat_transaction(window, should_repeat):
 
 def process_payment(window, payment_method, received_amount):
     log("--- ขั้นตอนการชำระเงิน (โหมด Fast Cash) ---")
-
+    
     # 1. กดรับเงิน (หน้าหลัก)
     log("...ค้นหาปุ่ม 'รับเงิน'...")
     time.sleep(1.5)
-
+    
     if smart_click(window, "รับเงิน"):
         log("...เข้าสู่หน้าชำระเงิน รอโหลด 1.5s...")
         time.sleep(1.5)
@@ -660,7 +660,7 @@ def process_payment(window, payment_method, received_amount):
     # 2. กดปุ่ม Fast Cash (ID: EnableFastCash)
     # ปุ่มนี้คือการจ่ายเงินแบบด่วน (ช่อง 2) ไม่ต้องกรอกตัวเลข
     log("...กำลังกดปุ่ม Fast Cash (ID: EnableFastCash)...")
-
+    
     # ใช้ฟังก์ชัน click_element_by_id ที่มีอยู่แล้วในโค้ด
     if click_element_by_id(window, "EnableFastCash", timeout=5):
         log("[/] กดปุ่ม Fast Cash สำเร็จ -> ระบบดำเนินการตัดเงินทันที")
@@ -671,7 +671,7 @@ def process_payment(window, payment_method, received_amount):
     # 3. จบรายการ
     # รอหน้าสรุป/เงินทอน แล้วกด Enter เพื่อปิดบิล
     log("...รอหน้าสรุป/เงินทอน -> กด Enter ปิดรายการ...")
-    time.sleep(2.0)  # รอ Animation จ่ายเงิน
+    time.sleep(2.0) # รอ Animation จ่ายเงิน
     window.type_keys("{ENTER}")
     time.sleep(1)
 
