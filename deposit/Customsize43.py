@@ -715,6 +715,9 @@ def process_payment(window, payment_method, received_amount):
 def run_smart_scenario(main_window, config):
     try:
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
+        width = config['DEPOSIT_ENVELOPE'].get('Width', '10')
+        length = config['DEPOSIT_ENVELOPE'].get('Length', '20')
+        height = config['DEPOSIT_ENVELOPE'].get('Height', '10')
         postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
         receiver_postal = config['DEPOSIT_ENVELOPE'].get(
             'ReceiverPostalCode', '10110')  # ปลายทาง
@@ -775,6 +778,23 @@ def run_smart_scenario(main_window, config):
     smart_input_weight(main_window, weight)
     smart_next(main_window)
     time.sleep(1)
+
+    log(f"...[Step 6] กรอกปริมาตร (กว้าง: {width}, ยาว: {length}, สูง: {height})")
+    try:
+        main_window.set_focus()
+        edits = [e for e in main_window.descendants(control_type="Edit") if e.is_visible()]
+        if edits:
+            edits[0].click_input()
+            log("   -> เจอช่องแรก -> เริ่มกรอกและ Tab")
+            main_window.type_keys(f"{width}{{TAB}}{length}{{TAB}}{height}", with_spaces=True)
+        else:
+            log("   [WARN] ไม่เจอ Edit box -> ลองพิมพ์ Blind Type")
+            main_window.type_keys(f"{width}{{TAB}}{length}{{TAB}}{height}", with_spaces=True)
+    except:
+         log("   [!] Error กรอกปริมาตร")
+    
+    smart_next(main_window)
+    time.sleep(step_delay)
     try:
         main_window.type_keys(str(receiver_postal), with_spaces=True)
     except:

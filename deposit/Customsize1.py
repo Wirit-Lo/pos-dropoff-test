@@ -691,6 +691,9 @@ def run_smart_scenario(main_window, config):
     try:
         # แยกตัวแปร PostalCode ให้ชัดเจน
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
+        width = config['DEPOSIT_ENVELOPE'].get('Width', '10')
+        length = config['DEPOSIT_ENVELOPE'].get('Length', '20')
+        height = config['DEPOSIT_ENVELOPE'].get('Height', '10')
         receiver_postal = config['DEPOSIT_ENVELOPE'].get(
             'ReceiverPostalCode', '10110')  # ปลายทาง
         sender_postal = config['TEST_DATA'].get(
@@ -755,6 +758,24 @@ def run_smart_scenario(main_window, config):
     smart_input_weight(main_window, weight)
     smart_next(main_window)
     time.sleep(1)
+
+    # 6. หน้า ปริมาตร (รูป 4)
+    log(f"...[Step 6] กรอกปริมาตร (กว้าง: {width}, ยาว: {length}, สูง: {height})")
+    try:
+        main_window.set_focus()
+        edits = [e for e in main_window.descendants(control_type="Edit") if e.is_visible()]
+        if edits:
+            edits[0].click_input()
+            log("   -> เจอช่องแรก -> เริ่มกรอกและ Tab")
+            main_window.type_keys(f"{width}{{TAB}}{length}{{TAB}}{height}", with_spaces=True)
+        else:
+            log("   [WARN] ไม่เจอ Edit box -> ลองพิมพ์ Blind Type")
+            main_window.type_keys(f"{width}{{TAB}}{length}{{TAB}}{height}", with_spaces=True)
+    except:
+         log("   [!] Error กรอกปริมาตร")
+
+    smart_next(main_window)
+    time.sleep(step_delay)
 
     # ตรงนี้ใช้ receiver_postal (ปลายทาง)
     try:
