@@ -57,7 +57,7 @@ def click_scroll_arrow_smart(window, direction='right', repeat=5):
         except:
             return False
 
-def find_and_click_with_rotate_logic(window, target_id, max_rotations=15):
+def find_and_click_with_rotate_logic(window, target_id, max_rotations=25):
     """
     ค้นหาปุ่มบริการแบบวนลูป (Search -> Click -> If Not Found -> Scroll)
     """
