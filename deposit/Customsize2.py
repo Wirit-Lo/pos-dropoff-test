@@ -609,6 +609,9 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
         log(f"[!] Error Details: {e}")
 
     # [Dynamic Next] ตรวจสอบบริการพิเศษเพื่อกำหนดจำนวนครั้งการกด
+    import configparser
+    config = configparser.ConfigParser()
+    config.read('config.ini', encoding='utf-8')
     special_services = config['SPECIAL_SERVICES'].get('Services', '').strip()
     loop_count = 3 if special_services else 1
     
@@ -709,6 +712,9 @@ def run_smart_scenario(main_window, config):
         add_insurance_flag = config['DEPOSIT_ENVELOPE'].get(
             'AddInsurance', 'False')
         insurance_amt = config['DEPOSIT_ENVELOPE'].get('Insurance', '1000')
+        import configparser
+        config = configparser.ConfigParser()
+        config.read('config.ini', encoding='utf-8')
         special_services = config['SPECIAL_SERVICES'].get('Services', '')
         addr_keyword = config['RECEIVER'].get('AddressKeyword', '99/99')
         rcv_fname = config['RECEIVER_DETAILS'].get('FirstName', 'A')
