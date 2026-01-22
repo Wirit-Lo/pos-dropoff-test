@@ -999,6 +999,11 @@ def run_smart_scenario(main_window, config):
         # กรณีลงทะเบียน (Register = True) -> ทำตามขั้นตอนปกติ
         time.sleep(step_delay)
 
+        # 1. บริการพิเศษ (EMS, ประกัน ฯลฯ)
+        process_special_services(main_window, special_services)
+        time.sleep(step_delay)
+
+
         # 2. ข้อมูลผู้ส่ง (มักจะข้าม)
         process_sender_info_page(main_window)
         time.sleep(step_delay)
