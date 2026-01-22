@@ -845,6 +845,10 @@ def run_smart_scenario(main_window, config):
     log("...กดถัดไป (Enter) เพื่อเข้าสู่ขั้นตอนต่อไป...")
     main_window.type_keys("{ENTER}")
 
+    # 1. บริการพิเศษ (EMS, ประกัน ฯลฯ)
+    process_special_services(main_window, special_services)
+    time.sleep(step_delay)
+
     # -------------------------------------------------------------------------
     # Flow แยก:
     # 1. ไม่ลงทะเบียน -> กรอกจำนวน -> ข้ามรายละเอียด -> ทำรายการซ้ำ
