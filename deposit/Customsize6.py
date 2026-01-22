@@ -847,8 +847,8 @@ def run_smart_scenario(main_window, config):
     
     # 1. บริการพิเศษ (EMS, ประกัน ฯลฯ)
     process_special_services(main_window, special_services)
-    log("...กดถัดไป (Enter)ปุ่มที่2 เพื่อเข้าสู่ขั้นตอนต่อไป...")
-    main_window.type_keys("{ENTER}")
+    time.sleep(1)
+    smart_next(main_window)
 
     # -------------------------------------------------------------------------
     # Flow แยก:
