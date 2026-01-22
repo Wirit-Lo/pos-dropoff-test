@@ -844,11 +844,11 @@ def run_smart_scenario(main_window, config):
     # [สำคัญ] กด Enter เพื่อไปขั้นตอนถัดไป
     log("...กดถัดไป (Enter) เพื่อเข้าสู่ขั้นตอนต่อไป...")
     main_window.type_keys("{ENTER}")
-
+    
     # 1. บริการพิเศษ (EMS, ประกัน ฯลฯ)
     process_special_services(main_window, special_services)
     time.sleep(step_delay)
-
+    main_window.type_keys("{ENTER}")
     # -------------------------------------------------------------------------
     # Flow แยก:
     # 1. ไม่ลงทะเบียน -> กรอกจำนวน -> ข้ามรายละเอียด -> ทำรายการซ้ำ
@@ -997,10 +997,6 @@ def run_smart_scenario(main_window, config):
 
     else:
         # กรณีลงทะเบียน (Register = True) -> ทำตามขั้นตอนปกติ
-        time.sleep(step_delay)
-
-        # 1. บริการพิเศษ (EMS, ประกัน ฯลฯ)
-        process_special_services(main_window, special_services)
         time.sleep(step_delay)
 
         # 2. ข้อมูลผู้ส่ง (มักจะข้าม)
