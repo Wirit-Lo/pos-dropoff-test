@@ -363,8 +363,19 @@ def process_receiver_details_form(window, fname, lname, phone):
             window.type_keys("{TAB}"*3); window.type_keys(phone, with_spaces=True)
     except Exception as e: log(f"[!] Error Details: {e}")
 
-    log("...จบขั้นตอนข้อมูลผู้รับ -> กด 'ถัดไป' 3 ครั้ง...")
-    for i in range(3):
+    # [Dynamic Next] ตรวจสอบบริการพิเศษเพื่อกำหนดจำนวนครั้งการกด
+    try:
+        config
+    except NameError:
+        import configparser
+        config = configparser.ConfigParser()
+        config.read('config.ini', encoding='utf-8')
+
+    special_services = config['SPECIAL_SERVICES'].get('Services', '').strip()
+    loop_count = 3 if special_services else 1
+
+    log(f"...จบขั้นตอนข้อมูลผู้รับ (Services='{special_services}') -> กด 'ถัดไป' {loop_count} ครั้ง...")
+    for i in range(loop_count):
         log(f"   -> Enter ครั้งที่ {i+1}")
         smart_next(window); time.sleep(1.8)
 
