@@ -479,12 +479,26 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
                     visible_items = [
                         i for i in children_items if i.is_visible()]
 
-                    if visible_items:
-                        # *** เลือกตัวแรกสุด (Index 0) ***
-                        target_item = visible_items[0]
+                    # [FIX] ตรวจสอบว่ารายการมี text content จริงๆ (ไม่ใช่แค่ element ว่างเปล่า)
+                    valid_with_text = []
+                    for item in visible_items:
+                        try:
+                            item_text = item.window_text().strip()
+                            # เช็คว่ามี text ที่มีความหมาย (ยาวพอ = มีที่อยู่จริง)
+                            if item_text and len(item_text) > 5:
+                                valid_with_text.append(item)
+                        except:
+                            pass
+
+                    if valid_with_text:
+                        # *** เลือกตัวแรกสุดที่มี text จริง ***
+                        target_item = valid_with_text[0]
                         log(
-                            f"[/] เจอ ID 'AddressResult' และรายการย่อย {len(visible_items)} รายการ -> ล็อคเป้าตัวแรก")
+                            f"[/] เจอ ID 'AddressResult' และรายการย่อย {len(valid_with_text)} รายการ (มี text) -> ล็อคเป้าตัวแรก")
                         break
+                    elif visible_items:
+                        # เจอ ListItem แต่ไม่มี text = รายการว่าง -> ไม่ใช่ผลลัพธ์จริง
+                        log("[WARN] เจอ AddressResult container แต่รายการไม่มี text -> ข้ามไป")
             except:
                 pass
 
@@ -496,10 +510,21 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
                     # เอาแค่ Top > 80 (เผื่อจอเล็กมาก Header บัง)
                     valid_items = [
                         i for i in list_items if i.rectangle().top > 80]
-                    if valid_items:
-                        valid_items.sort(key=lambda x: x.rectangle().top)
-                        target_item = valid_items[0]
-                        log("[/] เจอ ListItem (Fallback Mode) -> ล็อคเป้าตัวแรก")
+                    
+                    # [FIX] กรองเฉพาะรายการที่มี text จริงๆ
+                    valid_with_text = []
+                    for item in valid_items:
+                        try:
+                            item_text = item.window_text().strip()
+                            if item_text and len(item_text) > 5:
+                                valid_with_text.append(item)
+                        except:
+                            pass
+
+                    if valid_with_text:
+                        valid_with_text.sort(key=lambda x: x.rectangle().top)
+                        target_item = valid_with_text[0]
+                        log(f"[/] เจอ ListItem (Fallback Mode) {len(valid_with_text)} รายการ -> ล็อคเป้าตัวแรก")
                         break
                 except:
                     pass
