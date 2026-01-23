@@ -757,6 +757,10 @@ def run_smart_scenario(main_window, config):
         
         # กรอกรายละเอียดผู้รับ
         process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
+
+    log("บริการพิเศษ (EMS, ประกัน ฯลฯ)")
+    process_special_services(main_window, special_services)
+    time.sleep(step_delay)
     
     else:
         # ==========================================
