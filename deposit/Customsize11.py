@@ -762,6 +762,9 @@ def run_smart_scenario(main_window, config):
         # ==========================================
         # CASE 2: ไม่ทำประกัน (AddInsurance = False)
         # ==========================================
+        smart_next(main_window) 
+        time.sleep(step_delay)
+        
         log("บริการพิเศษ (EMS, ประกัน ฯลฯ)")
         process_special_services(main_window, special_services)
         time.sleep(step_delay)
