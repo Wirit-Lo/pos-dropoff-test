@@ -757,15 +757,15 @@ def run_smart_scenario(main_window, config):
         
         # กรอกรายละเอียดผู้รับ
         process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
-
-    log("บริการพิเศษ (EMS, ประกัน ฯลฯ)")
-    process_special_services(main_window, special_services)
-    time.sleep(step_delay)
     
     else:
         # ==========================================
         # CASE 2: ไม่ทำประกัน (AddInsurance = False)
         # ==========================================
+        log("บริการพิเศษ (EMS, ประกัน ฯลฯ)")
+        process_special_services(main_window, special_services)
+        time.sleep(step_delay)
+        
         log("...Config ไม่ทำประกัน -> กด Next เพื่อเข้าสู่ Popup จำนวน...")
         
         # 1. กด Enter (Next) เพื่อเรียก Popup จำนวน
