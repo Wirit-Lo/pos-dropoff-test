@@ -510,10 +510,14 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
     log("--- หน้า: รายละเอียดผู้รับ ---")
     log("...รอหน้าจอโหลด (พร้อมตรวจสอบ Popup Error)...")
 
+    # [FIX] ตัวแปรเพื่อติดตามว่าเจอ Error Popup หรือไม่
+    found_error_popup = False
+
     # วนลูปเช็ค Popup และรอหน้าจอ
     for _ in range(30):
         if check_error_popup(window, delay=0):
             log("...ปิด Popup แล้ว -> รอโหลดฟอร์มต่อ...")
+            found_error_popup = True  # [FIX] บันทึกว่าเจอ Error
             time.sleep(1.0)
 
         # ลองเช็คว่ามีช่องชื่อโผล่มาหรือยัง
@@ -525,6 +529,11 @@ def process_receiver_details_form(window, fname, lname, phone, is_manual_mode, m
         if found:
             break
         time.sleep(0.5)
+
+    # [FIX] ถ้าเจอ Error Popup = ที่อยู่ที่เลือกไม่ถูกต้อง -> บังคับเข้า Manual Mode
+    if found_error_popup and not is_manual_mode:
+        log("[FIX] เจอ Error Popup หลังเลือกที่อยู่ -> เปลี่ยนเป็น Manual Mode อัตโนมัติ")
+        is_manual_mode = True
 
     # เริ่มกรอกข้อมูลตามลำดับที่ขอ
     try:

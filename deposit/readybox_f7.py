@@ -405,10 +405,20 @@ def process_receiver_address_selection(window, address_keyword, manual_data):
                     list_items = [i for i in window.descendants(control_type="ListItem") if i.is_visible()]
                     # เอาแค่ Top > 80 (เผื่อจอเล็กมาก Header บัง)
                     valid_items = [i for i in list_items if i.rectangle().top > 80]
-                    if valid_items:
-                        valid_items.sort(key=lambda x: x.rectangle().top)
-                        target_item = valid_items[0]
-                        log("[/] เจอ ListItem (Fallback Mode) -> ล็อคเป้าตัวแรก")
+                    # [FIX] กรองเฉพาะรายการที่มี text จริงๆ
+                    valid_with_text = []
+                    for item in valid_items:
+                        try:
+                            item_text = item.window_text().strip()
+                            if item_text and len(item_text) > 5:
+                                valid_with_text.append(item)
+                        except:
+                            pass
+
+                    if valid_with_text:
+                        valid_with_text.sort(key=lambda x: x.rectangle().top)
+                        target_item = valid_with_text[0]
+                        log(f"[/] เจอ ListItem (Fallback Mode) {len(valid_with_text)} รายการ -> ล็อคเป้าตัวแรก")
                         break
                 except: pass
 
