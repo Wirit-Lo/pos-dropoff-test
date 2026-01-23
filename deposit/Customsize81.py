@@ -633,17 +633,24 @@ def run_smart_scenario(main_window, config):
     except: log("[Error] อ่าน Config ไม่สำเร็จ"); return
 
     log(f"--- เริ่มต้นการทำงาน ---")
+    log(f"--- ปณ.ต้นทาง: {sender_postal} | ปณ.ปลายทาง: {receiver_postal} ---")
     time.sleep(0.5)
 
-    if not smart_click(main_window, "รับฝากสิ่งของ"): return
+    if not smart_click(main_window, "รับฝากสิ่งของ"):
+        return
     time.sleep(step_delay)
+
+    # ส่ง sender_postal ไปใช้ใน popup ข้อมูลผู้ส่ง (หน้าแรก)
     process_sender_info_popup(main_window, phone, sender_postal)
+
     time.sleep(step_delay)
-    if not smart_click_with_scroll(main_window, "กำหนดขนาดเอง", scroll_dist=scroll_dist): return
+    if not smart_click_with_scroll(main_window, "กำหนดขนาดเอง", scroll_dist=scroll_dist):
+        return
     time.sleep(step_delay)
     if special_options_str.strip():
         for opt in special_options_str.split(','):
-            if opt: smart_click(main_window, opt.strip(), timeout=2)
+            if opt:
+                smart_click(main_window, opt.strip(), timeout=2)
     main_window.type_keys("{ENTER}")
     time.sleep(step_delay)
     handle_prohibited_items(main_window)
@@ -651,7 +658,6 @@ def run_smart_scenario(main_window, config):
     smart_next(main_window)
     time.sleep(1)
 
-# 6. หน้า ปริมาตร (รูป 4)
     log(f"...[Step 6] กรอกปริมาตร (กว้าง: {width}, ยาว: {length}, สูง: {height})")
     try:
         main_window.set_focus()
@@ -665,20 +671,28 @@ def run_smart_scenario(main_window, config):
             main_window.type_keys(f"{width}{{TAB}}{length}{{TAB}}{height}", with_spaces=True)
     except:
          log("   [!] Error กรอกปริมาตร")
-
+    
     smart_next(main_window)
     time.sleep(step_delay)
-    
-    try: main_window.type_keys(str(receiver_postal), with_spaces=True)
-    except: pass
+
+    # ตรงนี้ใช้ receiver_postal (ปลายทาง)
+    try:
+        log(f"...กรอก ปณ. ปลายทาง: {receiver_postal}")
+        main_window.type_keys(str(receiver_postal), with_spaces=True)
+    except:
+        pass
+
     smart_next(main_window)
     time.sleep(step_delay)
     for _ in range(3):
         found = False
         for child in main_window.descendants():
             if "ทับซ้อน" in child.window_text() or "พื้นที่" in child.window_text():
-                smart_click(main_window, "ดำเนินการ"); found = True; break
-        if found: break
+                smart_click(main_window, "ดำเนินการ")
+                found = True
+                break
+        if found:
+            break
         time.sleep(0.5)
 
     log("...รอหน้าบริการหลัก...")
