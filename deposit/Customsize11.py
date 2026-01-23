@@ -764,7 +764,7 @@ def run_smart_scenario(main_window, config):
         # ==========================================
         log("บริการพิเศษ (EMS, ประกัน ฯลฯ)")
         process_special_services(main_window, special_services)
-        time.sleep(step_delay)
+        main_window.type_keys("{ENTER}")
         
         log("...Config ไม่ทำประกัน -> กด Next เพื่อเข้าสู่ Popup จำนวน...")
         
