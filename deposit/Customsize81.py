@@ -735,7 +735,7 @@ def run_smart_scenario(main_window, config):
 
     log("บริการพิเศษ (EMS, ประกัน ฯลฯ)")
     process_special_services(main_window, special_services)
-    time.sleep(step_delay) 
+    smart_click(main_window, "Next")
     
     # -------------------------------------------------------------------------
     # Flow แยก:
