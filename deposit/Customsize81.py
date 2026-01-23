@@ -765,50 +765,52 @@ def run_smart_scenario(main_window, config):
         time.sleep(0.5)
 
     log("...รอหน้าบริการหลัก...")
-
+    
     # [แก้ไข] เพิ่ม timeout เป็น 60 และใส่ if not เพื่อเช็คว่าถ้าไม่เจอให้หยุดทันที
-    target_service_id = "ShippingService_600352"
+    target_service_id = "ShippingService_600352" 
     if not wait_until_id_appears(main_window, target_service_id, timeout=60):
         log("Error: รอนานเกิน 60 วินาทีแล้ว ยังไม่เข้าหน้าบริการหลัก")
-        return
+        return 
 
     # คลิก 1 ครั้ง
     if not find_and_click_with_rotate_logic(main_window, target_service_id):
         log(f"[Error] หาปุ่มบริการไม่เจอ ({target_service_id})")
         return
-    time.sleep(step_delay)
 
+    main_window.type_keys("{ENTER}")
+    
+    time.sleep(1)
+    smart_next(main_window) 
+    time.sleep(step_delay)
     process_special_services(main_window, special_services)
     time.sleep(step_delay)
-    
     process_sender_info_page(main_window)
     time.sleep(step_delay)
-
     # 1. ค้นหาที่อยู่ และรับค่าสถานะว่าเป็น Manual Mode หรือไม่?
-    is_manual_mode = process_receiver_address_selection(
-        main_window, addr_keyword, manual_data)
-
+    is_manual_mode = process_receiver_address_selection(main_window, addr_keyword, manual_data)
+    
     time.sleep(step_delay)
-
+    
     # 2. กรอกรายละเอียดผู้รับ (ส่ง is_manual_mode และ manual_data เข้าไป)
-    process_receiver_details_form(
-        main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
-
+    process_receiver_details_form(main_window, rcv_fname, rcv_lname, rcv_phone, is_manual_mode, manual_data)
+    
     time.sleep(step_delay)
-
-    # 1. เรียกฟังก์ชัน และรับค่ากลับมา (ตัวแปรนี้จะได้ค่า True/False จากจุดที่ 1)
+    
+    # ----------------------------------------------------
+    # 1. เรียกฟังก์ชัน และรับค่ากลับมาด้วยว่า "ตกลงเมื่อกี้ตั้งใจจะ Repeat ใช่ไหม"
     is_repeat_mode = process_repeat_transaction(main_window, repeat_flag)
-
-    # 2. เช็คเลยว่า ถ้าเป็นจริง -> จบการทำงาน
+    
+    # 2. เช็คเลยว่า ถ้าฟังก์ชันบอกว่าใช่ (is_repeat_mode = True) -> ให้จบการทำงานตรงนี้ทันที
     if is_repeat_mode:
-        log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที")
-        return  # ออกจากฟังก์ชันทันที
-
-    # 3. ถ้าไม่เข้าเงื่อนไขบน ก็จะลงมาทำชำระเงินต่อ
+        log("[Logic] ตรวจสอบพบโหมดทำรายการซ้ำ -> หยุดการทำงานทันที (Safe Exit)")
+        log("\n[SUCCESS] จบการทำงาน (Repeat Mode)")
+        return # ออกจากฟังก์ชันหลักทันที
+    
+    # ถ้าไม่เข้าเงื่อนไขด้านบน (คือ is_repeat_mode = False) ถึงจะลงมาทำบรรทัดนี้
+    # 2. ชำระเงิน (จะทำงานก็ต่อเมื่อเงื่อนไขข้างบนไม่เป็นจริง)
     process_payment(main_window, pay_method, pay_amount)
 
     log("\n[SUCCESS] จบการทำงานครบทุกขั้นตอน")
-
 
 # ================= 5. Start App =================
 if __name__ == "__main__":
@@ -819,12 +821,10 @@ if __name__ == "__main__":
             wait = int(conf['SETTINGS'].get('ConnectTimeout', 10))
             app_title = conf['APP']['WindowTitle']
             log(f"Connecting to Title: {app_title} (Wait: {wait}s)")
-            app = Application(backend="uia").connect(
-                title_re=app_title, timeout=wait)
+            app = Application(backend="uia").connect(title_re=app_title, timeout=wait)
             main_window = app.top_window()
             if main_window.exists():
-                if main_window.get_show_state() == 2:
-                    main_window.restore()
+                if main_window.get_show_state() == 2: main_window.restore()
                 main_window.set_focus()
             run_smart_scenario(main_window, conf)
         except Exception as e:
