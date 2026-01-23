@@ -651,6 +651,7 @@ def run_smart_scenario(main_window, config):
     smart_next(main_window)
     time.sleep(1)
 
+# 6. หน้า ปริมาตร (รูป 4)
     log(f"...[Step 6] กรอกปริมาตร (กว้าง: {width}, ยาว: {length}, สูง: {height})")
     try:
         main_window.set_focus()
@@ -664,11 +665,10 @@ def run_smart_scenario(main_window, config):
             main_window.type_keys(f"{width}{{TAB}}{length}{{TAB}}{height}", with_spaces=True)
     except:
          log("   [!] Error กรอกปริมาตร")
-    
+
     smart_next(main_window)
     time.sleep(step_delay)
-
-    if not smart_click_with_scroll(main_window, "กำหนดขนาดเอง", scroll_dist=scroll_dist): return
+    
     try: main_window.type_keys(str(receiver_postal), with_spaces=True)
     except: pass
     smart_next(main_window)
