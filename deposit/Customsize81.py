@@ -732,6 +732,10 @@ def run_smart_scenario(main_window, config):
     # [สำคัญ] กด Enter เพื่อไปขั้นตอนถัดไป
     log("...กดถัดไป (Enter) เพื่อเข้าสู่ขั้นตอนต่อไป...")
     main_window.type_keys("{ENTER}")
+
+    log("บริการพิเศษ (EMS, ประกัน ฯลฯ)")
+    process_special_services(main_window, special_services)
+    time.sleep(step_delay) 
     
     # -------------------------------------------------------------------------
     # Flow แยก:
