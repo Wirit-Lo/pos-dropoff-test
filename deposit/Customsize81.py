@@ -599,6 +599,8 @@ def process_payment(window, payment_method, received_amount):
 def run_smart_scenario(main_window, config):
     try:
         weight = config['DEPOSIT_ENVELOPE'].get('Weight', '10')
+        length = config['DEPOSIT_ENVELOPE'].get('Length', '20')
+        height = config['DEPOSIT_ENVELOPE'].get('Height', '10')
         postal = config['DEPOSIT_ENVELOPE'].get('PostalCode', '10110')
         receiver_postal = config['DEPOSIT_ENVELOPE'].get('ReceiverPostalCode', '10110') # ปลายทาง
         sender_postal = config['TEST_DATA'].get('SenderPostalCode', '10110') # ต้นทาง
